@@ -100,6 +100,7 @@ npm run triage -- <file>  # triage a failure JSON (needs API key)
 npm run role -- <role> "<task>" --app <app> --env <env> [--preflight]
                           # run a role in its own worktree — docs/agent-workflows.md
 npm run fault-check -- <spec>   # does a spec notice its server failing
+npm run archive-results   # keep the last 20 runs, so a trend can be read
 npm run ideas -- <scan.json>    # test cases a saved scan supports
 npm run precommit         # housekeeping before handing over a commit
 ```

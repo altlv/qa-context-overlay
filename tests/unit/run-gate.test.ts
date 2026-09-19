@@ -114,9 +114,21 @@ test.describe('the testing gate', () => {
     ).toContain('no design file');
   });
 
-  test('should say the session format is not yet enforced', () => {
+  test('should check a session’s notes rather than listing them as not run', () => {
+    // Until E6 landed this asserted the opposite: the gate named the session format
+    // under notRun and checked nothing a session cares about. The rules now live in
+    // auditReport and fire on `report: exploratory-session`, so the same check-report
+    // step every role runs enforces them — no extra step, one place the rules live.
     const plan = planGate({ ...base, role: 'exploratory-tester', family: 'testing', changed: [] });
-    expect(plan.notRun.join(' ')).toContain('E6');
+
+    expect(
+      plan.notRun.join(' '),
+      'a gate that still announces the session format as unenforced is describing a hole that was filled',
+    ).not.toContain('E6');
+    expect(
+      plan.steps.map((step) => step.name),
+      'the report step is what carries the session rules, so a session with no report check is unchecked',
+    ).toContain('report');
   });
 });
 

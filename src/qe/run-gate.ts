@@ -105,9 +105,11 @@ export function planGate(input: {
     }
   }
 
-  if (input.role === 'exploratory-tester') {
-    notRun.push('session notes format: not enforced until queue item E6 is built');
-  }
+  // A session's notes used to be listed here as not enforced. They are now checked by
+  // the same `check-report` step every role runs, because the session rules live in
+  // `auditReport` and fire on `report: exploratory-session` — a charter, an oracle
+  // named for every defect claim, observations and questions kept apart from both. No
+  // extra gate step: one command, one place the rules live.
 
   steps.push({
     name: 'report',

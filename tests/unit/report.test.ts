@@ -21,6 +21,7 @@ function report(over: Partial<Report> = {}): Report {
     not_covered: ['mobile'],
     not_run: [],
     cases: [],
+    coverage_candidates: [],
     ...over,
   };
 }
@@ -168,5 +169,168 @@ test.describe('report audit', () => {
       }),
     );
     expect(problems.some((p) => p.message.includes('basis'))).toBe(true);
+  });
+});
+
+test.describe('a session is checked as a session', () => {
+  const charter = {
+    explore: 'the cart and checkout flow',
+    resources: 'a seeded account, desktop Chrome',
+    to_discover: 'where totals and stock disagree',
+    timebox: '45 minutes',
+    persona: 'a first-time buyer',
+    constraint: 'without touching the admin panel',
+  };
+
+  const session = (over: Partial<Report> = {}): Report =>
+    report({
+      report: 'exploratory-session',
+      charter,
+      findings: [
+        {
+          id: 'O1',
+          severity: 'observation',
+          evidence: 'direct',
+          summary: 'The mini-cart total updated only after a reload.',
+        },
+        {
+          id: 'Q1',
+          severity: 'question',
+          evidence: 'claimed',
+          summary: 'Is the stock count meant to include reserved items?',
+        },
+      ],
+      evidence: { direct: 1, inferred: 0, claimed: 1 },
+      coverage_candidates: ['O1'],
+      ...over,
+    });
+
+  const messages = (over: Partial<Report> = {}): string =>
+    auditReport(session(over))
+      .map((problem) => `${problem.level}: ${problem.message}`)
+      .join('\n');
+
+  test('should accept a session that brought a charter, an observation and a question', () => {
+    expect(
+      auditReport(session()).filter((problem) => problem.level === 'error'),
+      'a well-formed session must pass cleanly, or the rules below are just noise',
+    ).toEqual([]);
+  });
+
+  test('should refuse a session with no charter', () => {
+    // "No charter is ad-hoc clicking with better branding." Without one, "no issues
+    // found" cannot be read — it is coverage evidence for an unstated scope.
+    const problems = auditReport(session({ charter: undefined }));
+
+    expect(
+      problems.some((problem) => problem.level === 'error' && problem.message.includes('charter')),
+      'an uncharted session reports coverage nobody can size',
+    ).toBe(true);
+  });
+
+  test('should refuse a defect claim with no oracle, where elsewhere it only warns', () => {
+    // The skill: "name the oracle for every defect claim". A session is exactly where
+    // there is no spec to fall back on, so this is an error here and a warning in a
+    // testability report.
+    const unsupported = {
+      id: 'D1',
+      severity: 'major' as const,
+      evidence: 'direct' as const,
+      summary: 'The total is wrong on the summary page.',
+    };
+
+    expect(
+      messages({ findings: [unsupported], evidence: { direct: 1, inferred: 0, claimed: 0 } }),
+      'in a session an unsupported defect claim is the failure mode, not an untidy edge',
+    ).toContain('error: D1: no basis given');
+    expect(
+      auditReport(report({ findings: [unsupported] }))
+        .map((problem) => problem.level)
+        .join(),
+      'outside a session the same gap stays a warning — there the spec can settle it',
+    ).not.toContain('error');
+  });
+
+  test('should refuse an observation that rests on anything but direct evidence', () => {
+    // An observation is something you watched happen. One that is merely inferred is a
+    // conclusion wearing an observation's label, which is the confusion this severity
+    // exists to prevent.
+    expect(
+      messages({
+        findings: [
+          {
+            id: 'O9',
+            severity: 'observation',
+            evidence: 'inferred',
+            summary: 'The service probably retries twice before failing.',
+          },
+        ],
+        evidence: { direct: 0, inferred: 1, claimed: 0 },
+      }),
+      'letting an inferred observation through reopens the gap between seeing and concluding',
+    ).toContain('error: O9: an observation is something you saw');
+  });
+
+  test('should warn when a session recorded no observations, only conclusions', () => {
+    expect(
+      messages({
+        findings: [
+          {
+            id: 'Q1',
+            severity: 'question',
+            evidence: 'claimed',
+            summary: 'Is the stock count meant to include reserved items?',
+          },
+        ],
+        evidence: { direct: 0, inferred: 0, claimed: 1 },
+      }),
+      'a session that wrote nothing down before judging probably judged too early',
+    ).toContain('No observations recorded');
+  });
+
+  test('should warn when a session raised no questions at all', () => {
+    expect(
+      messages({
+        findings: [
+          {
+            id: 'O1',
+            severity: 'observation',
+            evidence: 'direct',
+            summary: 'The mini-cart total updated only after a reload.',
+          },
+        ],
+        evidence: { direct: 1, inferred: 0, claimed: 0 },
+      }),
+      'a session with no questions in it is a session that did not explore',
+    ).toContain('No questions raised');
+  });
+
+  test('should warn when a charter names no persona and no constraint', () => {
+    const { persona, constraint, ...bare } = charter;
+    void persona;
+    void constraint;
+
+    expect(
+      messages({ charter: bare }),
+      'persona and constraint are what turn clicking into exploration',
+    ).toContain('no persona and no constraint');
+  });
+
+  test('should warn when nothing was proposed for permanent coverage', () => {
+    expect(
+      messages({ coverage_candidates: [] }),
+      'empty is sometimes the honest answer, and it should be a stated one rather than a silence',
+    ).toContain('coverage_candidates is empty');
+  });
+
+  test('should leave other report kinds alone', () => {
+    // The session rules must not leak. A testability report has no charter and no
+    // observations by design, and firing on it would teach everyone to ignore them.
+    expect(
+      auditReport(report({ report: 'testability' }))
+        .map((problem) => problem.message)
+        .join('\n'),
+      'a rule that fires on every document is a rule nobody reads',
+    ).not.toMatch(/charter|No questions raised|coverage_candidates/);
   });
 });

@@ -197,7 +197,7 @@ It runs inside the worktree, on everything changed there.
 | coding                       | `assert-quality` on changed specs · the changed specs run, with `TEST_ENV` · `fault-check` on changed app specs · the report |
 | `testability-reviewer`       | the report                                                                                                                   |
 | `test-planner`               | at least one design written, each passing `check-report` · the report                                                        |
-| `exploratory-tester`, others | the report · session format **not run** until E6                                                                             |
+| `exploratory-tester`, others | the report, checked as a session: a charter, an oracle named for every defect claim, observations and questions kept apart   |
 
 ### The guards
 

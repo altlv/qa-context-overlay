@@ -24,9 +24,21 @@ const PROJECTS = ['--project=unit', '--project=integration', '--project=harness'
  * test called the pure function directly rather than through the real path. When
  * adding one, confirm it fails for the right reason before trusting the score.
  *
- * Deliberately a hand-written list rather than a generic mutation engine. Nine
- * targeted mutations against the rules that matter say more than a thousand random
- * operator flips, and this runs in under a minute.
+ * Deliberately a hand-written list rather than a generic mutation engine: 144 targeted
+ * mutations against the rules that matter say more than a thousand random operator
+ * flips.
+ *
+ * **It is no longer a quick command, and this comment used to say it was.** It claimed
+ * nine mutations running in under a minute, which was true when it was written and
+ * became false without anything failing. A full sweep now runs the unit, integration
+ * and harness suites once per mutation and takes many minutes; `--changed` covered 16
+ * mutations in 114 seconds on 2026-09-19. That stale sentence is why a full run was
+ * fired casually mid-edit the same day, which corrupted its own results and left a
+ * mutation stranded in a source file.
+ *
+ * So: **full sweep when a capability lands and before a push; `--changed` while
+ * editing.** Nothing else may touch the tree during a full run — it rewrites source
+ * files in place, and a suite running against a half-edited tree measures neither.
  */
 interface Mutation {
   file: string;
@@ -938,6 +950,67 @@ const MUTATIONS: Mutation[] = [
     replace:
       'lines.push(\n          `${missedLooks} look(s) could not be taken, so that count is a total',
     breaks: 'An undercounted state total must announce itself as a floor',
+  },
+  {
+    // A session's notes were checked by nothing a session cares about until E6. This
+    // is the rule that makes a charter mandatory, and without it "no issues found"
+    // is coverage evidence for a scope nobody stated.
+    file: 'src/qe/report.ts',
+    find: '    if (report.charter === undefined) {',
+    replace: '    if (false) {',
+    breaks: 'An exploratory session without a charter must be refused',
+  },
+  {
+    // The harder half of "name the oracle for every defect claim". Downgrading it to a
+    // warning everywhere puts an unsupported claim back into a session, which is the
+    // one document with no spec to settle it.
+    file: 'src/qe/report.ts',
+    find: "        level: report.report === 'exploratory-session' ? 'error' : 'warning',",
+    replace: "        level: 'warning',",
+    breaks: 'In a session, a defect claim with no oracle must be an error',
+  },
+  {
+    // An observation is something you watched happen. Allowing a weaker grade lets a
+    // conclusion wear an observation's label, which is the confusion the severity was
+    // added to prevent.
+    file: 'src/qe/report.ts',
+    find: "    if (finding.severity === 'observation' && finding.evidence !== 'direct') {",
+    replace: '    if (false) {',
+    breaks: 'An observation must rest on direct evidence',
+  },
+  {
+    // Delegated to a local model on 2026-09-19 and reviewed by mutation. The name must
+    // come from the run's own start time: taken from the clock, archiving one report
+    // twice makes two entries for one run and every later count of the history is wrong.
+    file: 'src/qe/run-history.ts',
+    find: 'const at = Date.parse(startedAtIso);',
+    replace: 'const at = Date.now();\n  void startedAtIso;',
+    breaks: 'An archive name must come from the run, not from the clock',
+  },
+  {
+    // A copy does not preserve mtime, so the only honest ordering is the stamp inside
+    // the name. Without the sort a prune deletes by input order, which is readdir order.
+    file: 'src/qe/run-history.ts',
+    find: 'dated.sort((a, b) => b.at - a.at);',
+    replace: '// mutated: input order stands in for age',
+    breaks: 'Pruning must rank runs by the timestamp in the name',
+  },
+  {
+    // The rule that stops this deleting somebody else's file. An unrecognised name has
+    // to drop out of the conversation; handing back a number puts it in `remove`.
+    file: 'src/qe/run-history.ts',
+    find: '  if (match === null) return null;',
+    replace: '  if (match === null) return 0;',
+    breaks: 'A file that is not an archive must never be pruned',
+  },
+  {
+    // The survivor from the first review pass. `-5` against three runs cannot tell a
+    // clamped count from an unclamped one, because both slices overrun the array; `-1`
+    // can, and the test that proves it was added after this mutation stayed green.
+    file: 'src/qe/run-history.ts',
+    find: 'Number.isFinite(keepCount) ? Math.max(0, Math.trunc(keepCount)) : 0',
+    replace: 'keepCount',
+    breaks: 'A negative keep count must keep nothing, not all but the last few',
   },
 ];
 

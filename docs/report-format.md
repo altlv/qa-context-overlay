@@ -34,7 +34,7 @@ evidence:
   claimed: 0 # asserted but unverified
 findings:
   - id: F1
-    severity: blocker | major | minor | question
+    severity: blocker | major | minor | question | observation
     evidence: direct | inferred | claimed
     summary: One sentence stating the defect or observation.
     where: apps/todo-fixture/tests/todos.api.spec.ts:42
@@ -44,6 +44,15 @@ not_covered:
 not_run:
   - npm run test:external — third-party site was unreachable.
 commit: 6e03534 # test-design only — the commit it was written against, for the staleness warning
+charter: # exploratory-session only, and required there
+  explore: the cart and checkout flow
+  resources: a seeded account, desktop Chrome
+  to_discover: where totals and stock disagree
+  timebox: 45 minutes
+  persona: a first-time buyer # optional, warned about when absent
+  constraint: without touching the admin panel # optional, warned about when absent
+coverage_candidates: # exploratory-session: which findings deserve permanent coverage
+  - O1
 cases: # test-design only, and required there
   - id: C1
     level: api # unit | integration | api | e2e | exploratory
@@ -73,6 +82,13 @@ Free markdown, but lead with these in order:
 | `evidence` counts should total the number of findings                      | warning |
 | `not_covered` should not be empty                                          | warning |
 | Some evidence should be `direct`                                           | warning |
+| An `observation` must carry `direct` evidence                              | error   |
+| **Session:** `exploratory-session` needs a `charter`                       | error   |
+| **Session:** every defect claim needs a `basis` — warning in other reports | error   |
+| **Session:** no observations recorded                                      | warning |
+| **Session:** no questions raised                                           | warning |
+| **Session:** `coverage_candidates` empty                                   | warning |
+| **Session:** charter names no persona or constraint                        | warning |
 
 ```bash
 npm run check-report                 # everything under reports/
