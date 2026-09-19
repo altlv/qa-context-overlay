@@ -318,6 +318,18 @@ scan`, which costs no tokens and grades the selectors as well.
   failures that way reported 10 failures in 10 runs of a suite that was entirely green.
   Match the summary line — `^ +[0-9]+ failed` — and re-read any flake rate measured the
   other way before believing it.
+- **A script that spawns a server must kill it in a `finally`, or it outlives the
+  session and holds the working directory.** A throwaway drive script started the
+  todo fixture with `spawn(...)` and killed it on the last line. An assertion threw
+  before that line, so the server was orphaned — and it was still running a day later,
+  which is why renaming the repository folder failed with "the process cannot access
+  the file because it is being used by another process". The message names no process,
+  so the cause is invisible from the error alone.
+  Finding it: `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like
+'*<repo folder>*' }` lists what is holding a path, and a `ParentProcessId` whose
+  process is gone marks an orphan rather than something a person is using. The same
+  check distinguishes "this session holds it", which is normal and clears on exit,
+  from a leak, which does not clear at all.
 
 ## Credentials
 
