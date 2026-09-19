@@ -879,6 +879,66 @@ const MUTATIONS: Mutation[] = [
     replace: '      response.writeHead',
     breaks: 'Under the fault an API spec’s corrupted calls must be counted',
   },
+  {
+    // The driver's plan is the only thing standing between a generated write case and
+    // a production session. Checked on the tag, because `actionAllowed` can only see a
+    // write when a submit control is in front of it.
+    file: 'src/qe/driver.ts',
+    find: "if (idea.tag === '@writes' && !policy.allowWrites) {",
+    replace: "if (idea.tag === '@writes' && false) {",
+    breaks: 'A case that changes server state must not be offered on a read-only policy',
+  },
+  {
+    // Unknown is not read-only. Removing this reads every effect `ideasFor` could not
+    // establish as safe, which is the wrong default in exactly the wrong place.
+    file: 'src/qe/driver.ts',
+    find: 'if (idea.tag === null && !policy.allowWrites) {',
+    replace: 'if (idea.tag === null && false) {',
+    breaks: 'An idea whose effect was never established must not pass as a read',
+  },
+  {
+    // The label rules and the form-submit rule reach the plan only through here, so
+    // this one line carries `denyLabels` for the whole driver.
+    file: 'src/qe/driver.ts',
+    find: 'return verdict.allowed ? null : verdict.reason;',
+    replace: 'return null;',
+    breaks: 'A control whose label commits to something must be refused in the plan too',
+  },
+  {
+    // The set-not-multiset choice, which is the whole reason a list being used
+    // normally does not spend the state ceiling. As a multiset, adding one todo row
+    // is a new state and any session against a list burns its allowance on nothing.
+    file: 'src/qe/state-model.ts',
+    find: 'const signatures = [...new Set(observation.fingerprints.map(controlSignature))].sort();',
+    replace: 'const signatures = observation.fingerprints.map(controlSignature).sort();',
+    breaks: 'A list growing by one row must not count as a new state',
+  },
+  {
+    // Off by one at the ceiling. The guard asks this exact question, so `>` instead of
+    // `>=` grants every session one state more than its policy allows.
+    file: 'src/qe/state-model.ts',
+    find: 'return this.seen.size >= maxStates;',
+    replace: 'return this.seen.size > maxStates;',
+    breaks: 'The state ceiling must refuse AT the limit, not one past it',
+  },
+  {
+    // `maxStates` was enforced by nothing for months. This is the line that changed
+    // that, and it is worth a mutation precisely because its absence is invisible —
+    // the other two bounds keep working and the run looks bounded.
+    file: 'src/qe/browser-guard.ts',
+    find: 'if (states !== undefined && states.atCeiling(policy.maxStates)) {',
+    replace: 'if (false && states !== undefined && states.atCeiling(policy.maxStates)) {',
+    breaks: 'An action past the state ceiling must be refused',
+  },
+  {
+    // A missed look undercounts states, so the ceiling is enforced on a number lower
+    // than the truth. Dropping the caveat turns a floor into an apparently exact count.
+    file: 'src/qe/observer.ts',
+    find: 'lines.push(\n          `${missedLooks} look(s) could not be taken, so that count is a FLOOR',
+    replace:
+      'lines.push(\n          `${missedLooks} look(s) could not be taken, so that count is a total',
+    breaks: 'An undercounted state total must announce itself as a floor',
+  },
 ];
 
 /**

@@ -115,3 +115,44 @@ test.describe('how the limits are phrased', () => {
     );
   });
 });
+
+test.describe('candidate actions', () => {
+  const ACTIONS = '--- Candidate actions: 4 the local policy permits here ---';
+
+  test('should include the plan and say it is not a checklist', () => {
+    const text = brief({ map: MAP, actions: ACTIONS });
+    expect(text, 'the plan has to actually be in the prompt').toContain(ACTIONS);
+    // A list handed to an agent reads as a quota unless something says otherwise —
+    // the same failure the action ceiling is phrased around three lines above.
+    expect(text).toMatch(/not a checklist/i);
+  });
+
+  test('should keep the map and the plan both, and in that order', () => {
+    const text = brief({ map: MAP, actions: ACTIONS });
+    expect(text.indexOf(MAP), 'the map must survive once a plan is also supplied').toBeGreaterThan(
+      -1,
+    );
+    expect(
+      text.indexOf(ACTIONS),
+      'what is on the page has to come before what may be done to it, or the candidates arrive with nothing to read them against',
+    ).toBeGreaterThan(text.indexOf(MAP));
+  });
+
+  test('should never mention a plan the session was not given', () => {
+    // The measured failure this repeats: a briefing that named something absent sent
+    // the agent looking for it, at 3 extra turns.
+    expect(
+      brief({ map: MAP }),
+      'a scanned session with no plan must not be told one exists — it will go looking',
+    ).not.toMatch(/candidate actions/i);
+    expect(
+      brief({ map: '' }),
+      'an unscanned session has no plan either, and naming one is the same contradiction',
+    ).not.toMatch(/candidate actions/i);
+  });
+
+  test('should offer a plan even when no map was computed', () => {
+    // The two are separable inputs; nothing should make one depend on the other.
+    expect(brief({ map: '', actions: ACTIONS })).toContain(ACTIONS);
+  });
+});

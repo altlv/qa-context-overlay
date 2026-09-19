@@ -48,6 +48,43 @@ export function decideToolUse(
   }
 }
 
+/**
+ * The other half of the pair: a `PostToolUse` hook that looks at the page afterwards.
+ *
+ * `PreToolUse` decides and `PostToolUse` observes, and the split is not incidental —
+ * only the second one can exist after the page has changed, which is the only moment
+ * a state model can be told anything true. Keeping them apart also keeps the guard
+ * unable to advance the model, so what refuses and what records stay separately
+ * testable.
+ *
+ * **This hook never denies.** It has nothing to deny — the tool has already run. It
+ * returns `continue: true` whatever happens, including when the look fails, because
+ * the alternative is ending a session over a page that was mid-navigation. The cost
+ * of a missed look is an undercount, and `observer.ts` reports that as a floor rather
+ * than swallowing it.
+ */
+export function observerHook(
+  observe: (toolName: string) => Promise<void>,
+  interestedIn: (toolName: string) => boolean,
+): HookCallbackMatcher {
+  return {
+    hooks: [
+      async (input): Promise<HookJSONOutput> => {
+        if (input.hook_event_name !== 'PostToolUse') return { continue: true };
+        if (!interestedIn(input.tool_name)) return { continue: true };
+        try {
+          await observe(input.tool_name);
+        } catch {
+          // Already fail-soft inside the observer; this is the belt to that braces.
+          // An exception escaping here would surface as a tool failure to the model,
+          // which would make the harness's bookkeeping look like the app misbehaving.
+        }
+        return { continue: true };
+      },
+    ],
+  };
+}
+
 export function guardHook(
   check: ToolCheck,
   onDeny: (toolName: string, reason: string) => void = () => undefined,

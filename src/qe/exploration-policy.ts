@@ -144,15 +144,42 @@ const PRESETS: Record<Environment, Omit<ExplorationPolicy, 'environment'>> = {
     crawlDelayMs: 0,
   },
 
-  /** Shared. Your mess is someone else's blocked afternoon. */
+  /**
+   * Shared, and meant to be exercised. Your mess is someone else's blocked
+   * afternoon — but so is a session that could not reach anything.
+   *
+   * **Destructive is permitted here as of 2026-09-19** (user's decision). The
+   * previous setting refused it, and two things followed that were not intended:
+   *
+   *  - A session could not reset the application between experiments. On a
+   *    client-side app whose state lives in `localStorage`, the whole `RESET` group
+   *    was absent, so returning to a known state meant reloading and re-navigating,
+   *    spending an action budget on setup rather than on testing.
+   *  - `reset` is in `DESTRUCTIVE_LABELS`, so a control named "Reset" — usually the
+   *    *safest* thing on a practice app, the one that restores a clean state — was
+   *    refused by name.
+   *
+   * Both halves move together on purpose. They are separate fields and flipping only
+   * the flag grants the tools while still refusing "Reset" by label, which is a
+   * confusing half-state: able to clear cookies, unable to press the button that does
+   * the same thing visibly.
+   *
+   * **What this gives up.** A test deployment is shared, and a control called "Delete
+   * account" is now clickable here. The remaining protections are the effect tags
+   * (`effectAllowed` still refuses an untagged spec anywhere but local), the outbound
+   * labels below, `maxActions`, `maxStates`, and the fact that a run is scoped to one
+   * app and environment at a time. If that proves too loose, the narrower fix is a
+   * per-app override — `policyFor` already accepts `Partial<ExplorationPolicy>` — so
+   * one subject can differ without moving the tier for everyone.
+   */
   test: {
     allowWrites: true,
     allowFormSubmit: true,
-    allowDestructive: false,
+    allowDestructive: true,
     allowAuthentication: true,
     stayOnOrigin: true,
     captureBodies: false,
-    denyLabels: [...DESTRUCTIVE_LABELS, ...OUTBOUND_LABELS],
+    denyLabels: [...OUTBOUND_LABELS],
     maxStates: 25,
     maxActions: 100,
     timeoutMs: 180_000,
@@ -199,6 +226,36 @@ export function isEnvironment(value: string | undefined): value is Environment {
 }
 
 /**
+ * Types that take typed text. Everything else an `<input>` can be — submit, button,
+ * image, reset, checkbox, radio, file — either acts or is not typing.
+ *
+ * `password` is deliberately absent: it is text entry, but it has its own rule below
+ * and a label like "reset password" on a credential field is worth keeping refused.
+ */
+const TEXT_ENTRY_TYPES = new Set([
+  'text',
+  'email',
+  'search',
+  'tel',
+  'url',
+  'number',
+  'date',
+  'datetime-local',
+  'month',
+  'week',
+  'time',
+  'color',
+  'range',
+]);
+
+/** Whether this control is a box you type into rather than something you press. */
+function entersText(control: { tag: string; type: string | null }): boolean {
+  if (control.tag === 'textarea') return true;
+  if (control.tag !== 'input') return false;
+  return TEXT_ENTRY_TYPES.has(control.type ?? 'text');
+}
+
+/**
  * Decides whether one control may be interacted with.
  *
  * Returns a reason when the answer is no, because a skipped control has to be
@@ -210,9 +267,24 @@ export function actionAllowed(
 ): { allowed: true } | { allowed: false; reason: string } {
   const label = (control.label ?? '').toLowerCase().trim();
 
-  const denied = policy.denyLabels.find((needle) => label.includes(needle));
-  if (denied !== undefined) {
-    return { allowed: false, reason: `label contains "${denied}"` };
+  // The label rules are about controls that *do* something — press this and an email
+  // goes, a subscription starts, a record dies. Typing into a box does none of that,
+  // and applying them to a field refuses "Email Address" on any contact form in the
+  // world because the label contains "email". Found by the driver on
+  // WebDriverUniversity, 2026-09-19: seven candidates planned and that one field
+  // silently dropped, the loss attributed to policy. The module already argued this
+  // way further down — "typing into a field is not a write" — and the label check ran
+  // first without applying it.
+  //
+  // **Fail-safe when the caller cannot tell.** `browser-guard.ts` gets an opaque ref
+  // and a description the model wrote, so it passes `tag: 'unknown'`, which is not a
+  // text field here and keeps the full rule. Only a caller that positively knows it
+  // is looking at a text box — the driver, reading a scan — gets the exemption.
+  if (!entersText(control)) {
+    const denied = policy.denyLabels.find((needle) => label.includes(needle));
+    if (denied !== undefined) {
+      return { allowed: false, reason: `label contains "${denied}"` };
+    }
   }
 
   if (control.isSubmit && !policy.allowFormSubmit) {

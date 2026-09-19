@@ -1,6 +1,14 @@
 import { test, expect } from '@playwright/test';
 import { join, resolve } from 'node:path';
-import { insideDir, lockfilesMatch, runsRoot, worktreePath } from '../../src/qe/run-worktree.js';
+import {
+  canonical,
+  insideDir,
+  lockfilesMatch,
+  runsRoot,
+  worktreePath,
+} from '../../src/qe/run-worktree.js';
+import { realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 /**
  * The pure half of worktree isolation: where runs live, what counts as inside one, and
@@ -55,5 +63,40 @@ test.describe('whether linked modules can be trusted', () => {
       'modules installed for one lockfile do not serve code from another',
     ).toBe(false);
     expect(lockfilesMatch(null, '{}')).toBe(false);
+  });
+});
+
+test.describe('naming the same directory two ways', () => {
+  test('should agree however the path was spelled', () => {
+    // The regression: `git worktree list --porcelain` reports the long Windows path
+    // while Node reports whatever it was handed, and `isRunWorktree` compared the two
+    // strings and refused a worktree it had just created. On a machine with 8.3 short
+    // names these two spellings differ; everywhere else they are already equal and
+    // this asserts the invariant trivially. Both are worth having: the one that can
+    // fail does so exactly where the bug lives.
+    const short = tmpdir();
+    const long = realpathSync.native(short);
+
+    expect(
+      canonical(short),
+      'two spellings of one directory must canonicalise to one string, or a path comparison refuses a directory that exists',
+    ).toBe(canonical(long));
+  });
+
+  test('should be idempotent, so a canonical path survives being canonicalised again', () => {
+    const once = canonical(tmpdir());
+
+    expect(canonical(once), 'a normaliser that moves on the second pass is not one').toBe(once);
+  });
+
+  test('should fall back rather than throw on a path that does not exist', () => {
+    // isRunWorktree is handed whatever a caller passed to --worktree, which may be
+    // nonsense. Throwing there would turn a wrong flag into a crash instead of a refusal.
+    const missing = join(tmpdir(), 'no-such-directory-4e8f21');
+
+    expect(
+      canonical(missing),
+      'a path that cannot be resolved must still come back absolute, so the caller can compare and refuse it',
+    ).toBe(resolve(missing));
   });
 });

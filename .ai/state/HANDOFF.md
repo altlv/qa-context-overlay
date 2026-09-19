@@ -267,6 +267,54 @@ scan`, which costs no tokens and grades the selectors as well.
   refusal failed to fire would have started a paid agent run. Every `role.ts` test
   passes `--preflight`, which exits before the worktree and the agent. Never mutate that
   exit.
+- **A defensive branch for a case you never confirmed is a fiction with a comment
+  attached.** The driver split its target on `→` before looking the element up,
+  believing the arrow was a selector with a read-back appended, and documented that
+  belief in the function's doc comment. Only `apiIdeas` produces that form, and its
+  target is an endpoint — so the branch could never have matched and the comment
+  described a case the codebase does not contain. A test written to prove the branch
+  worked is what exposed it. Write the case that proves the branch fires; if you cannot,
+  the branch is the thing to delete.
+- **Two `npm test` runs at once corrupt each other's results.** One in the background
+  and one in the foreground gave 587 passed with 4 "did not run", against 603 passed and
+  1 failed when either ran alone — they compete for the fixture server and both write
+  `artifacts/results.json`, which `npm run gate` and `npm run plan:facts` then read. Run
+  the suite alone and re-run it before quoting any number from it.
+- **Playwright MCP writes into its working directory unless `--output-dir` says
+  otherwise.** A spike that spawned it without the flag left a `.playwright-mcp/`
+  folder in the repository root, holding a snapshot of the page it had visited.
+  `browserMcpConfig` always passes the flag, so a real run is unaffected — and the
+  reason to keep it that way is that a run's cwd is its worktree, whose diff is the
+  only account of what the run changed. A tool quietly adding files there turns
+  evidence into noise, and `worktreeChanges` would report them as the agent's work.
+  Verified after the fact: the integration test, which does pass the flag, creates
+  nothing.
+- **`npm run mutate` rewrites source files in place — nothing else may touch the tree
+  while it runs.** It edits a file, runs the suites, restores it, and moves to the
+  next, for every mutation in the list. Two consequences, both met on 2026-09-19.
+  Editing during a run makes every result meaningless in both directions: your change
+  can fail a suite and be recorded as a mutation caught, and a restore can write the
+  pre-edit copy back over your work. And **killing a run leaves the current mutation
+  applied** — a stopped run left `page` replaced by `Promise.resolve()` in
+  `src/tools/probe.ts`, which `git status` showed and `git diff` briefly did not,
+  because the process restored that file and mutated the next one between the two
+  commands. After stopping one, check `git diff` over `src/` for a change you did not
+  make, and be aware the run takes roughly an hour: `TaskStop` on a wrapper shell does
+  not stop the node process underneath it.
+- **A CDP connection learns about a page when the browser tells it, not when the other
+  client opens one.** The observer attaches to the shared browser before Playwright MCP
+  does, so after MCP's first `browser_navigate` the page exists while
+  `browser.contexts().pages()` on this connection can still be empty. A single look
+  returned null and the run counted a miss on the very first action of every session —
+  an undercount, which makes the state ceiling permissive. `activePage` now polls for a
+  bounded window and returns the moment a page appears. Found by
+  `observer.int.test.ts` failing about one run in four, not by reading the code: it
+  passed every time it was run alone.
+- **`grep -q "failed"` over Playwright's line reporter matches test names.** Several
+  tests here are called things like "should FAIL when tests failed", so a loop counting
+  failures that way reported 10 failures in 10 runs of a suite that was entirely green.
+  Match the summary line — `^ +[0-9]+ failed` — and re-read any flake rate measured the
+  other way before believing it.
 
 ## Credentials
 

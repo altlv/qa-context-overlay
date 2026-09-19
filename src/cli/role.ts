@@ -15,9 +15,13 @@ import { budgetForTier, resolveModel } from '../agents/models.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
 import type { SnapshotMode } from '../qe/browser-tools.js';
-import { browserGuard } from '../qe/browser-guard.js';
+import { browserGuard, movesThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
+import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
+import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
+import { formatActionPlan, planActions } from '../qe/driver.js';
+import { ideasFor } from '../qe/test-ideas.js';
 import { ENVIRONMENTS, policyFor } from '../qe/exploration-policy.js';
 import { fileToolGuard } from '../qe/file-guard.js';
 import { readinessProblems, stalenessWarning } from '../qe/readiness.js';
@@ -35,7 +39,7 @@ import {
   worktreeChanges,
 } from '../qe/run-worktree.js';
 import { shellGuard } from '../qe/shell-guard.js';
-import { guardHook } from '../qe/tool-hook.js';
+import { guardHook, observerHook } from '../qe/tool-hook.js';
 import { NetworkRecorder } from '../capture/network.js';
 import { formatProbe, probePage } from '../tools/probe.js';
 
@@ -245,6 +249,7 @@ let browser: {
   tools: string[];
   briefing: string;
   guard: BrowserGuard;
+  observer: Observer;
 } | null = null;
 
 const access = BROWSER_ACCESS[name];
@@ -252,6 +257,7 @@ if (access !== undefined && runTarget !== null) {
   const policy = policyFor(runTarget.environment);
 
   let map = '';
+  let actions = '';
   if (prescan) {
     process.stderr.write(`Scanning ${runTarget.baseURL} before the session… `);
     const chrome = await chromium.launch();
@@ -259,12 +265,42 @@ if (access !== undefined && runTarget !== null) {
     const network = NetworkRecorder.attach(page, { captureBodies: policy.captureBodies });
     try {
       await page.goto(runTarget.baseURL, { waitUntil: 'domcontentloaded' });
-      map = formatProbe(await probePage(page, network, {}));
-      process.stderr.write(`${map.split('\n').length} lines, 0 tokens spent\n`);
+      const probe = await probePage(page, network, {});
+      map = formatProbe(probe);
+      // The same scan, read a second way. A session was previously handed the map and
+      // left to work out what to try from it, every time, at model prices — while the
+      // generators that answer exactly that ran only in a separate CLI nothing in a run
+      // called. Costs one more pass over an object already in memory.
+      const plan = planActions({
+        ideas: ideasFor({ scan: probe.scan, dictionary: probe.dictionary }),
+        scan: probe.scan,
+        policy,
+      });
+      actions = formatActionPlan(plan, runTarget.environment);
+      process.stderr.write(
+        `${map.split('\n').length} lines, ${plan.candidates.length} candidate action(s), ` +
+          `${plan.skipped.length} refused by policy, 0 tokens spent\n`,
+      );
     } finally {
       await chrome.close();
     }
   }
+
+  // One browser, two clients. This run launches Chromium with a debugging port and
+  // hands the endpoint to MCP, so the agent drives it and the harness reads it — which
+  // is the only arrangement in which `maxStates` can be enforced on what actually
+  // happened rather than on what the model said happened. A role that only observes
+  // gets no state model because it cannot change state; its ceiling is its tool list.
+  const cdpPort = await freePort();
+  const cdpEndpoint = `http://127.0.0.1:${cdpPort}`;
+  const driven = await chromium.launch({ args: [`--remote-debugging-port=${cdpPort}`] });
+  const eyes = await chromium.connectOverCDP(cdpEndpoint);
+  const observer = pageObserver(() => activePage(eyes));
+  // Closing in this order matters: the observer connection first, so tearing it down
+  // cannot race MCP's own shutdown against a browser that is already gone.
+  process.on('exit', () => {
+    void eyes.close().then(() => driven.close());
+  });
 
   browser = {
     mcpServers: {
@@ -273,16 +309,21 @@ if (access !== undefined && runTarget !== null) {
         runTarget.origins,
         join(worktree, 'artifacts', 'browser'),
         snapshots,
+        cdpEndpoint,
       ),
     },
     tools: browserToolsFor(policy, access),
-    briefing: sessionBriefing({ target: runTarget.baseURL, policy, access, map }),
-    guard: browserGuard(policy),
+    briefing: sessionBriefing({ target: runTarget.baseURL, policy, access, map, actions }),
+    guard: browserGuard(policy, observer),
+    observer,
   };
   console.error(
     `Browser: ${runTarget.app}/${runTarget.environment} at ${runTarget.baseURL} — ${browser.tools.length} of the ` +
       `MCP server’s tools granted (role ceiling: ${access}, snapshots: ${snapshots})` +
       (policy.allowWrites && access === 'full' ? '' : ', read-only'),
+  );
+  console.error(
+    `  shared browser on ${cdpEndpoint} — enforcing ${browser.guard.enforcing().join(' · ')}`,
   );
 } else if (access !== undefined) {
   console.error(`No --app/--env given, so ${name} runs without a browser.`);
@@ -357,6 +398,21 @@ try {
       PreToolUse: [
         guardHook(check, (toolName, reason) => console.error(`  refused ${toolName}: ${reason}`)),
       ],
+      // Only where a browser exists. Registering an observer with nothing to observe
+      // would spend a hook on every tool call to reach a `null` page and count a miss,
+      // which would then report the state count as a floor for a run that never had a
+      // browser — a caveat that is not merely useless but actively misleading.
+      ...(browser === null
+        ? {}
+        : {
+            PostToolUse: [
+              observerHook(async () => {
+                const transition = await browser!.observer.observe();
+                const moved = transition === null ? null : describeTransition(transition);
+                if (moved !== null) console.error(`  page: ${moved}`);
+              }, movesThePage),
+            ],
+          }),
     },
     model: chosen.id,
     budget,
@@ -375,6 +431,13 @@ console.error(
 );
 if (result.stoppedBy !== null) {
   console.error('The run hit a budget limit. Its report is partial; the gate still runs.');
+}
+// Printed beside the turns and the dollars because it is the same kind of fact: what
+// the session actually spent. A session that clicked forty times around one screen and
+// one that crossed fifteen cost the same in tokens and are not the same session.
+if (browser !== null) {
+  for (const line of browser.observer.summary()) console.error(`  ${line}`);
+  console.error(`  Actions spent: ${browser.guard.spent()}`);
 }
 
 // ── Post-run gate on the worktree's diff ──────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync } from 'node:fs';
 import { createServer, type AddressInfo } from 'node:net';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -40,6 +40,35 @@ export function worktreePath(repoRoot: string, runId: string): string {
 export function insideDir(path: string, dir: string): boolean {
   const rel = relative(resolve(dir), resolve(dir, path));
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+/**
+ * The path as the filesystem itself spells it, for comparing against git's output.
+ *
+ * `path.resolve` normalises separators and `..` and stops there, which is not enough
+ * the moment two sources disagree about how to *name* the same directory. On Windows
+ * a folder whose name contains a space gets an 8.3 alias, and a `TMP` pointing at
+ * `C:\Users\PCUSER~1\...` is the short form of `C:\Users\PC User\...`.
+ * `git worktree list --porcelain` reports the long form, Node reports whatever it was
+ * given, and `isRunWorktree` compared the two strings and said no — refusing a
+ * worktree it had created seconds earlier. `--worktree` reuse was therefore broken
+ * for anyone whose path reaches the repository through a short name, which is why
+ * this is not only a test fix.
+ *
+ * Falls back to `resolve` when the path does not exist, because `realpath` throws
+ * there and a path that does not exist is not a worktree either way.
+ *
+ * **Deliberately not used by `insideDir`.** That one guards the file tools, and a run
+ * worktree reaches `node_modules` through a link: resolving real paths there would
+ * land outside the worktree and start refusing reads the run is entitled to.
+ * Containment and identity are different questions and want different answers.
+ */
+export function canonical(path: string): string {
+  try {
+    return realpathSync.native(resolve(path));
+  } catch {
+    return resolve(path);
+  }
 }
 
 /** Line endings differ between checkouts on Windows; content is what must match. */
@@ -136,13 +165,16 @@ export async function createRunWorktree(
 
 /** Whether `path` is a registered worktree under this repository's runs folder. */
 export async function isRunWorktree(repoRoot: string, path: string): Promise<boolean> {
-  if (!insideDir(path, runsRoot(repoRoot))) return false;
+  // Both sides through `canonical`, because this compares a caller's spelling of a
+  // path against git's, and the two disagree whenever a short name is involved.
+  const wanted = canonical(path);
+  if (!insideDir(wanted, canonical(runsRoot(repoRoot)))) return false;
   const listing = await git(repoRoot, ['worktree', 'list', '--porcelain']);
   const registered = listing
     .split(/\r?\n/)
     .filter((line) => line.startsWith('worktree '))
-    .map((line) => resolve(line.slice('worktree '.length)));
-  return registered.includes(resolve(path));
+    .map((line) => canonical(line.slice('worktree '.length)));
+  return registered.includes(wanted);
 }
 
 /** Everything changed in a run worktree — all of it the run's, by construction. */

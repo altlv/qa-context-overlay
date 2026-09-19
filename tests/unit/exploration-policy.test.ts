@@ -71,11 +71,11 @@ test.describe('environment presets', () => {
 
 test.describe('actionAllowed', () => {
   test('should refuse a control whose label reads destructive, and say why', () => {
-    const verdict = actionAllowed(policyFor('test'), control({ label: 'Delete account' }));
+    // Moved from `test` to `prod` on 2026-09-19 when the test tier gained
+    // allowDestructive. The rule did not change; the tier carrying it did.
+    const verdict = actionAllowed(policyFor('prod'), control({ label: 'Delete account' }));
 
-    expect(verdict.allowed, 'a Delete control must not be clicked on a shared environment').toBe(
-      false,
-    );
+    expect(verdict.allowed, 'a Delete control must not be clicked against real users').toBe(false);
     expect(
       verdict.allowed === false ? verdict.reason : '',
       'a refusal must carry a reason, because every skipped control is reported as unexplored',
@@ -172,5 +172,66 @@ test.describe('formatChecklist', () => {
       rendered,
       'the report must carry the warning that a constrained clean session proves little',
     ).toContain('not evidence of a clean system');
+  });
+});
+
+test.describe('label rules apply to controls that act, not to boxes you type in', () => {
+  const field = (label: string, type = 'text') => ({ label, tag: 'input', type, isSubmit: false });
+  const button = (label: string) => ({ label, tag: 'button', type: null, isSubmit: false });
+
+  test('should let a session type into a field labelled Email Address', () => {
+    // Found by the driver on WebDriverUniversity's contact form, 2026-09-19: seven
+    // candidates planned and this one dropped, because "email address" contains
+    // "email" — a rule meant to stop pressing something that mails a real person.
+    expect(
+      actionAllowed(policyFor('test'), field('Email Address', 'email')).allowed,
+      'refusing an email field loses that field on every contact form there is, and blames the policy for it',
+    ).toBe(true);
+  });
+
+  test('should still refuse a control that acts on the same word', () => {
+    // The rule must keep doing its job; this is the case it was written for.
+    const verdict = actionAllowed(policyFor('test'), button('Email this to a friend'));
+
+    expect(verdict.allowed, 'pressing this sends mail to a real person').toBe(false);
+    expect(
+      verdict.allowed ? '' : verdict.reason,
+      'the refusal must still name the label that caused it',
+    ).toContain('email');
+  });
+
+  test('should refuse when the caller cannot tell what the control is', () => {
+    // browser-guard sees an opaque ref and a description the model wrote, so it passes
+    // tag 'unknown'. That must keep the full rule: the exemption is for a caller that
+    // positively knows it is looking at a text box, never a default.
+    expect(
+      actionAllowed(policyFor('prod'), {
+        label: 'Delete everything',
+        tag: 'unknown',
+        type: null,
+        isSubmit: false,
+      }).allowed,
+      'an exemption that applies when nothing is known is not an exemption, it is a hole',
+    ).toBe(false);
+  });
+
+  test('should keep refusing a destructive label on a checkbox, which acts', () => {
+    expect(
+      actionAllowed(policyFor('prod'), {
+        label: 'Delete my account',
+        tag: 'input',
+        type: 'checkbox',
+        isSubmit: false,
+      }).allowed,
+      'a checkbox is pressed, not typed into, so the label rule still applies to it',
+    ).toBe(false);
+  });
+
+  test('should keep refusing a credential field whose label reads destructive', () => {
+    // password is left out of the text-entry set on purpose.
+    expect(
+      actionAllowed(policyFor('prod'), field('Reset password', 'password')).allowed,
+      'a password box is text entry and still not somewhere to relax a label rule',
+    ).toBe(false);
   });
 });

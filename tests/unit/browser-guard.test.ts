@@ -27,11 +27,25 @@ test.describe('what may be clicked', () => {
     }
   });
 
-  test('should refuse a destructive label on a shared environment', () => {
-    const verdict = browserGuard(policyFor('test')).check(...click('Delete account link'));
-    expect(verdict.allowed, 'a shared test environment is someone else’s blocked afternoon').toBe(
+  test('should refuse a destructive label where the policy denies it', () => {
+    // Was asserted against `test` until 2026-09-19, when that tier gained
+    // allowDestructive. The rule is unchanged; the tier that carries it moved, so the
+    // case moved with it rather than being weakened to keep passing.
+    const verdict = browserGuard(policyFor('prod')).check(...click('Delete account link'));
+    expect(verdict.allowed, 'production is where a destructive label must never be pressed').toBe(
       false,
     );
+  });
+
+  test('should permit a destructive label on a test environment, by decision', () => {
+    // The other half of that change, pinned so a silent revert is visible. A control
+    // named "Reset" is usually the safest thing on a practice app, and refusing it cost
+    // a session the ability to return to a known state.
+    const verdict = browserGuard(policyFor('test')).check(...click('Reset the app'));
+    expect(
+      verdict.allowed,
+      'test tier permits destructive controls as of 2026-09-19 — if this fails, the preset changed and the reason should be recorded',
+    ).toBe(true);
   });
 
   test('should allow an ordinary control', () => {
@@ -109,7 +123,7 @@ test.describe('what the guard cannot do', () => {
     // model writes. This documents the limit rather than pretending it away: the
     // guard catches the honest case, and the tool allowlist is the layer that does
     // not depend on the model's description at all.
-    const guard = browserGuard(policyFor('test'));
+    const guard = browserGuard(policyFor('prod'));
     const honest = guard.check(...click('Delete account'));
     const evasive = guard.check(...click('the third button'));
     expect(honest.allowed, 'the honest description must be refused').toBe(false);
@@ -117,5 +131,61 @@ test.describe('what the guard cannot do', () => {
       evasive.allowed,
       'a vague description passes the label check — if this ever starts failing, the guard got stronger and this test should be rewritten rather than deleted',
     ).toBe(true);
+  });
+});
+
+test.describe('the state ceiling', () => {
+  const source = (count: number) => ({
+    count: () => count,
+    atCeiling: (max: number) => count >= max,
+  });
+
+  test('should refuse an action once the session has visited its states', () => {
+    // maxStates was in the policy from the beginning and enforced by nothing, because
+    // a per-call guard cannot tell a new page from a return. The state model can, and
+    // this is the refusal that makes the bound real.
+    const policy = policyFor('prod');
+    const guard = browserGuard(policy, source(policy.maxStates));
+
+    const decision = guard.check('mcp__playwright__browser_click', { element: 'Next page' });
+
+    expect(
+      decision.allowed,
+      'a bound that never refuses is advice, and this one had been advice since it was written',
+    ).toBe(false);
+    expect(decision.reason, 'the refusal must name the ceiling it hit').toContain('state ceiling');
+  });
+
+  test('should let an action through while states remain', () => {
+    const policy = policyFor('local');
+    const guard = browserGuard(policy, source(policy.maxStates - 1));
+
+    expect(
+      guard.check('mcp__playwright__browser_click', { element: 'Open menu' }).allowed,
+      'one state short of the ceiling must still act, or exploration stops a step early',
+    ).toBe(true);
+  });
+
+  test('should not count observation against the state ceiling', () => {
+    const policy = policyFor('prod');
+    const guard = browserGuard(policy, source(policy.maxStates));
+
+    expect(
+      guard.check('mcp__playwright__browser_take_screenshot', {}).allowed,
+      'looking changes nothing and must stay available for the session to report what it saw',
+    ).toBe(true);
+  });
+
+  test('should say plainly when maxStates is not being enforced', () => {
+    // The hole this closes: a guard with no state source silently enforces two of
+    // three bounds, and a run summary that did not say so would read as all three.
+    expect(
+      browserGuard(policyFor('local')).enforcing().join(' '),
+      'an unenforced bound must announce itself, not be inferred from its absence',
+    ).toContain('NOT enforced');
+    expect(
+      browserGuard(policyFor('local'), source(0)).enforcing().join(' '),
+      'and a guard that does enforce it must say the number',
+    ).toContain('40 states');
   });
 });

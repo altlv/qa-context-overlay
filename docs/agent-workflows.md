@@ -228,9 +228,49 @@ One `PreToolUse` hook carries every guard; a guard that throws refuses the call.
 | A stale design             | Warn                                                        | Refuse                                                           |
 | How a guard reaches a run  | One `PreToolUse` hook, fail-closed                          | `canUseTool`                                                     |
 
+### Decided on 2026-09-18
+
+| Question                       | Decision                                                                                                                                      | Declined                                                                             |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Where the driver's state lives | A **CDP-shared browser**: the harness launches Chromium, hands Playwright MCP `--cdp-endpoint`, and keeps its own Playwright connection to it | A `PostToolUse` hook parsing snapshot text; a deterministic driver CLI with no agent |
+| What the driver decides        | Which actions are **possible and permitted** — `ideasFor` narrowed by the policy                                                              | Which action is most worth taking; that stays judgement, per `heuristics.ts`         |
+
+Both mechanisms were checked before choosing, not assumed: the SDK does carry
+`PostToolUse` with `tool_response`, and `@playwright/mcp` does accept `--cdp-endpoint`.
+`PostToolUse` was declined because state would be derived from the model-facing snapshot
+text — which forces `--snapshot-mode full`, the expensive way to look, and loses
+`fieldName`, `constraints` and `ancestors`, most of the redundant signals `identity.ts`
+exists for.
+
+### Decided on 2026-09-19
+
+| Question                             | Decision                                                                                     | Declined                                                                          |
+| ------------------------------------ | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Destructive actions on the test tier | **Permitted** — `allowDestructive: true`, and `DESTRUCTIVE_LABELS` dropped from `denyLabels` | Leaving it refused; a per-app override for one subject only                       |
+| Whether the two halves move together | Together                                                                                     | Flipping the flag alone, which grants the tools and still refuses "Reset" by name |
+
+The user's decision, and it is worth stating what it costs. `allowDestructive` is one
+flag governing two different things: which browser tools an agent holds, and — through
+`grepForPolicy` in `apps/targets.ts` — **which Playwright specs run at all**. So a test
+deployment now also runs `@destructive` specs, and untagged ones whose effect nobody
+declared, exactly as local does. That is a wider blast radius than the browser policy
+that motivated the change.
+
+What still protects a test deployment: the outbound labels (never permitted anywhere),
+`maxActions`, `maxStates`, `stayOnOrigin`, and one run per app and environment at a
+time. If the spec half proves too loose, the fix is to split the flag —
+`allowSessionReset` for cookies and storage, `allowDestructive` for controls that
+destroy data — not to quietly narrow the tests that now pin this behaviour.
+
 ### Open
 
-- **The driver (E5)** — a mode of `exploratory-tester`, or a role of its own.
+- **The driver (E5)** — a mode of `exploratory-tester`, or a role of its own. **E5a is
+  built**: `src/qe/driver.ts` joins `ideasFor` to the policy, and a `--scan` run now
+  carries candidate actions and named refusals into the briefing. **E5b is built**: the
+  run launches Chromium with a debugging port, hands the endpoint to Playwright MCP,
+  and reads the live DOM over its own connection after every call that can move the
+  page — so `maxStates` is enforced rather than described. **E5c**, choosing the next
+  action from the diff, is not; the driver narrows and does not choose.
 - **A test-reviewer role**, judging whether a finished spec's assertions are good enough.
 - **`oracle-check` for coders** — an assertion is an oracle written down.
 

@@ -8,18 +8,20 @@ test, and the skills in `.claude/skills/` before deciding _what_ to test.
 A harness pairing Claude (via `@anthropic-ai/claude-agent-sdk`) with Playwright for
 QA/QE work.
 
-| Capability                                      | Status                             | Entry point                 |
-| ----------------------------------------------- | ---------------------------------- | --------------------------- |
-| Network capture                                 | built                              | `src/capture/network.ts`    |
-| Page scanner + testability audit                | built                              | `src/tools/page-scanner.ts` |
-| Test quality gate                               | built                              | `src/quality/assertions.ts` |
-| Release gate verdict                            | built                              | `src/qe/gate.ts`            |
-| Failure triage agent                            | built, unverified against live API | `src/agents/triage.ts`      |
-| Agent roles — coding family and testing family  | defined, not yet driven            | `src/agents/roles.ts`       |
-| Self-healing selectors                          | built                              | `src/tools/heal.ts`         |
-| Test ideas from a scan, heuristics catalogue    | built, not yet used by an agent    | `src/qe/test-ideas.ts`      |
-| Role runner — preflight, guards, worktree, gate | built, not yet driven by an agent  | `src/cli/role.ts`           |
-| Fault check — does a spec notice a 500          | built                              | `src/cli/fault-check.ts`    |
+| Capability                                      | Status                              | Entry point                 |
+| ----------------------------------------------- | ----------------------------------- | --------------------------- |
+| Network capture                                 | built                               | `src/capture/network.ts`    |
+| Page scanner + testability audit                | built                               | `src/tools/page-scanner.ts` |
+| Test quality gate                               | built                               | `src/quality/assertions.ts` |
+| Release gate verdict                            | built                               | `src/qe/gate.ts`            |
+| Failure triage agent                            | built, unverified against live API  | `src/agents/triage.ts`      |
+| Agent roles — coding family and testing family  | defined, not yet driven             | `src/agents/roles.ts`       |
+| Self-healing selectors                          | built                               | `src/tools/heal.ts`         |
+| Test ideas from a scan, heuristics catalogue    | built, reaches a run via the driver | `src/qe/test-ideas.ts`      |
+| Driver (E5a) — candidate actions under a policy | built, no live agent has seen one   | `src/qe/driver.ts`          |
+| State model (E5b) — shared browser over CDP     | built, never refused a live session | `src/qe/state-model.ts`     |
+| Role runner — preflight, guards, worktree, gate | built, not yet driven by an agent   | `src/cli/role.ts`           |
+| Fault check — does a spec notice a 500          | built                               | `src/cli/fault-check.ts`    |
 
 Do not add placeholder modules for the planned items. Build one end to end when it
 is wanted.

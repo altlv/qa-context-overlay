@@ -25,6 +25,15 @@ export interface BriefingInput {
   access: BrowserAccess;
   /** A pre-computed scan, or empty when the session must look for itself. */
   map: string;
+  /**
+   * The candidate actions the policy permits here, or empty when none were computed.
+   *
+   * Separate from `map` because they answer different questions and a session can
+   * have one without the other: the map says what is on the page, the plan says what
+   * may be done to it. Joining them into one string would have made "was a plan
+   * offered?" untestable, which is the measurement item 30 exists to take.
+   */
+  actions?: string;
 }
 
 /** The opening move, which differs entirely depending on whether a map was supplied. */
@@ -68,6 +77,7 @@ function reach(policy: ExplorationPolicy, access: BrowserAccess): string {
 
 export function sessionBriefing(input: BriefingInput): string {
   const { target, policy, access, map } = input;
+  const actions = input.actions ?? '';
 
   const lines = [
     `Target: ${target} (environment: ${policy.environment}).`,
@@ -85,8 +95,15 @@ export function sessionBriefing(input: BriefingInput): string {
       ' invite — are refused wherever you are, and destructive labels are refused' +
       ' outside a local fixture. A refusal is a finding: report the control as' +
       ' unexplored rather than looking for another route to it.',
+    // Named only when one exists. A briefing that mentions a list the session was not
+    // given is the same contradiction that cost 3 turns and $0.07 the first time:
+    // the agent goes looking for it.
+    actions === ''
+      ? ''
+      : 'Candidate actions generated from the scan follow the map. They are values and' +
+        ' targets, already filtered to what this policy permits — not a checklist and not' +
+        ' a ranking. Pick the ones the risk here justifies, and say which you left.',
   ].filter(Boolean);
 
-  const body = lines.join(' ');
-  return map === '' ? body : `${body}\n\n${map}`;
+  return [lines.join(' '), map, actions].filter((section) => section !== '').join('\n\n');
 }

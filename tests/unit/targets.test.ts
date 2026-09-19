@@ -121,13 +121,35 @@ test.describe('the runner filter', () => {
     ).toBe(false);
   });
 
-  test('should let a test environment run writes but not deletes', () => {
-    const grep = grepForPolicy(policyFor('test'));
+  test('should stop filtering a test run once that tier allows destructive', () => {
+    // **The consequence worth seeing.** `allowDestructive` is one flag governing two
+    // different things: which browser tools an agent holds, and which Playwright specs
+    // run at all. Flipping it for the test tier on 2026-09-19 did both, so a test
+    // deployment now runs `@destructive` specs — and untagged ones, whose effect
+    // nobody declared — exactly as local does.
+    //
+    // Asserted rather than left implied, because the blast radius here is wider than
+    // the browser policy that motivated the change. If that is not wanted, the fix is
+    // to split the flag, not to quietly narrow this test.
+    expect(
+      grepForPolicy(policyFor('test')),
+      'a test tier that allows destructive runs everything, like local — if this becomes a filter again, the flag was split and that decision should be recorded',
+    ).toBeUndefined();
+  });
 
-    expect(grep?.test('@writes'), 'writing is the point of a test environment').toBe(true);
+  test('should still refuse destructive and untagged specs on production', () => {
+    const grep = grepForPolicy(policyFor('prod'));
+
+    expect(grep?.test('@read-only'), 'reading production is the point of pointing at it').toBe(
+      true,
+    );
     expect(
       grep?.test('@destructive'),
-      'a shared environment still refuses deletes, so the filter must not admit them',
+      'production is where safe-by-default has to survive, whatever the other tiers do',
+    ).toBe(false);
+    expect(
+      grep?.test('a test with no tag at all'),
+      'an undeclared effect is unknown, not harmless',
     ).toBe(false);
   });
 

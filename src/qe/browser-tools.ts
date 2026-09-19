@@ -246,15 +246,31 @@ export function browserMcpConfig(
   origins: string | readonly string[],
   outputDir = 'artifacts/browser',
   snapshots: SnapshotMode = 'full',
+  cdpEndpoint?: string,
 ): { command: string; args: string[] } {
   return {
     command: process.execPath,
     args: [
       mcpCliPath(),
-      // A fresh profile per session. Otherwise one session's cookies are the next
-      // session's starting state, and a run stops being reproducible.
-      '--isolated',
-      '--headless',
+      // Two shapes, and which one is in force decides whether the harness can see the
+      // page at all.
+      //
+      // Without an endpoint, MCP launches and owns a browser nothing else can reach,
+      // so the only account of what happened is the model's own text.
+      //
+      // With one, MCP attaches to a browser this run launched, and the harness keeps
+      // its own Playwright connection to it — which is how `state-model.ts` gets real
+      // fingerprints off the live DOM instead of parsing a snapshot. Proven on
+      // 2026-09-19: MCP's `browser_navigate` produced a page the observer connection
+      // then read.
+      //
+      // The fresh-profile guarantee moves with the launch rather than disappearing:
+      // `chromium.launch()` uses a throwaway profile per run, which is what
+      // `--isolated` was buying. One session's cookies are still never the next
+      // session's starting state.
+      ...(cdpEndpoint === undefined
+        ? ['--isolated', '--headless']
+        : ['--cdp-endpoint', cdpEndpoint]),
       '--output-dir',
       outputDir,
       '--snapshot-mode',
