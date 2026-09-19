@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `1e702dc` — the commit this file was last checked against. A file cannot name
+Head is `fe38d51` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -65,17 +65,16 @@ The first three lines are `npm run plan:facts` output, which refuses any run old
 the code.
 
 - `npm test` **662 passed** — unit 541, integration 51, todo-fixture 7, harness 63
-- `npm run test:external` **not clean, and not quoted as such** — 4 of 5 runs on
-  2026-09-19 failed one to four countdown-timer tests. fakerestapi's 16 passed every
-  run. See _Not proven_; `npm run plan:facts` refuses to bless this line while it
-  stands, which is the check working
-- `npm run mutate` **NOT RUN in full since these changes.** The last full sweep was
-  137/137; the list is now **144**, and a sweep started on 2026-09-19 was stopped
-  deliberately rather than commit a tree it was midway through rewriting. What is
-  measured instead: `npm run mutate -- --changed` covered **16/16** across the files
-  touched, in 114 seconds, and the seven new mutations were each applied by hand and
-  seen to fail a named test. That is evidence for those rules and **is not a mutation
-  score** — 128 rules went unchecked in the scoped run, and it says so itself
+- `npm run test:external` **not clean, and not quoted as such** — countdown-timer fails
+  intermittently at a rate that jumped on 2026-09-19, idle or busy alike. The 16
+  fakerestapi tests passed every run. The failure signature is captured under _Not
+  proven_ and the diagnosis is item 47; `npm run plan:facts` refuses to bless this line
+  while it stands, which is the check working
+- `npm run mutate` **144/144**, one mutation per enforced rule, no survivors. 1515
+  seconds on 2026-09-19 — worth recording, because the module header claimed "under a
+  minute" until today and that sentence is why a sweep was once fired mid-edit.
+  `npm run mutate -- --changed` covered 16/16 in 114s while the rules were being
+  written; it prints no percentage and says how many rules it skipped
 - `npm run gate` **PASS** · `npm run assert-quality` **61 files, 0 findings**
 - `npm run check` clean · `npm run precommit` clean
 - **The driver's plan runs on real third-party pages, both directions, 2026-09-18.**
@@ -211,21 +210,29 @@ the code.
   guard refuses git writes, secrets and foreign hosts, not paths — and nothing removes
   finished worktrees, by design, so they accumulate beside the repository until a person
   removes them.
-- **The countdown-timer suite fails intermittently, the rate is rising, and nobody
-  knows why.** One `npm run test:external` on 2026-09-14 failed three of six; 90 runs
-  after that failed none. On 2026-09-19 it failed once in four, on a different test.
-  Later the same day, after hours of repeated local suites and two mutation sweeps on
-  this machine, it failed **4 of 5 runs** — 2, 2, 0, 1 and 4 failures, clustered on
-  "should hold the remaining time while stopped" and "should resume from the held value
-  after a stop". Three different rates, days apart, and averaging them into one number
-  would invent a figure that describes none of them.
-  What has been ruled out: the site is not down or slow — three direct requests
-  returned HTTP 200 in 345–807 ms while the suite was failing. What has not been ruled
-  out, and is the standing lead: every occasion so far followed heavy local load, and
-  these are clock-driven tests. That is a correlation on three data points, not a
-  cause. Not called flaky in the dismissive sense: the target is somebody else's live
-  site, no mechanism is established, and a retry would bury it.
-  `apps/countdown-timer/README.md`
+- **The countdown-timer failures have a signature now, and the load theory is dead.**
+  History: 3 of 6 failed once on 2026-09-14, then 0 in 90 runs. On 2026-09-19 the rate
+  jumped — 4 of 5 runs while the machine was busy, and **3 of 5 with the machine idle**.
+  That difference is nothing at n=5, so "heavy local load" is **disproven as the lead**
+  rather than merely unconfirmed; it was recorded as the standing lead earlier the same
+  day and should not have been without a control.
+  What the failure actually looks like, captured rather than guessed: `runFor(10_000)`
+  from `00:01:00` lands on `00:00:49`, not `00:00:50` — off by one — and then the
+  display **keeps counting down in real time** while the assertion waits, drifting
+  49 → 44 across a 5-second timeout. If `page.clock` held the page it would be frozen
+  where `runFor` left it. So clock control over this app is partial or lost, which is a
+  mechanism, not a mood.
+  Ruled out: the site is not slow (HTTP 200 in 345–807 ms during failures); the spec
+  does install the clock before `goto`, as the README demands; nothing in this
+  repository has touched `apps/countdown-timer`, `src/fixtures`, `playwright.config.ts`,
+  `apps/targets.ts` or `apps/registry.ts` since `711d738` — `git log` over those paths
+  is empty, so no change here is implicated, the WebMCP work least of all since it was
+  documentation rows only.
+  The open lead: `/js/apps/timer/countdown.js` is served with
+  `last-modified: 2026-09-18 15:49 GMT`, one day before the rate jumped, and it drives
+  the display with `setInterval`. That is suggestive and not proof — a static-site
+  rebuild touches every mtime without changing a byte — and it cannot be confirmed
+  upstream, because the `sourceRepo` recorded in `app.config.ts` now 404s. Item 47
 - **Which guard path the SDK calls under `bypassPermissions` is unobserved (F7).** Its
   types say that mode bypasses permission checks, which is why `canUseTool` was
   replaced with a `PreToolUse` hook. Until a live run refuses a command, neither is shown
@@ -434,6 +441,7 @@ Three separate problems, and conflating them is the trap:
 | 44  | **Layer 2 first: record and replay an MCP conversation.** A fixture beside `src/fixtures/api.ts` that captures a real MCP server's stdio once and replays it deterministically, so a spec asserts the **tool-call sequence** rather than the model's words. The seed is already written and was written for something else: `tests/integration/observer.int.test.ts` speaks JSON-RPC over stdio to a real Playwright MCP server. This is the layer with the best value per unit of work here, and the one `assert-quality` could then gate — an MCP spec asserting a text blob instead of a call sequence is the same defect class as a UI spec checking a write only by its render                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 45  | **Layer 3 — success rates over runs. Unblocked 2026-09-19 when item 26 landed.** "Regression no longer means the output changed, it means success rates dropped" requires more than one run on disk to compare. `npm run archive-results` now keeps the newest 20, so there is finally something to measure against — though the history is a floor, since nothing runs it automatically                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | 46  | **Layer 4 is item 9 wearing a different hat.** LLM-as-judge on a rubric, three runs and a majority vote, needs a second model — which is exactly the `askModel(model, prompt)` seam item 9 already describes, and exactly what `honesty-check` most needs, since self-assessment is its weakest link. Build the seam once and both land                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 47  | **Diagnose the countdown-timer failures properly, with `flaky-test-detection`.** The signature is captured (see _Not proven_): `page.clock` does not hold this app — the display keeps counting in real time while an assertion waits — and `runFor` lands one second short. Two things to establish. First, whether the subject changed under us: its JS is served `last-modified: 2026-09-18`, a day before the rate jumped, and `setInterval` drives the display. Second, why clock control is partial, given the spec installs before `goto` as the README demands. **The `sourceRepo` in `apps/countdown-timer/app.config.ts` 404s**, so upstream history cannot answer the first — find where that repository moved, or record that it is gone. Until then this is the one external subject whose red is expected, which is exactly the state that teaches a team to ignore a red suite                                                                                                                                                                                                           |
 
 ## Waiting on the user
 
