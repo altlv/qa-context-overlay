@@ -153,12 +153,12 @@ test.describe('after a failed gate', () => {
     const command = investigationCommand(
       record(),
       `${RUN_DIR}/gate.json`,
-      'C:\\work\\cc-pw-qe-harness-runs\\e2e-coder-1',
+      'C:\\work\\qa-context-overlay-runs\\e2e-coder-1',
     );
     expect(
       command,
       'the failing specs exist only in that worktree; a fresh one at HEAD would not have them',
-    ).toContain('--worktree "C:/work/cc-pw-qe-harness-runs/e2e-coder-1"');
+    ).toContain('--worktree "C:/work/qa-context-overlay-runs/e2e-coder-1"');
   });
 
   test('should hand off nothing when the gate passed', () => {

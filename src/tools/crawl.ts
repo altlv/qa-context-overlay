@@ -27,7 +27,7 @@ import { templatePath } from './schema.js';
 
 /** Identifies us honestly, so an owner can recognise or block this traffic. */
 export const USER_AGENT =
-  'cc-pw-qe-harness/0.1 (+https://github.com/altlv/cc-pw-qe-harness) Playwright';
+  'qa-context-overlay/0.1 (+https://github.com/altlv/qa-context-overlay) Playwright';
 
 export interface RobotsRules {
   present: boolean;
@@ -152,7 +152,7 @@ export function parseRobots(text: string): Omit<RobotsRules, 'present'> {
     }
 
     if (field === 'user-agent') {
-      applies = value === '*' || value.toLowerCase().includes('cc-pw-qe-harness');
+      applies = value === '*' || value.toLowerCase().includes('qa-context-overlay');
       continue;
     }
 

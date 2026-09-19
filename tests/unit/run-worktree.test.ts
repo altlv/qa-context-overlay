@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
  * repository in tests/integration/run-worktree.int.test.ts.
  */
 
-const repo = resolve('/work/cc-pw-qe-harness');
+const repo = resolve('/work/qa-context-overlay');
 
 test.describe('where run worktrees live', () => {
   test('should put runs beside the repository, never inside it', () => {
@@ -25,13 +25,13 @@ test.describe('where run worktrees live', () => {
       insideDir(root, repo),
       'a worktree inside the repo is seen by its lint, format, tests and git status',
     ).toBe(false);
-    expect(root).toBe(resolve('/work/cc-pw-qe-harness-runs'));
+    expect(root).toBe(resolve('/work/qa-context-overlay-runs'));
     expect(worktreePath(repo, 'e2e-coder-1')).toBe(join(root, 'e2e-coder-1'));
   });
 });
 
 test.describe('what counts as inside a worktree', () => {
-  const worktree = resolve('/work/cc-pw-qe-harness-runs/e2e-coder-1');
+  const worktree = resolve('/work/qa-context-overlay-runs/e2e-coder-1');
 
   test('should accept a path inside it, relative or absolute', () => {
     expect(insideDir('apps/todo-fixture/tests/a.spec.ts', worktree)).toBe(true);
@@ -41,12 +41,12 @@ test.describe('what counts as inside a worktree', () => {
 
   test('should refuse a path that climbs or points out of it', () => {
     expect(
-      insideDir('../../cc-pw-qe-harness/src/cli/role.ts', worktree),
+      insideDir('../../qa-context-overlay/src/cli/role.ts', worktree),
       'an edit to the main checkout from inside a run is the shared state this removes',
     ).toBe(false);
     expect(insideDir(join(repo, 'src', 'cli', 'role.ts'), worktree)).toBe(false);
     expect(
-      insideDir(resolve('/work/cc-pw-qe-harness-runs/e2e-coder-10/x.ts'), worktree),
+      insideDir(resolve('/work/qa-context-overlay-runs/e2e-coder-10/x.ts'), worktree),
       'a sibling run with a similar name is not inside this one',
     ).toBe(false);
   });

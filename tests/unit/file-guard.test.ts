@@ -7,8 +7,8 @@ import { fileToolGuard } from '../../src/qe/file-guard.js';
  * tool: the path that leaves, and the ordinary path inside that must still work.
  */
 
-const worktree = resolve('/work/cc-pw-qe-harness-runs/e2e-coder-1');
-const main = resolve('/work/cc-pw-qe-harness');
+const worktree = resolve('/work/qa-context-overlay-runs/e2e-coder-1');
+const main = resolve('/work/qa-context-overlay');
 const guard = fileToolGuard(worktree);
 
 const allowed = (tool: string, input: Record<string, unknown>) => guard.check(tool, input)?.allowed;
@@ -27,7 +27,7 @@ test.describe('file tools inside a run worktree', () => {
       allowed('Edit', { file_path: join(main, 'src', 'cli', 'role.ts') }),
       'an edit to the main checkout reaches a person’s uncommitted work',
     ).toBe(false);
-    expect(allowed('Write', { file_path: '../../cc-pw-qe-harness/README.md' })).toBe(false);
+    expect(allowed('Write', { file_path: '../../qa-context-overlay/README.md' })).toBe(false);
     expect(allowed('NotebookEdit', { notebook_path: join(main, 'n.ipynb') })).toBe(false);
   });
 

@@ -5,8 +5,10 @@ test, and the skills in `.claude/skills/` before deciding _what_ to test.
 
 ## What this repo is
 
-A harness pairing Claude (via `@anthropic-ai/claude-agent-sdk`) with Playwright for
-QA/QE work.
+`qa-context-overlay` — Claude (via `@anthropic-ai/claude-agent-sdk`) paired with
+Playwright, laying three things over an app under test: the **context** an agent would
+otherwise pay to re-derive every session, the **bounds** its environment permits, and
+the **QA** checks that decide whether the result proves anything.
 
 | Capability                                      | Status                              | Entry point                 |
 | ----------------------------------------------- | ----------------------------------- | --------------------------- |

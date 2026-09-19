@@ -10,10 +10,13 @@ something here needs updating every session, it is in the wrong file.
 
 ## What this is
 
-`cc-pw-qe-harness` — Claude + Playwright + QA/QE practice, public at
-`altlv/cc-pw-qe-harness`. Three parts, all meant to be real: **cc** agent roles and
-skills, **pw** the Playwright stack, **qe** the quality practice that decides whether a
-test proves anything.
+`qa-context-overlay` — Claude + Playwright + QA practice, public at
+`altlv/qa-context-overlay`. Renamed from `cc-pw-qe-harness` on 2026-09-19; the old
+name was an initialism of its three parts and the new one says what it does, so if you
+find `cc-pw-qe-harness` anywhere it is a leftover worth fixing. Three parts, all meant
+to be real: **Overlay** the agent roles, skills and bounds laid over a run, **Context**
+the Playwright stack that turns an app into a map and a network log, **QA** the
+practice that decides whether a test proves anything.
 
 Apps under `apps/` are **subjects under test**, one folder each, so a new app never
 collides with an existing one.
