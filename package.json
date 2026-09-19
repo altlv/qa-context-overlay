@@ -2,7 +2,7 @@
   "name": "qa-context-overlay",
   "version": "0.1.0",
   "private": true,
-  "description": "Context and guardrails for AI agents doing QA. Bounded Claude agents drive a real browser via Playwright MCP, shared over CDP so the harness sees what each action changed. Agents get a free page map and only the actions their environment permits; a quality gate refuses a test that proves nothing.",
+  "description": "Context and guardrails for AI agents doing QA. Claude drives a real browser through Playwright MCP under a per-environment policy, and a quality gate refuses a test that proves nothing.",
   "type": "module",
   "engines": {
     "node": ">=20"

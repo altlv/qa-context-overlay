@@ -3,15 +3,27 @@
 **Context** what the app under test is turned into · **Overlay** the bounds laid over a
 run · **QA** whether any of it proves anything.
 
-An agent testing a web application is usually handed a URL and left to work everything
-out by reading the page, expensively, every session. This lays three things over that
-instead: a map of the play area that costs no tokens, the actions its environment
-actually permits, and a reading of what each one changed — then refuses to call the
-result a test unless it asserts something. Playwright drives the browser, Claude
-reasons about what it finds, and the QA layer decides whether any of it is
-trustworthy. The connective tissue is a network capture layer: Playwright keeps
-request/response detail inside trace files, but an agent triaging a failure it did not
-watch happen needs that evidence as text.
+An agent handed a URL and told to test it will read the page to work out what is
+there — expensively, every session — and then report whatever it did as a success.
+This lays three things over that.
+
+**Context.** A map of the play area, built by Playwright for no tokens: every control
+with a graded selector, the bounds the page declared for each input, the traffic it
+made, and a statement of what the scan could not see. The agent is given it rather
+than buying it.
+
+**Overlay.** Only the actions the target's environment permits, enforced as tools the
+agent does not hold rather than rules it is asked to follow — and the harness watches
+the same browser over CDP, so what each action actually changed is read from the live
+DOM instead of taken on the model's word.
+
+**QA.** Gates that refuse a test asserting nothing or checking a write only by its
+render, a release verdict that goes stale the moment the code moves, and a report
+format where a blocker must carry direct evidence.
+
+The connective tissue is the network capture layer. Playwright keeps request and
+response detail inside trace files, but an agent triaging a failure it did not watch
+happen needs that evidence as text.
 
 ## Status
 
