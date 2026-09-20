@@ -165,3 +165,62 @@ test.describe('the session index', () => {
     expect(line).not.toContain('0 defect(s)');
   });
 });
+
+test.describe('the report is kept wherever the role filed it', () => {
+  test('should keep a report filed under reports/ rather than reporting it missing', async () => {
+    // The first version of harvest looked only at artifacts/run/report.md, so it said
+    // "report.md missing" while the report sat two directories away. Live runs file it
+    // under reports/<app>-<date>.md as often as at the conventional path.
+    inTree(
+      'reports/exploratory-academybugs-2026-09-20.md',
+      `---
+report: exploratory-session
+target: https://example.test
+date: 2026-09-20
+author: exploratory-tester
+confidence: high
+evidence:
+  direct: 1
+  inferred: 0
+  claimed: 0
+findings:
+  - id: F1
+    severity: major
+    evidence: direct
+    summary: The total does not match the sum of its parts.
+    basis: Arithmetic.
+not_covered:
+  - mobile
+---
+
+Body.
+`,
+    );
+
+    const harvested = await harvestSession({
+      repoRoot: root,
+      worktree,
+      runDir: RUN_DIR,
+      app: 'academybugs',
+      role: 'exploratory-tester',
+      stamp: 'stamp',
+    });
+
+    expect(
+      harvested.copied,
+      'a session that loses its report has kept nothing that matters',
+    ).toContain('report.md');
+    expect(
+      harvested.missing,
+      'and it must stop claiming the report is missing once it has been found',
+    ).not.toContain('report.md');
+  });
+
+  test('should still report a genuinely absent report as missing', () => {
+    // The fallback must not become a way of never admitting the report is gone.
+    expect(
+      keepsakes(RUN_DIR).find((item) => item.as === 'report.md')?.expected,
+      'the report is the one file whose absence is always worth saying out loud',
+    ).toBe(true);
+  });
+});

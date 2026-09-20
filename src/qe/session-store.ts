@@ -1,5 +1,6 @@
 import { appendFile, cp, mkdir, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { findReport } from './run-report.js';
 
 /**
  * Where a session's evidence lives after its worktree is gone.
@@ -108,6 +109,25 @@ export async function harvestSession(options: {
       copied.push(item.as);
     } catch {
       missing.push(`${item.as} (copy failed)`);
+    }
+  }
+
+  // The report is the one thing a session must not lose, and roles file it in more
+  // than one place — `reports/<app>-<date>.md` is as common as the conventional path.
+  // Looking only where we asked it to go is how a harvest reports "report.md missing"
+  // while the report sits two directories away, which is exactly what the first
+  // version of this did.
+  if (!copied.includes('report.md')) {
+    const found = findReport(options.worktree);
+    if (found !== null) {
+      try {
+        await cp(found.path, join(target, 'report.md'));
+        copied.push('report.md');
+        const absent = missing.indexOf('report.md');
+        if (absent !== -1) missing.splice(absent, 1);
+      } catch {
+        // Leave it listed as missing. Saying so is the point.
+      }
     }
   }
 

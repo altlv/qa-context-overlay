@@ -73,6 +73,10 @@ function refuse(reason: string, detail: string[] = []): never {
   process.exit(2);
 }
 
+// Set once a worktree exists and its evidence can be copied out. Read by the early
+// SIGINT handler, which must not exit synchronously past an async harvest.
+let harvestArmed = false;
+
 const outPath = flag('--out');
 const appArg = flag('--app');
 const envArg = flag('--env');
@@ -104,7 +108,9 @@ if (name === undefined || task === '') {
   process.exit(2);
 }
 
-const role = roles[name];
+// Narrowed once, because the closures below lose the guard's narrowing of argv.
+const roleName: string = name;
+const role = roles[roleName];
 const family = families[name];
 if (role === undefined || family === undefined) {
   refuse(`Unknown role "${name}". Available: ${Object.keys(roles).join(', ')}`);
@@ -221,7 +227,12 @@ if (runTarget !== null) {
     );
   }
   process.on('exit', () => releaseLock(process.pid, lockPath));
-  process.on('SIGINT', () => process.exit(130));
+  // Stands aside once there is a worktree worth harvesting: a synchronous exit here
+  // would beat the async copy that saves the session's notes. Until then there is
+  // nothing to save and stopping immediately is right.
+  process.on('SIGINT', () => {
+    if (!harvestArmed) process.exit(130);
+  });
 }
 
 if (preflight) {
@@ -243,6 +254,52 @@ const worktree =
 console.error(
   `${reusePath === undefined ? 'Created' : 'Reusing'} worktree ${worktree} at ${base.slice(0, 7)}`,
 );
+
+// ── Keep the evidence, whatever happens to the run ────────────────────────────────
+//
+// Harvesting only at the end of the happy path keeps nothing from the runs that most
+// need keeping. Every loss so far came from a run that was killed mid-session or that
+// threw before it finished: the notes were being appended live inside the worktree,
+// the worktree was later removed, and the session was gone. A crash is exactly when a
+// person wants the log.
+//
+// So this is armed as soon as there is a worktree, runs on the way out however the run
+// ends, and is safe to call more than once — the later call simply copies more.
+const runDirForHarvest =
+  reusePath === undefined ? 'artifacts/run' : `artifacts/investigation-${stamp}`;
+let keptAlready = false;
+async function keepEvidence(why: string): Promise<void> {
+  try {
+    const kept = await harvestSession({
+      repoRoot,
+      worktree,
+      runDir: runDirForHarvest,
+      app: runTarget?.app ?? null,
+      role: roleName,
+      stamp,
+    });
+    if (!keptAlready) {
+      console.error(`\nSession kept in ${kept.home} (${why}) — ${kept.copied.length} item(s).`);
+      keptAlready = true;
+    }
+  } catch {
+    // Never let saving the evidence be the thing that fails the run.
+  }
+}
+
+// Signals first: this is the path a person takes when they stop a run by hand, and the
+// one that lost the most. The handler is async, so it must not call process.exit()
+// before the copy finishes.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    void keepEvidence(`stopped by ${signal}`).then(() => process.exit(130));
+  });
+}
+harvestArmed = true;
+process.on('uncaughtException', (error) => {
+  console.error(`\nUncaught: ${error instanceof Error ? error.message : String(error)}`);
+  void keepEvidence('the run threw').then(() => process.exit(1));
+});
 
 // ── The browser, when the role looks at running software and has somewhere to look ─
 
@@ -427,6 +484,11 @@ try {
   if (error instanceof AgentAuthError) refuse(error.message);
   throw error;
 }
+
+// The agent is done and its notes exist. Keep them now, before the gate runs — the
+// gate spawns test commands that can hang or throw, and a session's log must not
+// depend on what happens after the session.
+await keepEvidence('the session finished');
 
 const spent = budget.spent();
 console.error(
