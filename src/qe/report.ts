@@ -64,12 +64,58 @@ export const charterSchema = z.object({
   /** How long the box was, e.g. "45 minutes". */
   timebox: z.string().min(2),
   /**
-   * Optional, and warned about when missing: the skill is emphatic that a persona and
-   * a constraint are "what turn clicking into exploration". A first-time user finds
-   * discoverability problems; a keyboard-only user finds barriers.
+   * The persona lenses the session rotated through, named.
+   *
+   * **Plural on purpose, and required to be plural.** This was `persona: string`, and
+   * a session that adopted one persona for its whole run satisfied it. Two runs against
+   * eprimer on 2026-09-20 did exactly that — both held "a careful first-time user who
+   * reads what the screen says" throughout, and between them missed every seeded defect
+   * in responsiveness, keyboard access, contrast and document head, because a first-time
+   * user does not resize a window, tab through a page, or read source. Neither model
+   * failed: a single persona is a blindfold that excuses every move it would not make,
+   * and the field's own shape was what asked for one.
+   *
+   * A lens is rotated through deliberately: first-time user for discoverability,
+   * keyboard-only for barriers, small-screen for layout, non-English for encoding,
+   * maintainer-reading-source for what the markup admits.
    */
+  lenses: z.array(z.string().min(3)).optional(),
+  /** Superseded by `lenses`. Accepted so older reports still parse. */
   persona: z.string().optional(),
+  /**
+   * What the session deliberately excluded. Optional, and deliberately *not* warned
+   * about when absent — a constraint narrows, and narrowing by habit is how a session
+   * loses coverage it never decided to give up.
+   */
   constraint: z.string().optional(),
+});
+
+/**
+ * The visual-inspection pre-flight, declared check by check.
+ *
+ * Every field is required and every value is prose, so a skipped check has to be
+ * written down as skipped. The role has always told sessions to run this sweep
+ * "before the charter"; both eprimer runs skipped it, one of them said so in its own
+ * `not_covered`, and both passed the gate — because the gate checked the report's
+ * *shape* and never its *method*. Prose in a role prompt is a suggestion; a required
+ * field is not.
+ *
+ * Say what you found, or say it is a gap. A check you did not perform is a gap, never
+ * a pass, and never silence.
+ */
+export const preflightSchema = z.object({
+  /** Layout at the sizes the app will actually meet, mobile widths included. */
+  position: z.string().min(3),
+  /** Empty, loading, error and populated states. */
+  state: z.string().min(3),
+  /** Browser zoom, out and in. */
+  zoom: z.string().min(3),
+  /** Tab order, focus visibility, and whether every control is reachable. */
+  keyboard: z.string().min(3),
+  /** Text and non-text contrast against the background behind it. */
+  contrast: z.string().min(3),
+  /** Title, charset, viewport meta, favicon, alt text, language. */
+  document_head: z.string().min(3),
 });
 
 /**
@@ -111,6 +157,8 @@ export const reportSchema = z.object({
   cases: z.array(caseSchema).default([]),
   /** Required for `exploratory-session`, ignored elsewhere. */
   charter: charterSchema.optional(),
+  /** Required for `exploratory-session`, ignored elsewhere. See `preflightSchema`. */
+  preflight: preflightSchema.optional(),
   /**
    * Finding ids a session proposes for permanent automated coverage.
    *
@@ -253,15 +301,24 @@ export function auditReport(report: Report): ReportProblem[] {
           'An exploratory session needs a charter — explore, resources, to_discover, timebox. Without one, "no issues found" cannot be read: it is coverage evidence for whatever was explored, and the scope is unstated.',
       });
     } else {
-      const missing = (['persona', 'constraint'] as const).filter(
-        (field) => report.charter?.[field] === undefined,
-      );
-      if (missing.length > 0) {
+      const lenses = report.charter.lenses ?? [];
+      if (lenses.length < 2) {
         problems.push({
-          level: 'warning',
-          message: `charter has no ${missing.join(' and no ')} — these are what turn clicking into exploration, and different personas find different defects.`,
+          level: 'error',
+          message:
+            `charter names ${lenses.length === 0 ? 'no lenses' : 'only one lens'} — a session held to a single persona is blindfolded, not focused. ` +
+            'Rotate at least two and name them: first-time user for discoverability, keyboard-only for barriers, small-screen for layout, non-English for encoding, maintainer-reading-source for what the markup admits.',
         });
       }
+    }
+
+    // The role has always said to run this before the charter. Saying so was not enough.
+    if (report.preflight === undefined) {
+      problems.push({
+        level: 'error',
+        message:
+          'No preflight block. The visual-inspection sweep — position, state, zoom, keyboard, contrast, document_head — runs before the charter, and each check is declared as what it found or as a gap. A check you did not perform is a gap, never silence.',
+      });
     }
 
     if (!report.findings.some((finding) => finding.severity === 'observation')) {

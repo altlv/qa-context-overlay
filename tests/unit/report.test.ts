@@ -178,14 +178,24 @@ test.describe('a session is checked as a session', () => {
     resources: 'a seeded account, desktop Chrome',
     to_discover: 'where totals and stock disagree',
     timebox: '45 minutes',
-    persona: 'a first-time buyer',
+    lenses: ['a first-time buyer', 'a keyboard-only shopper', 'a phone-sized screen'],
     constraint: 'without touching the admin panel',
+  };
+
+  const preflight = {
+    position: 'checked at 1280, 768 and 375 wide; the basket summary wraps under 400',
+    state: 'empty, one item, and the out-of-stock error all rendered',
+    zoom: 'legible at 200%; nothing clipped at 50%',
+    keyboard: 'tab reaches every control; focus ring visible throughout',
+    contrast: 'body text passes; the muted stock note is borderline at 4.2:1',
+    document_head: 'title, charset and viewport present; favicon 404s',
   };
 
   const session = (over: Partial<Report> = {}): Report =>
     report({
       report: 'exploratory-session',
       charter,
+      preflight,
       findings: [
         {
           id: 'O1',
@@ -305,15 +315,33 @@ test.describe('a session is checked as a session', () => {
     ).toContain('No questions raised');
   });
 
-  test('should warn when a charter names no persona and no constraint', () => {
-    const { persona, constraint, ...bare } = charter;
-    void persona;
-    void constraint;
+  test('should refuse a charter that names no lenses', () => {
+    const { lenses, ...bare } = charter;
+    void lenses;
 
     expect(
       messages({ charter: bare }),
-      'persona and constraint are what turn clicking into exploration',
-    ).toContain('no persona and no constraint');
+      'a session that names no lens has not decided how it will look, and defaults to one viewpoint',
+    ).toContain('no lenses');
+  });
+
+  test('should refuse a charter held to a single lens', () => {
+    // The defect this rule exists for: two eprimer sessions on 2026-09-20 each held
+    // "a careful first-time user" for the whole run, and between them missed every
+    // seeded bug in responsiveness, keyboard access, contrast and document head.
+    expect(
+      messages({ charter: { ...charter, lenses: ['a careful first-time user'] } }),
+      'one persona for a whole session is a blindfold, and it must not pass as focus',
+    ).toContain('only one lens');
+  });
+
+  test('should refuse a session that never declared its pre-flight sweep', () => {
+    // The role has always said to run this before the charter. Saying so was not
+    // enough: both eprimer runs skipped it and both passed the gate.
+    expect(
+      messages({ preflight: undefined }),
+      'a gate that checks shape but never method cannot tell a swept page from an unswept one',
+    ).toContain('No preflight block');
   });
 
   test('should warn when nothing was proposed for permanent coverage', () => {

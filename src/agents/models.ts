@@ -27,16 +27,38 @@ export const DEFAULT_TIER: ModelTier = 'sonnet';
  * Budget multipliers applied to what a role declares. A role's own `maxTurns` is
  * written for **sonnet**, which is why sonnet is 1.
  *
- * **These are estimates, not measurements.** No role has been run on any tier, so
- * nothing here is tuned — the shape is the claim (a weaker model needs more attempts
- * and costs less per attempt; a stronger one needs fewer and costs more), the
- * numbers are a starting point. Replace them with observed medians once roles have
- * actually run, and delete this paragraph when you do.
+ * **Partly measured now.** `exploratory-tester` has been run against eprimer/test on
+ * sonnet and opus, same charter, same settings — the first live runs this harness has
+ * completed. That is one role on one subject, so these are **first measurements, not
+ * medians**; haiku remains a pure estimate because nothing has run on it.
+ *
+ * Observed 2026-09-20, base commit `4b0d190`:
+ *
+ * | | turns | spend | $/turn | stopped by |
+ * | --- | --- | --- | --- | --- |
+ * | sonnet | 69 | $2.1820 | $0.0316 | nothing — ended voluntarily |
+ * | opus | 70 | $5.3834 | $0.0769 | spend limit |
+ *
+ * Two things the original estimates got wrong, both now corrected above:
+ *
+ * **The turn multiplier's premise is false.** It assumed a stronger model needs fewer
+ * attempts. On identical work the two spent 69 and 70 turns and took 20 and 19 browser
+ * actions. Opus did not do less; it noticed more per action. `opus: 0.8` is kept only
+ * because nothing has yet shown a role where it matters, and it costs nothing while
+ * spend is the binding limit — but it is not evidence-backed and should not be
+ * defended as if it were.
+ *
+ * **The spend multipliers were wrong in both directions.** Opus was set at 4× sonnet;
+ * the observed per-turn ratio on identical work is **2.43×**, so 2.5 replaces it. And
+ * the sonnet baseline itself is too low: a real exploratory session cost $2.18, so
+ * `DEFAULT_LIMITS.maxUsd` of $1 would have cut it off at roughly half-done. The base
+ * is left alone here because it applies to every role and only one has been measured —
+ * but any exploratory run needs an explicit `AGENT_MAX_USD` until that is fixed.
  */
 export const TIER_BUDGET: Record<ModelTier, { turns: number; usd: number }> = {
   haiku: { turns: 1.5, usd: 0.4 },
   sonnet: { turns: 1, usd: 1 },
-  opus: { turns: 0.8, usd: 4 },
+  opus: { turns: 0.8, usd: 2.5 },
 };
 
 export interface ResolvedModel {

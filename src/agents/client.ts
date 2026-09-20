@@ -50,9 +50,19 @@ export class AgentAuthError extends Error {}
  * through Claude Code — the most common setup. Attempt the run and report whatever
  * the SDK actually says.
  */
-function isAuthFailure(error: unknown): boolean {
+/**
+ * Exported for its test. The patterns are a list of messages actually seen, not a
+ * guess at the shape of the SDK's errors, and it grows when a new one is observed.
+ *
+ * `not logged in` and `/login` were added after the first live run: the SDK reported
+ * `Claude Code returned an error result: Not logged in · Please run /login`, which
+ * matched none of the original patterns, so an ordinary "you are signed out" came
+ * back as a minified stack trace out of `sdk.mjs` — and a person reading that has no
+ * reason to suspect the cause is a login.
+ */
+export function isAuthFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /authenticat|oauth|api key|unauthorized|401/i.test(message);
+  return /authenticat|oauth|api key|unauthorized|401|not logged in|\/login/i.test(message);
 }
 
 export const AUTH_HINT =

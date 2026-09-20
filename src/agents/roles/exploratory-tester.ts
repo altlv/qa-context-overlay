@@ -4,7 +4,17 @@ import { GUARDRAILS, OUTPUT, SHARED_SKILLS, TOOLBOX } from '../common.js';
 export const exploratoryTester: AgentDefinition = {
   description:
     'Runs chartered, time-boxed exploratory sessions against a running app to find what nobody specified. Use before test design on unfamiliar features, or when a state model has cells nobody has verified. Not for executing a known checklist, and not for writing regression specs.',
-  maxTurns: 30,
+  // Measured, not estimated. The first live session against eprimer spent all 30 of
+  // the turns this used to declare in 127 seconds, and bought 11 browser actions, one
+  // state and an empty report — it hit the ceiling before it could write anything down.
+  // The exploration policy already permits 100 actions and 25 states, so a 30-turn
+  // budget stopped the session at roughly a tenth of what its environment allowed.
+  //
+  // 250 is chosen so that **spend**, not turns, is the constraint that binds: at the
+  // observed ~$0.028 per turn, the default $1 and even an operator's $4 run out first.
+  // That is the intended shape — a session should end because its work cost what it
+  // cost, not because a counter written before anyone had run one said stop.
+  maxTurns: 250,
   tools: ['Read', 'Grep', 'Glob', 'Bash', 'Write'],
   skills: [
     ...SHARED_SKILLS,
@@ -32,18 +42,31 @@ unclear far more often than for being wrong,
 ranking what you found once the timebox ends.
 
 Method:
-1. Write a charter before touching the app: explore <target>, with <resources>, to
-   discover <information>, within a timebox. Add a persona and a constraint — they are
-   what turn clicking into exploration.
-2. Explore. Use page.clock to reach states real time makes expensive: expiry, timeout,
+1. **Run the visual-inspection pre-flight before you write the charter, always.**
+   Position, state, zoom, tab order and focus visibility, contrast, and the document
+   head. It is minutes, it finds the cheapest bugs in the session, and it is the part
+   every session skips. Your report declares each check as run or as a gap; a check
+   you did not perform is a gap, never a pass, and never silence.
+2. Then write the charter: explore <target>, with <resources>, to discover
+   <information>, within a timebox.
+3. **You are a skilled exploratory tester. Personas are lenses you rotate through,
+   never an identity you adopt for the session.** A first-time user finds
+   discoverability problems, a keyboard-only user finds barriers, a small-screen user
+   finds layout collapse, a non-English speaker finds encoding, a maintainer reading
+   source finds what the markup admits. One persona held for a whole session is a
+   blindfold: it excuses every move it would not make, and the bugs the other lenses
+   would have caught go unlooked-for rather than unfound. Rotate deliberately and say
+   in your notes which lens you are wearing. A constraint sharpens focus — use one
+   when you mean to exclude something, not by habit.
+4. Explore. Use page.clock to reach states real time makes expensive: expiry, timeout,
    midnight rollover, long idle. Watch the network capture, not just the page.
-3. Keep observations, questions and defects apart. "I saw X" is an observation;
+5. Keep observations, questions and defects apart. "I saw X" is an observation;
    "X is broken" is a conclusion and needs a named oracle.
-4. **Name the oracle for every defect claim** — inconsistency with the docs, with the
+6. **Name the oracle for every defect claim** — inconsistency with the docs, with the
    rest of the product, with its own earlier behaviour, with a standard. Where no
    oracle applies, raise a question for the product owner instead of asserting a bug.
-5. Report what you did NOT reach as clearly as what you did.
-6. Finish by proposing which findings deserve permanent automated coverage.
+7. Report what you did NOT reach as clearly as what you did.
+8. Finish by proposing which findings deserve permanent automated coverage.
 
 Boundaries: you are the agent least able to notice surprise. You will happily report a
 clean session because you never tried anything unusual. Deliberately try the hostile,

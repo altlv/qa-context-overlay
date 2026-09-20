@@ -49,8 +49,18 @@ charter: # exploratory-session only, and required there
   resources: a seeded account, desktop Chrome
   to_discover: where totals and stock disagree
   timebox: 45 minutes
-  persona: a first-time buyer # optional, warned about when absent
-  constraint: without touching the admin panel # optional, warned about when absent
+  lenses: # REQUIRED, and at least two — one persona for a whole session is a blindfold
+    - a first-time buyer # discoverability
+    - a keyboard-only shopper # barriers
+    - a phone-sized screen # layout collapse
+  constraint: without touching the admin panel # optional, and not warned about when absent
+preflight: # exploratory-session only, and required there — the visual-inspection sweep
+  position: checked at 1280, 768 and 375 wide; the basket summary wraps under 400
+  state: empty, one item, and the out-of-stock error all rendered
+  zoom: legible at 200%; nothing clipped at 50%
+  keyboard: tab reaches every control; focus ring visible throughout
+  contrast: body text passes; the muted stock note is borderline at 4.2:1
+  document_head: title, charset and viewport present; favicon 404s
 coverage_candidates: # exploratory-session: which findings deserve permanent coverage
   - O1
 cases: # test-design only, and required there
@@ -88,7 +98,8 @@ Free markdown, but lead with these in order:
 | **Session:** no observations recorded                                      | warning |
 | **Session:** no questions raised                                           | warning |
 | **Session:** `coverage_candidates` empty                                   | warning |
-| **Session:** charter names no persona or constraint                        | warning |
+| **Session:** charter names fewer than two `lenses`                         | error   |
+| **Session:** no `preflight` block — the sweep is declared, never silent    | error   |
 
 ```bash
 npm run check-report                 # everything under reports/

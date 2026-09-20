@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { Budget } from '../../src/agents/budget.js';
+import { isAuthFailure } from '../../src/agents/client.js';
 import { extractJson, triageVerdictSchema } from '../../src/agents/triage.js';
 import {
   auditTestability,
@@ -271,5 +272,33 @@ test.describe('testability grading', () => {
         'a finding without a fix is noise, and noise is how a gate gets ignored',
       ).toBeGreaterThan(20);
     }
+  });
+});
+
+test.describe('auth failures — recognised, not thrown as a stack trace', () => {
+  test('should recognise the message a signed-out Claude Code CLI returns', () => {
+    // Observed verbatim on the first live run, and matched by none of the original
+    // patterns. Keeping the real string here is the point of the test.
+    const error = new Error(
+      'Claude Code returned an error result: Not logged in · Please run /login',
+    );
+    expect(
+      isAuthFailure(error),
+      'a signed-out CLI must reach AgentAuthError, not escape as an SDK stack',
+    ).toBe(true);
+  });
+
+  test('should recognise an API-key rejection', () => {
+    expect(
+      isAuthFailure(new Error('401 Unauthorized: invalid x-api-key')),
+      'a rejected key is an auth failure',
+    ).toBe(true);
+  });
+
+  test('should not treat an ordinary run failure as an auth failure', () => {
+    expect(
+      isAuthFailure(new Error('Maximum number of turns (30) reached')),
+      'a budget stop must stay a budget stop, or the run reports the wrong cause',
+    ).toBe(false);
   });
 });

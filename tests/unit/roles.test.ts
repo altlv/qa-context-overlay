@@ -71,7 +71,12 @@ how the wrong agent gets selected`,
 problem keeps trying`,
         ).toBeDefined();
         expect(role.maxTurns ?? 0).toBeGreaterThan(0);
-        expect(role.maxTurns ?? 0).toBeLessThanOrEqual(40);
+        // The ceiling exists to catch an unbounded role, not to pick the number. It
+        // was 40, written before any role had run; the first live exploratory session
+        // spent 30 turns in 127 seconds and died with an empty report, so 40 was not a
+        // safety bound but a gag. Spend is the real bound — `budgetForTier` caps every
+        // run in dollars — and this only asserts nobody typed a five-digit number.
+        expect(role.maxTurns ?? 0).toBeLessThanOrEqual(300);
       });
 
       test('should carry the guardrails', () => {

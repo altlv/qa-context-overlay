@@ -350,7 +350,10 @@ const budget = Budget.fromEnv({
 });
 console.error(
   `Running ${name} on ${chosen.id} (${chosen.tier}) — max ${budget.limits.maxTurns} turns, ` +
-    `$${budget.limits.maxUsd.toFixed(2)}, ${budget.limits.timeoutMs / 1000}s` +
+    (budget.measuringSpendOnly()
+      ? `spend MEASURED not capped (reference $${budget.limits.maxUsd.toFixed(2)})`
+      : `$${budget.limits.maxUsd.toFixed(2)}`) +
+    `, ${budget.limits.timeoutMs / 1000}s` +
     (budget.limits.maxTurns === scaled.maxTurns
       ? ` (role asks ${declaredTurns} × ${chosen.tier})`
       : ` (AGENT_MAX_TURNS overrides the role's ${declaredTurns})`),
@@ -429,6 +432,18 @@ console.error(
     `${Math.round(spent.elapsedMs / 1000)}s` +
     (result.stoppedBy === null ? '' : ` — STOPPED: ${result.stoppedBy}`),
 );
+// The point of measuring rather than capping: a session that was cut off and one that
+// found little look the same in a report. Said out loud so the number gets recorded
+// against the session's quality rather than noticed later.
+if (budget.measuringSpendOnly()) {
+  const reference = budget.limits.maxUsd;
+  const ratio = reference > 0 ? spent.costUsd / reference : 0;
+  console.error(
+    `  Spend was measured, not capped: $${spent.costUsd.toFixed(4)} ` +
+      `(${ratio.toFixed(2)}× the $${reference.toFixed(2)} reference). ` +
+      'Nothing stopped this run for cost — judge the session on its findings, then decide what it was worth.',
+  );
+}
 if (result.stoppedBy !== null) {
   console.error('The run hit a budget limit. Its report is partial; the gate still runs.');
 }

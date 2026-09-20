@@ -2,12 +2,27 @@ export interface BudgetLimits {
   maxTurns: number;
   maxUsd: number;
   timeoutMs: number;
+  /**
+   * Whether `maxUsd` stops the run, or is only something to measure against.
+   *
+   * Set false and the run continues past the figure, still recording what it spent.
+   * The reason to want that: a session cut off at a dollar amount cannot be judged,
+   * because "it found little" and "it was stopped before it finished" look identical
+   * in the output. Measuring first tells you what a session of this kind actually
+   * costs — including a bad one — and a limit set from that number means something,
+   * where one set from a guess only hides the evidence needed to replace it.
+   *
+   * Turns and wall clock stay enforced regardless: they are the backstop against a
+   * loop, and an agent that cannot solve a problem does not stop on its own.
+   */
+  enforceSpend?: boolean;
 }
 
 export const DEFAULT_LIMITS: BudgetLimits = {
   maxTurns: 12,
   maxUsd: 1,
   timeoutMs: 180_000,
+  enforceSpend: true,
 };
 
 function envNumber(name: string, fallback: number): number {
@@ -38,7 +53,16 @@ export class Budget {
       maxTurns: overrides.maxTurns ?? envNumber('AGENT_MAX_TURNS', DEFAULT_LIMITS.maxTurns),
       maxUsd: overrides.maxUsd ?? envNumber('AGENT_MAX_USD', DEFAULT_LIMITS.maxUsd),
       timeoutMs: overrides.timeoutMs ?? envNumber('AGENT_TIMEOUT_MS', DEFAULT_LIMITS.timeoutMs),
+      // `AGENT_SPEND=measure` runs past maxUsd and only records the cost. Anything
+      // else, including unset, enforces — a typo must not silently uncap spending.
+      enforceSpend:
+        overrides.enforceSpend ?? process.env.AGENT_SPEND?.trim().toLowerCase() !== 'measure',
     });
+  }
+
+  /** True when spend is being recorded rather than enforced. */
+  measuringSpendOnly(): boolean {
+    return this.limits.enforceSpend === false;
   }
 
   record(update: { turns?: number; costUsd?: number }): void {
@@ -55,7 +79,7 @@ export class Budget {
     if (this.turns >= this.limits.maxTurns) {
       return `turn limit reached (${this.turns}/${this.limits.maxTurns})`;
     }
-    if (this.costUsd >= this.limits.maxUsd) {
+    if (this.limits.enforceSpend !== false && this.costUsd >= this.limits.maxUsd) {
       return `spend limit reached ($${this.costUsd.toFixed(2)}/$${this.limits.maxUsd.toFixed(2)})`;
     }
     return null;
