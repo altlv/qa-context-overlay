@@ -58,10 +58,18 @@ Repository conventions (docs/conventions.md is authoritative):
 /** Every role hands back the same envelope, so a script can check it. */
 const OUTPUT = `
 Output — a report per docs/report-format.md. The format is strict, because a script
-reads it:
+reads it.
 
-- The very first characters of your output must be \`---\` on its own line, opening the
-  YAML frontmatter. No preamble, no greeting, no summary before it.
+**Write the report to a file: \`artifacts/run/report.md\`.** That file is what the gate
+reads. Your final reply is for the person and is not gated, so summarise there freely —
+but a summary is not a report, and a run whose report exists only as a chat message is
+a run whose evidence is gone the moment the terminal scrolls. If you file it elsewhere
+under \`reports/\` the runner will still find it; the path above is the one it prefers.
+
+The file itself is strict:
+
+- Its very first characters must be \`---\` on its own line, opening the YAML
+  frontmatter. No preamble, no greeting, no summary before it.
 - Do NOT wrap the frontmatter in a code fence. It is the document's own header, not a
   code sample.
 - Close the frontmatter with \`---\`, then write the markdown body.

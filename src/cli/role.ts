@@ -2,7 +2,7 @@ import '../env.js';
 import { chromium } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { apps } from '../../apps/registry.js';
@@ -28,6 +28,7 @@ import { readinessProblems, stalenessWarning } from '../qe/readiness.js';
 import { parseReport } from '../qe/report.js';
 import { gatePassed, investigationCommand, planGate, type GateRecord } from '../qe/run-gate.js';
 import { acquireLock, lockPathFor, releaseLock } from '../qe/run-lock.js';
+import { findReport } from '../qe/run-report.js';
 import { resolveRunTarget } from '../qe/run-target.js';
 import {
   committedAt,
@@ -452,7 +453,15 @@ if (result.stoppedBy !== null) {
 // one that crossed fifteen cost the same in tokens and are not the same session.
 if (browser !== null) {
   for (const line of browser.observer.summary()) console.error(`  ${line}`);
-  console.error(`  Actions spent: ${browser.guard.spent()}`);
+  // Named for what it is. Navigation is deliberately not an action against `maxActions`
+  // — a GET changes nothing on the server — but on a subject explored mainly through
+  // URLs this number is a small fraction of what the session did, and a bare "actions
+  // spent" reads as the whole of it. One session reported 62 steps of its own where
+  // this counter stood at 9, and neither figure was wrong.
+  console.error(
+    `  State-changing actions: ${browser.guard.spent()} of ${policyFor(runTarget!.environment).maxActions}` +
+      ' (clicks, typing, key presses and dialogs — navigation is not counted against the ceiling)',
+  );
 }
 
 // ── Post-run gate on the worktree's diff ──────────────────────────────────────────
@@ -460,12 +469,69 @@ if (browser !== null) {
 // The report is always written, so the gate has something to check and a person has
 // something to read. An investigation in a reused worktree writes beside the run's own.
 const runDir = reusePath === undefined ? 'artifacts/run' : `artifacts/investigation-${stamp}`;
+await mkdir(join(worktree, runDir), { recursive: true });
+
+// Find the report the run wrote before falling back to what it said. Writing the
+// final chat message to `--out` and gating that made the verdict depend on where a
+// role happened to put its prose — see src/qe/run-report.ts for the three live runs
+// that failed a gate their real report passed cleanly.
+const wrote = findReport(worktree);
+const reportBody =
+  wrote === null ? result.text : await readFile(wrote.path, 'utf8').catch(() => result.text);
+if (wrote === null) {
+  console.error(
+    `No report file found under artifacts/run/ or reports/ — gating the final message instead. ` +
+      `A role that writes its report to a file gets that file gated; this one did not.`,
+  );
+} else {
+  console.error(
+    `Report found at ${wrote.relative} (${wrote.because}) — gating that, not the reply.`,
+  );
+}
+
 const reportPath =
   outPath === undefined ? join(worktree, runDir, 'report.md') : resolve(repoRoot, outPath);
-await mkdir(join(worktree, runDir), { recursive: true });
 await mkdir(dirname(reportPath), { recursive: true });
-await writeFile(reportPath, result.text, 'utf8');
+await writeFile(reportPath, reportBody, 'utf8');
+// The run's own transcript is kept beside it either way: when the report came from a
+// file, the final message is the summary a person reads first, and losing it to make
+// room for the report would throw away the part written for them.
+if (wrote !== null && result.text.trim() !== '') {
+  await writeFile(join(worktree, runDir, 'summary.md'), result.text, 'utf8');
+}
 console.error(`Report written to ${reportPath}`);
+
+// The run's own scoreboard, printed where a person will actually see it. Reading the
+// severity split, the evidence split and the cost together is what makes a session
+// judgeable: findings alone say nothing about what they rest on, and cost alone says
+// nothing about what it bought.
+const parsedReport = parseReport(reportBody);
+if (parsedReport.ok) {
+  const findings = parsedReport.report.findings;
+  const count = (severity: string): number =>
+    findings.filter((finding) => finding.severity === severity).length;
+  const defects = count('blocker') + count('major') + count('minor');
+  const { direct, inferred, claimed } = parsedReport.report.evidence;
+  const row = (label: string, value: string): string => `  ${label.padEnd(24)}${value}`;
+  console.error('\nSession summary');
+  console.error(row('Blocker', String(count('blocker'))));
+  console.error(row('Major', String(count('major'))));
+  console.error(row('Minor', String(count('minor'))));
+  console.error(row('Defect claims', String(defects)));
+  console.error(row('Observations', String(count('observation'))));
+  console.error(row('Questions', String(count('question'))));
+  console.error(row('Evidence d/i/c', `${direct} / ${inferred} / ${claimed}`));
+  console.error(
+    row(
+      'Cost',
+      `$${spent.costUsd.toFixed(4)}` +
+        (budget.measuringSpendOnly()
+          ? ` (${(spent.costUsd / budget.limits.maxUsd).toFixed(2)}× reference)`
+          : '') +
+        `, ${spent.turns} turns, ${Math.round(spent.elapsedMs / 1000)}s`,
+    ),
+  );
+}
 
 // Everything changed in the worktree is the run's: nobody else works there.
 const changed = await worktreeChanges(worktree);
