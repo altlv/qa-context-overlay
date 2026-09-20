@@ -30,6 +30,7 @@ import { gatePassed, investigationCommand, planGate, type GateRecord } from '../
 import { acquireLock, lockPathFor, releaseLock } from '../qe/run-lock.js';
 import { findReport } from '../qe/run-report.js';
 import { resolveRunTarget } from '../qe/run-target.js';
+import { harvestSession, indexLine, noteInIndex } from '../qe/session-store.js';
 import {
   committedAt,
   createRunWorktree,
@@ -590,6 +591,38 @@ const recordPath = `${runDir}/gate.json`;
 await writeFile(join(worktree, recordPath), JSON.stringify(record, null, 2), 'utf8');
 
 const passed = gatePassed(record) && result.stoppedBy === null;
+
+// ── Carry the evidence out of the worktree ────────────────────────────────────────
+// Everything above was written inside the worktree — the thing a person is told to
+// delete once they have taken what they want. Harvest first, then tell them it is
+// safe to remove, and on a failure keep the worktree as well.
+const harvest = await harvestSession({
+  repoRoot,
+  worktree,
+  runDir,
+  app: runTarget?.app ?? null,
+  role: name,
+  stamp,
+});
+console.error(`\nSession kept in ${harvest.home} — ${harvest.copied.length} item(s).`);
+for (const gap of harvest.missing) console.error(`  · not kept: ${gap}`);
+await noteInIndex(
+  repoRoot,
+  indexLine({
+    stamp,
+    role: name,
+    app: runTarget?.app ?? null,
+    environment: runTarget?.environment ?? null,
+    defects: parsedReport.ok
+      ? parsedReport.report.findings.filter((finding) =>
+          ['blocker', 'major', 'minor'].includes(finding.severity),
+        ).length
+      : null,
+    gate: passed ? 'PASS' : 'FAIL',
+    costUsd: spent.costUsd,
+    home: harvest.home,
+  }),
+);
 if (passed) {
   console.error(
     `\nGate: PASS — the run's work is uncommitted in ${worktree}. Nothing has been committed or merged.\n` +

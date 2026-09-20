@@ -22,3 +22,6 @@ artifacts/
 .DS_Store
 Thumbs.db
 /reports/
+
+# Session evidence: reports, notes and screenshots carried out of run worktrees
+sessions/
