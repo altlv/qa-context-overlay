@@ -17,12 +17,13 @@ than padded in.
 
 ## Deciding what to test
 
-| Skill                                                 | Purpose                                                                   | Trust |
-| ----------------------------------------------------- | ------------------------------------------------------------------------- | ----- |
-| [`risk-assessment`](risk-assessment/SKILL.md)         | How much testing an area deserves, scored so the decision is defensible   | 1     |
-| [`test-design`](test-design/SKILL.md)                 | What to test and at which level — decomposition, techniques, traceability | 1     |
-| [`exploratory-session`](exploratory-session/SKILL.md) | Chartered discovery of what nobody specified                              | 1     |
-| [`test-techniques`](test-techniques/SKILL.md)         | Deriving the cases a technique actually produces, and its coverage bar    | 1     |
+| Skill                                                 | Purpose                                                                     | Trust |
+| ----------------------------------------------------- | --------------------------------------------------------------------------- | ----- |
+| [`risk-assessment`](risk-assessment/SKILL.md)         | How much testing an area deserves, scored so the decision is defensible     | 1     |
+| [`test-design`](test-design/SKILL.md)                 | What to test and at which level — decomposition, techniques, traceability   | 1     |
+| [`exploratory-session`](exploratory-session/SKILL.md) | Chartered discovery of what nobody specified                                | 1     |
+| [`test-techniques`](test-techniques/SKILL.md)         | Deriving the cases a technique actually produces, and its coverage bar      | 1     |
+| [`rule-modelling`](rule-modelling/SKILL.md)           | Recovering the rule a product applies, and testing its classes not examples | 1     |
 
 ## Looking at a running product
 
@@ -49,19 +50,20 @@ than padded in.
 
 Do not load the catalogue. Load one or two skills for the task in front of you.
 
-| Task                             | Load                                                                 |
-| -------------------------------- | -------------------------------------------------------------------- |
-| "what should I test"             | `risk-assessment` → `test-design`                                    |
-| "which values, which cases"      | `npm run ideas -- <scan.json>`, then `test-techniques`               |
-| "look at this page"              | `visual-inspection`                                                  |
-| "write tests for this"           | `pwtest`                                                             |
-| "explore this feature"           | `exploratory-session` + `oracle-check`                               |
-| "is this a bug"                  | `oracle-check`                                                       |
-| "write this up"                  | `bug-report`                                                         |
-| "this test is flaky"             | `flaky-test-detection`                                               |
-| "why do our tests keep breaking" | `testability-audit`                                                  |
-| "is this ready to ship"          | `npm run gate`, then read the verdict                                |
-| any non-trivial task             | `work-discipline` at the start, `honesty-check` before claiming done |
+| Task                              | Load                                                                    |
+| --------------------------------- | ----------------------------------------------------------------------- |
+| "what should I test"              | `risk-assessment` → `test-design`                                       |
+| "which values, which cases"       | `npm run ideas -- <scan.json>`, then `test-techniques`                  |
+| "the product _decides_ something" | `rule-modelling` — table the rule, and never let the code be the oracle |
+| "look at this page"               | `visual-inspection`                                                     |
+| "write tests for this"            | `pwtest`                                                                |
+| "explore this feature"            | `exploratory-session` + `oracle-check`                                  |
+| "is this a bug"                   | `oracle-check`                                                          |
+| "write this up"                   | `bug-report`                                                            |
+| "this test is flaky"              | `flaky-test-detection`                                                  |
+| "why do our tests keep breaking"  | `testability-audit`                                                     |
+| "is this ready to ship"           | `npm run gate`, then read the verdict                                   |
+| any non-trivial task              | `work-discipline` at the start, `honesty-check` before claiming done    |
 
 ## Deliberately absent
 

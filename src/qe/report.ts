@@ -103,6 +103,47 @@ export const charterSchema = z.object({
  * Say what you found, or say it is a gap. A check you did not perform is a gap, never
  * a pass, and never silence.
  */
+/**
+ * The testing dimensions a session accounted for, one line each.
+ *
+ * **This requires accounting, not compliance.** "not applicable, because this page
+ * holds no user data" is a first-class answer, and so is "gap — no contrast tool was
+ * used". What it forbids is silence: a dimension nobody mentions reads afterwards as
+ * one that was fine, and the difference between "checked and clean" and "never looked"
+ * is the difference between coverage evidence and a guess.
+ *
+ * This generalises the mechanism that worked. Requiring a declared `preflight` and two
+ * rotated `lenses` moved seeded-defect recall by 2.7× and 3.8× on two models whose
+ * prompts were otherwise unchanged — not because either was made to do more, but
+ * because both had to say what they had not done. Every dimension here earns its place
+ * from a defect class that a real session missed while reporting cleanly.
+ *
+ * It is a floor and never a ceiling. Sessions have already contradicted the reference
+ * answers they were scored against, and were right to. A dimension not listed here is
+ * not a dimension not worth testing — add to `not_covered`, or say so in the nearest
+ * line and explain.
+ */
+export const coverageSchema = z.object({
+  /** The product's own decision rules, their classes, and the four failure shapes. */
+  rules: z.string().min(3),
+  /** Partitions, boundaries, absent, empty, malformed and hostile values. */
+  inputs: z.string().min(3),
+  /** Order, repetition, recovery, navigation, and what persists across them. */
+  state: z.string().min(3),
+  /** Character sets, locales, normalisation, size, and how realistic the data was. */
+  data: z.string().min(3),
+  /** Keyboard reach, focus visibility, measured contrast, and announced semantics. */
+  accessibility: z.string().min(3),
+  /** Document head, markup validity, network weight, browsers and devices. */
+  platform: z.string().min(3),
+  /** Copy accuracy, consistent terminology, labels that carry values, instructions. */
+  content: z.string().min(3),
+  /** Responsiveness under realistic and extreme load, measured rather than felt. */
+  performance: z.string().min(3),
+  /** Trust boundaries, injection, and what the product exposes that it need not. */
+  security: z.string().min(3),
+});
+
 export const preflightSchema = z.object({
   /** Layout at the sizes the app will actually meet, mobile widths included. */
   position: z.string().min(3),
@@ -159,6 +200,8 @@ export const reportSchema = z.object({
   charter: charterSchema.optional(),
   /** Required for `exploratory-session`, ignored elsewhere. See `preflightSchema`. */
   preflight: preflightSchema.optional(),
+  /** Required for `exploratory-session`, ignored elsewhere. See `coverageSchema`. */
+  coverage: coverageSchema.optional(),
   /**
    * Finding ids a session proposes for permanent automated coverage.
    *
@@ -310,6 +353,17 @@ export function auditReport(report: Report): ReportProblem[] {
             'Rotate at least two and name them: first-time user for discoverability, keyboard-only for barriers, small-screen for layout, non-English for encoding, maintainer-reading-source for what the markup admits.',
         });
       }
+    }
+
+    // Accounting, not compliance: every dimension answered, and "not applicable,
+    // because…" answers it. Silence is what this refuses, because a dimension nobody
+    // mentions reads later as one that was fine.
+    if (report.coverage === undefined) {
+      problems.push({
+        level: 'error',
+        message:
+          'No coverage block. Account for each dimension — rules, inputs, state, data, accessibility, platform, content, performance, security — with what you did, or "gap: …", or "not applicable, because …". Any of those three is a complete answer; leaving one out is not, because an unmentioned dimension reads afterwards as one that was fine.',
+      });
     }
 
     // The role has always said to run this before the charter. Saying so was not enough.

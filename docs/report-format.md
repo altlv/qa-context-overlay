@@ -61,6 +61,16 @@ preflight: # exploratory-session only, and required there — the visual-inspect
   keyboard: tab reaches every control; focus ring visible throughout
   contrast: body text passes; the muted stock note is borderline at 4.2:1
   document_head: title, charset and viewport present; favicon 404s
+coverage: # exploratory-session only, and required there — account for each, do not comply with each
+  rules: the discount table, all four rows plus the member-first-order hole
+  inputs: partitions and boundaries on total and promo code; empty and malformed both refused
+  state: repeat submit, back after submit, recovery after a failed payment
+  data: ASCII, accented and CJK names; NFC and NFD forms of the same name
+  accessibility: 'gap — keyboard reach checked, contrast not measured with a tool'
+  platform: head and markup validity checked; single browser only, declared as a gap
+  content: every string read; "basket" and "cart" used interchangeably
+  performance: not applicable, because this view renders a fixed four-row table
+  security: markup and SQL probes through the promo field; both escaped
 coverage_candidates: # exploratory-session: which findings deserve permanent coverage
   - O1
 cases: # test-design only, and required there
@@ -100,6 +110,7 @@ Free markdown, but lead with these in order:
 | **Session:** `coverage_candidates` empty                                   | warning |
 | **Session:** charter names fewer than two `lenses`                         | error   |
 | **Session:** no `preflight` block — the sweep is declared, never silent    | error   |
+| **Session:** no `coverage` block — every dimension accounted for           | error   |
 
 ```bash
 npm run check-report                 # everything under reports/

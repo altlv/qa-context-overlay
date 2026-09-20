@@ -191,11 +191,25 @@ test.describe('a session is checked as a session', () => {
     document_head: 'title, charset and viewport present; favicon 404s',
   };
 
+  const coverage = {
+    rules: 'the discount table: all four rows exercised, plus the member-first-order hole',
+    inputs:
+      'partitions and boundaries on total and promo code; empty and malformed both refused cleanly',
+    state: 'repeat submit, back after submit, and recovery after a failed payment',
+    data: 'ASCII, accented and CJK names; NFC and NFD forms of the same name',
+    accessibility: 'gap — keyboard reach checked, contrast not measured with a tool',
+    platform: 'document head and markup validity checked; single browser only, declared as a gap',
+    content: 'every string read; "basket" and "cart" used interchangeably',
+    performance: 'not applicable, because this view renders a fixed four-row table',
+    security: 'markup and SQL probes through the promo field; both escaped',
+  };
+
   const session = (over: Partial<Report> = {}): Report =>
     report({
       report: 'exploratory-session',
       charter,
       preflight,
+      coverage,
       findings: [
         {
           id: 'O1',
@@ -333,6 +347,29 @@ test.describe('a session is checked as a session', () => {
       messages({ charter: { ...charter, lenses: ['a careful first-time user'] } }),
       'one persona for a whole session is a blindfold, and it must not pass as focus',
     ).toContain('only one lens');
+  });
+
+  test('should refuse a session that accounted for no coverage dimensions', () => {
+    expect(
+      messages({ coverage: undefined }),
+      'a dimension nobody mentions reads afterwards as one that was fine',
+    ).toContain('No coverage block');
+  });
+
+  test('should accept "not applicable" and "gap" as complete answers', () => {
+    // The point of the block is accounting, not compliance. A session forced to claim
+    // it tested everything would either lie or stop declaring gaps honestly, and the
+    // honest gap is the thing that makes the rest of the report readable.
+    const declared = {
+      ...coverage,
+      performance: 'not applicable, because this view renders a fixed four-row table',
+      accessibility: 'gap — no contrast tool was available in this session',
+    };
+
+    expect(
+      auditReport(session({ coverage: declared })).filter((problem) => problem.level === 'error'),
+      'declaring a gap or an exemption must pass, or sessions learn to stay silent instead',
+    ).toEqual([]);
   });
 
   test('should refuse a session that never declared its pre-flight sweep', () => {

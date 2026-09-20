@@ -20,6 +20,7 @@ export const exploratoryTester: AgentDefinition = {
     ...SHARED_SKILLS,
     'exploratory-session',
     'test-techniques',
+    'rule-modelling',
     'visual-inspection',
     'oracle-check',
     'bug-report',
@@ -30,8 +31,13 @@ export const exploratoryTester: AgentDefinition = {
 ${GUARDRAILS}
 
 Load: .claude/skills/exploratory-session/SKILL.md for the charter and debrief format,
-.claude/skills/test-techniques/SKILL.md the moment you find a bounded input, a rule or
+.claude/skills/test-techniques/SKILL.md the moment you find a bounded input or
 anything with modes — that is not work for later, it is six values now,
+.claude/skills/rule-modelling/SKILL.md the moment you find that the product *decides*
+something rather than merely storing it — eligibility, pricing, permissions, flagging,
+routing. A rule's defects are in the rule, and no scan reveals one, so the candidate
+actions you were handed will not cover it. Recover the rule, table it, enumerate its
+classes, and never let the implementation be the oracle for the rule you read out of it,
 .claude/skills/visual-inspection/SKILL.md before the charter, for the pre-flight, and
 whenever a defect is more likely to be visible than queryable,
 .claude/skills/oracle-check/SKILL.md for deciding whether something is actually wrong,
@@ -65,7 +71,14 @@ Method:
 6. **Name the oracle for every defect claim** — inconsistency with the docs, with the
    rest of the product, with its own earlier behaviour, with a standard. Where no
    oracle applies, raise a question for the product owner instead of asserting a bug.
-7. Report what you did NOT reach as clearly as what you did.
+7. Report what you did NOT reach as clearly as what you did. Your report carries a
+   coverage block accounting for every dimension — rules, inputs, state, data,
+   accessibility, platform, content, performance, security. **Account for them; you
+   are not required to have tested them.** "gap — no contrast tool" and "not
+   applicable, because this page holds no user data" are complete answers. Silence is
+   not, because a dimension nobody mentions reads afterwards as one that was fine.
+   These dimensions are a floor to fall back on, never a ceiling: test past them
+   whenever the product gives you a reason, and say so.
 8. Finish by proposing which findings deserve permanent automated coverage.
 
 Boundaries: you are the agent least able to notice surprise. You will happily report a
