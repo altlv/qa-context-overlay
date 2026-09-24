@@ -34,7 +34,11 @@ this file.
    each, the value it returns, the state it changes, the errors it raises, the
    collaborators it calls, and what it promises the caller. If you cannot state the
    promise in one sentence, you do not yet know what to assert — every assertion you write
-   now will describe the code instead of the behaviour, and it will survive a defect.
+   now will describe the code instead of the behaviour, and it will survive a defect. Read
+   one of the subject's existing tests and the command that runs them before you write
+   anything: the runner, the module system, the assertion library and the file's own
+   conventions are facts to find, not choices to make. A file that does not match them is
+   not collected by the suite at all, and a test nobody runs reports nothing.
 
 2. **Decide where the unit ends.** One unit is a decision, not a fact about a file: a
    single file may hold three units, and one unit may span three files. Draw the boundary
@@ -50,7 +54,11 @@ this file.
      test checking three fields passes while the fourth is wrong, and it needs editing
      every time the value gains a field. Where some parts are incidental — a generated
      identifier, a timestamp — compare the rest whole and those parts narrowly, or the
-     test fails on churn that is not the behaviour it covers.
+     test fails on churn that is not the behaviour it covers. Where the value is a computed
+     number, compare it within a stated tolerance rather than to a typed decimal: a
+     hand-written decimal will not round-trip a computed double, so the test fails for a
+     reason that is not the behaviour. Keep the tolerance tight enough that a changed
+     formula still fails it.
    - **An observable state change** — what a caller can see afterwards: the record exists,
      the queue grew, the file was written. Asserting only the return value of something
      whose real job is the write passes happily while nothing is stored, which is the
@@ -124,8 +132,12 @@ this file.
     // boundary counts, and the boundary is now an assertion hole
     ```
 
-    A survivor is an assertion hole: strengthen the assertion rather than adding another
-    test beside it. Coverage percentage is a floor that finds untouched code and never a
+    A survivor is usually an assertion hole: strengthen the assertion rather than adding
+    another test beside it. Check first that it is not equivalent — a mutation that cannot
+    change behaviour for any input, because the branch it removes is unreachable or its
+    effect is undone further down. Those survive every suite that will ever exist, and
+    chasing them with a contrived case only adds a test nobody would have written.
+    Coverage percentage is a floor that finds untouched code and never a
     goal — it cannot see whether anything was asserted, whether the expected value was
     right, or which values were never tried, and a branch covered by `assert.ok(result)`
     is covered by nothing.
@@ -138,9 +150,11 @@ this file.
   can name the case that reaches each
 - Every judging unit has both a firing case and a silent case
 - Each test has one reason to fail, and its name states the rule rather than the function
-- The file has been run twice — alone, and with the whole suite — and both are green. A
-  single-file run and a full-suite run are different evidence, and the difference is
-  where order and leftover state show up
+- The file has been run twice — alone, and with the whole suite. Alone it is green. In the
+  suite the failures are no more numerous than the count you measured before adding it, and
+  you can quote both numbers. A suite that was already red stays red: a run that does not
+  separate the two cannot tell your file from the wreckage. A count that moves on its own
+  between runs is the suite's flakiness, which is a finding, not your doing
 - No assertion reaches into internals; no test needs the clock, the network or another
   test's leftovers to pass
 - At least one rule was broken on purpose and a named test caught it. Any rule that
@@ -152,12 +166,12 @@ this file.
 
 - The test file, runnable by the subject's own runner with no new dependency and no
   change to the code under test
-- The command run and its actual result, quoted; anything not run named as NOT RUN
-  rather than left implied
+- The command run and its actual result, quoted, with the suite's failure count before and
+  after your file; anything not run named as NOT RUN rather than left implied
 - One line per unit: the promise it makes, the cases that cover it, and what was
   deliberately left out
-- The mutations tried and the test that caught each — or the survivors, named as
-  assertion holes with the assertion that needs strengthening
+- The mutations tried and the test that caught each — or the survivors, each named as an
+  assertion hole with the assertion that needs strengthening, or as equivalent and why
 - Anything that could only be asserted by doubling the unit itself, with the level at
   which it should be tested instead
 
