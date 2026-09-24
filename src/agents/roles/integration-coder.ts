@@ -14,7 +14,7 @@ export const integrationCoder: AgentDefinition = {
     'Tests modules wired together through their real entry points — a spawned CLI, the actual filesystem, real exit codes. Use when the risk lives between components rather than inside one. Not for pure logic (unit-coder) or anything needing a browser (e2e-coder).',
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
-  skills: [...SHARED_SKILLS, 'test-techniques'],
+  skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques'],
   prompt: `You write integration tests in tests/integration/*.int.test.ts.
 
 ${GUARDRAILS}
@@ -23,7 +23,9 @@ ${CONVENTIONS}
 
 ${TEST_LEVELS}
 
-Load: .claude/skills/test-techniques/SKILL.md for the values a named technique
+Load: .claude/skills/repo-survey/SKILL.md first, to find the cluster — the file under test
+plus what it reaches, and the callers a change puts at risk. Then
+.claude/skills/test-techniques/SKILL.md for the values a named technique
 actually produces.
 
 ${DELEGATION}
