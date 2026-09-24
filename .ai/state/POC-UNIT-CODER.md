@@ -52,17 +52,26 @@ to deny it, which the literal acceptance test correctly refused.
 `--preflight` against mcpa/local reports **ready**, at the subject's own commit, and refuses a dirty
 subject checkout by name.
 
-**Not landed.** C5 (stack-aware gate), C6 (assertion floor), C7 (the `searchIndex` mutation set) and
-C8 (the comparator). A run is now _possible_ — the worktree, the guard and the prompt all point at
-the subject. What it cannot yet be is _judged_: the post-run gate filters changed files by
-`/\.(?:spec|test)\.ts$/`, so for this subject it reports that there was nothing to check. And the
-tests that exist were still produced by a person following the skill: preflight proves the role can
-be _pointed_ at a subject, not that it writes anything.
+**Not landed.** C6 (assertion floor), C7 (the `searchIndex` mutation set), C8 (the comparator), and
+the rest of C5. The gate now runs a subject's changed tests with the subject's own runner, where
+before it reported that there was nothing to check for any subject not using Playwright — which is
+every subject we do not own. What it still lacks is a vacuity check at that level: `fault-check`
+proves an app _spec_ notices its server failing, and nothing yet proves a subject _test_ notices its
+process failing.
 
-**The credential is deliberately unproven.** No `ANTHROPIC_API_KEY` is set, and this worktree
-carries no environment file. `src/agents/client.ts` refuses to pre-check for one, because gating
-on that variable refuses everyone signed in through `claude login` — so whether a paid run can
-authenticate is settled by attempting one, not by inspection.
+**The run was attempted twice and stops at authentication.** Both attempts created a worktree of the
+subject at `c8d7549` beside it — which is the direct evidence that C4 works end to end — released the
+lock, touched no file in the subject's own checkout, and then failed before any model call with
+`Agent auth failed. Either sign in with claude login, or set ANTHROPIC_API_KEY in .env`. Nothing was
+spent. `src/agents/client.ts` refuses to pre-check for a credential, because gating on the variable
+refuses everyone signed in through `claude login`, so only an attempt can answer the question — and
+two now have. One detail matters for whichever route is taken: `src/env.ts` anchors the environment
+file to its own module, so a key belongs in _this_ checkout's `.env`, not the shared one's.
+
+**Not proven, and worth repeating.** A run is now possible: the worktree, the guard, the prompt and
+the gate all point at the subject. What has never happened is a single agent turn. The tests that
+exist for `searchIndex.js` were written by a person following the skill — preflight proves the role
+can be _pointed_ at a subject, not that it writes anything.
 
 **Measured, on one mutation set and one subject commit, against the human baseline** (§6 is
 the method): the agent's suite kills 18 of 20 mutations, the baseline kills 12 of 20, and both

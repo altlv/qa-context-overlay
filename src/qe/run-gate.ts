@@ -1,6 +1,7 @@
 import type { RoleFamily } from '../agents/roles.js';
 import { PLAYWRIGHT_CLI, TSX_CLI } from '../tool-paths.js';
 import type { Environment } from './exploration-policy.js';
+import { subjectTests, type TestStack } from './test-stack.js';
 
 /**
  * The checks the runner makes after an agent finishes, on what the run changed.
@@ -51,6 +52,11 @@ export function planGate(input: {
   environment: Environment | null;
   /** This run's own folder, so the gate never writes over another run's results. */
   runDir: string;
+  /**
+   * The subject's own test stack, when the run's work landed in a subject. Absent means this
+   * repository's Playwright, which is what the spec-shaped steps below assume.
+   */
+  testStack?: TestStack;
 }): GatePlan {
   const changed = input.changed.map(posix);
   const steps: GateStep[] = [];
@@ -61,9 +67,24 @@ export function planGate(input: {
 
   if (input.family === 'coding' && input.role !== 'testability-reviewer') {
     const specs = changed.filter((path) => SPEC.test(path));
-    if (specs.length === 0) {
-      notRun.push('no spec file changed, so there was nothing for the coding gate to check');
-    } else {
+
+    // A subject's tests are not specs. The run's worktree *is* a worktree of the subject, so
+    // the changed paths are relative to it and the subject's own runner applies. Before this,
+    // the gate reported nothing to check for every subject that does not use Playwright —
+    // which is every subject we do not own.
+    const subjectFiles =
+      input.testStack === undefined ? [] : subjectTests(input.testStack, changed);
+    for (const file of subjectFiles) {
+      steps.push({ name: `changed test passes: ${file}`, args: ['--test', file], env: {} });
+    }
+
+    if (specs.length === 0 && subjectFiles.length === 0) {
+      notRun.push(
+        input.testStack === undefined
+          ? 'no spec file changed, so there was nothing for the coding gate to check'
+          : `no test file changed, so there was nothing for the coding gate to check — this subject's tests match ${input.testStack.testFilePattern}`,
+      );
+    } else if (specs.length > 0) {
       steps.push({
         name: 'assert-quality',
         args: [TSX, 'src/cli/assert-quality.ts', ...specs],

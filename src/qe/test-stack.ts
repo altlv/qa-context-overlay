@@ -29,3 +29,16 @@ export interface TestStack {
   /** One test file to read as the house style, relative to the subject's repository root. */
   exemplar: string;
 }
+
+/**
+ * The changed paths that are test files under this stack.
+ *
+ * A literal suffix is enough for the patterns a stack declares — `*.test.js`, or a path
+ * pattern ending in `.spec.ts`. Anything more elaborate belongs in the config as a plain
+ * suffix rather than as a glob dialect this would have to reimplement.
+ */
+export function subjectTests(stack: TestStack, paths: readonly string[]): string[] {
+  const lastSegment = stack.testFilePattern.slice(stack.testFilePattern.lastIndexOf('/') + 1);
+  const suffix = lastSegment.replace(/^\*/, '');
+  return paths.filter((path) => path.replace(/\\/g, '/').endsWith(suffix));
+}

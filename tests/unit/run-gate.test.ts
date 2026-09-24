@@ -75,6 +75,57 @@ test.describe('the coding gate', () => {
     expect(plan.notRun.join(' '), 'a skipped check must be stated').toContain('fault check');
   });
 
+  const subjectStack = {
+    runner: 'node --test',
+    runAll: 'node --test test/*.test.js',
+    runOne: 'node --test ',
+    testsDir: 'test',
+    testFilePattern: '*.test.js',
+    moduleSystem: 'commonjs',
+    assertions: "const assert = require('node:assert/strict');",
+    exemplar: 'test/specIndexer.test.js',
+  };
+
+  test('should run a subject’s changed tests with the subject’s own runner', () => {
+    const plan = planGate({
+      ...base,
+      role: 'unit-coder',
+      family: 'coding',
+      changed: ['test/searchIndex.unit.test.js', 'src/services/searchIndex.js'],
+      testStack: subjectStack,
+    });
+
+    // The run's worktree is a worktree of the subject, so a path relative to it and the
+    // subject's own runner are what apply. Before this, a run against any subject that does
+    // not use Playwright was told there was nothing to check — which is every subject we do
+    // not own, and the only kind this role is pointed at.
+    expect(names(plan), 'the subject runner replaces the spec-shaped steps').toEqual([
+      'changed test passes: test/searchIndex.unit.test.js',
+      'report',
+    ]);
+    expect(plan.steps[0]?.args, 'node --test over the changed file, in the worktree').toEqual([
+      '--test',
+      'test/searchIndex.unit.test.js',
+    ]);
+    expect(plan.notRun.join(' '), 'and nothing claims to have been skipped').not.toContain(
+      'nothing for the coding gate to check',
+    );
+  });
+
+  test('should name what counts as a test when a subject run changed none', () => {
+    const plan = planGate({
+      ...base,
+      role: 'unit-coder',
+      family: 'coding',
+      changed: ['src/services/searchIndex.js'],
+      testStack: subjectStack,
+    });
+    expect(
+      plan.notRun.join(' '),
+      'a subject run that wrote no test must say so, and say what would have counted',
+    ).toContain('*.test.js');
+  });
+
   test('should say when a coding run changed no spec', () => {
     const plan = planGate({ ...base, role: 'api-coder', family: 'coding', changed: [] });
     expect(names(plan)).toEqual(['report']);

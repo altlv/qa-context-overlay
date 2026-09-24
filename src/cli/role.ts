@@ -691,6 +691,9 @@ const plan = planGate({
   report: reportPath,
   environment: runTarget?.environment ?? null,
   runDir,
+  // The subject's stack, when the work landed in a subject: the gate then checks the changed
+  // tests with the subject's own runner, where before it reported nothing to check at all.
+  ...(subjectConfig?.testStack === undefined ? {} : { testStack: subjectConfig.testStack }),
 });
 
 console.error(`\nPost-run gate — ${changed.length} file(s) changed in the worktree:`);
