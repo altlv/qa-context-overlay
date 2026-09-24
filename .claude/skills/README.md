@@ -33,10 +33,11 @@ than padded in.
 
 ## Writing tests
 
-| Skill                                             | Purpose                                                                            | Trust |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------- | ----- |
-| [`pwtest`](pwtest/SKILL.md)                       | Generate Playwright UI/API tests: scan → design → approve → generate → run → debug | 1     |
-| [`testability-audit`](testability-audit/SKILL.md) | Why automation here is fragile, and the concrete fixes to ask for                  | 1     |
+| Skill                                             | Purpose                                                                                                                             | Trust |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| [`pwtest`](pwtest/SKILL.md)                       | Generate Playwright UI/API tests: scan → design → approve → generate → run → debug                                                  | 1     |
+| [`unit-testing`](unit-testing/SKILL.md)           | Shape a unit test: the unit's boundary, what to assert, doubles, one reason to fail, and the coverage bar that says when it is done | 1     |
+| [`testability-audit`](testability-audit/SKILL.md) | Why automation here is fragile, and the concrete fixes to ask for                                                                   | 1     |
 
 ## Judging findings
 
@@ -57,6 +58,7 @@ Do not load the catalogue. Load one or two skills for the task in front of you.
 | "the product _decides_ something" | `rule-modelling` — table the rule, and never let the code be the oracle |
 | "look at this page"               | `visual-inspection`                                                     |
 | "write tests for this"            | `pwtest`                                                                |
+| "write unit tests for this logic" | `test-techniques` for the values, then `unit-testing` for the shape     |
 | "explore this feature"            | `exploratory-session` + `oracle-check`                                  |
 | "is this a bug"                   | `oracle-check`                                                          |
 | "write this up"                   | `bug-report`                                                            |

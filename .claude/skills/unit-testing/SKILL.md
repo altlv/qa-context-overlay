@@ -55,7 +55,7 @@ this file.
      the queue grew, the file was written. Asserting only the return value of something
      whose real job is the write passes happily while nothing is stored, which is the
      defect this repo has a live example of.
-   - **An interaction with a collaborator** — only when the interaction *is* the promise,
+   - **An interaction with a collaborator** — only when the interaction _is_ the promise,
      such as asking a mailer to send. Reaching for this first turns the suite into a
      transcript of the implementation, and it fails on every internal reordering.
 
@@ -74,14 +74,14 @@ this file.
 6. **Replace a dependency only when what it does makes that necessary.** The decision is
    about behaviour, not about the name of the double:
 
-   | What the dependency does                          | What the test does                                      | Failure if you skip it                                                          |
-   | ------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
-   | Returns a value the unit branches on              | Hand it the value directly, or stubs it                 | The slow real thing is dragged in and the branch is never reached               |
-   | Records something — writes, sends, appends        | Record the call and assert on the record                | The unit's actual promise goes unverified and passes with the write deleted     |
-   | Is slow or unreachable — network, payment, queue  | Replace it; a unit test does not cross a wire            | The suite takes minutes, fails when the network does, and gets deleted          |
-   | Is non-deterministic — clock, random, identifiers | Control it and inject the value; never assert on it      | The assertion encodes today's date and fails tomorrow for unrelated reasons     |
-   | Is not yours — a third-party SDK                  | Replace it at your own boundary                          | Their next release becomes a failure in your suite and a story about your code  |
-   | **Is the unit under test**                        | **Stop. The test has lost its subject.**                 | The assertions describe the double; the suite stays green while the unit is broken |
+   | What the dependency does                          | What the test does                                  | Failure if you skip it                                                             |
+   | ------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------- |
+   | Returns a value the unit branches on              | Hand it the value directly, or stubs it             | The slow real thing is dragged in and the branch is never reached                  |
+   | Records something — writes, sends, appends        | Record the call and assert on the record            | The unit's actual promise goes unverified and passes with the write deleted        |
+   | Is slow or unreachable — network, payment, queue  | Replace it; a unit test does not cross a wire       | The suite takes minutes, fails when the network does, and gets deleted             |
+   | Is non-deterministic — clock, random, identifiers | Control it and inject the value; never assert on it | The assertion encodes today's date and fails tomorrow for unrelated reasons        |
+   | Is not yours — a third-party SDK                  | Replace it at your own boundary                     | Their next release becomes a failure in your suite and a story about your code     |
+   | **Is the unit under test**                        | **Stop. The test has lost its subject.**            | The assertions describe the double; the suite stays green while the unit is broken |
 
    Three doubles for one small unit is not a testing problem, it is a design signal: the
    unit is doing several jobs, and the fix is to split it rather than to build a stage set.
@@ -190,12 +190,12 @@ If this file is not read as a file, these are the rules that still apply.
 
 | Situation                                         | Action                                                                               |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| The promise cannot be stated                      | Stop and ask. An assertion invented now encodes a guess and will pass forever         |
-| The unit needs three doubles to be testable       | Split the unit, or move the test up a level. Do not build the stage set               |
-| The only way to assert it is to call a private    | The test is aimed at the wrong boundary. Re-aim it at the caller's view               |
-| A test broke on a refactor that lost no behaviour | The test was coupled to the implementation. Fix the test, and say so                  |
-| A mutant survives                                 | Strengthen the assertion that should have caught it. Adding tests beside it hides it  |
-| The expected value is uncertain                   | Say so; do not derive the expectation from the code, which makes any output correct   |
+| The promise cannot be stated                      | Stop and ask. An assertion invented now encodes a guess and will pass forever        |
+| The unit needs three doubles to be testable       | Split the unit, or move the test up a level. Do not build the stage set              |
+| The only way to assert it is to call a private    | The test is aimed at the wrong boundary. Re-aim it at the caller's view              |
+| A test broke on a refactor that lost no behaviour | The test was coupled to the implementation. Fix the test, and say so                 |
+| A mutant survives                                 | Strengthen the assertion that should have caught it. Adding tests beside it hides it |
+| The expected value is uncertain                   | Say so; do not derive the expectation from the code, which makes any output correct  |
 
 ## Interlaying (blind spot)
 
