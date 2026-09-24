@@ -133,16 +133,9 @@ for (const app of apps) {
 
 // ── Ready? ────────────────────────────────────────────────────────────────────────
 
-if (reusePath !== undefined) {
-  if (family !== 'testing') {
-    refuse(
-      `Only a testing role may run in another run's worktree — "${name}" can edit, and would change the evidence.`,
-    );
-  }
-  if (!(await isRunWorktree(repoRoot, reusePath))) {
-    refuse(`--worktree ${reusePath} is not one of this repository's run worktrees.`);
-  }
-}
+// The `--worktree` reuse check moved below the subject resolution: a run's worktree belongs
+// to the repository the run tests, so whether a path is one of ours cannot be answered
+// before knowing which repository that is.
 const workRoot = reusePath === undefined ? repoRoot : resolve(reusePath);
 
 const resolved = resolveRunTarget(
@@ -189,6 +182,41 @@ const subjectRepo =
     ? resolve(await mainCheckout(repoRoot), subjectConfig.sourceRepo)
     : null;
 
+// Which repository the run's worktree comes from. A subject is a repository of its own, so
+// branching the harness would confine the agent to a worktree that does not contain the code
+// it was asked to test, and the file guard would refuse every write that mattered.
+const runRepo = subjectRepo ?? repoRoot;
+
+// The stack facts a subject run composes its prompt from, when the app declares them. Absent
+// for a run in this repository, which keeps its own conventions and level table.
+const subjectRun =
+  subjectConfig?.testStack !== undefined && subjectRepo !== null
+    ? { app: subjectConfig.name, repo: subjectRepo, stack: subjectConfig.testStack }
+    : undefined;
+
+if (reusePath !== undefined) {
+  if (family !== 'testing') {
+    refuse(
+      `Only a testing role may run in another run's worktree — "${name}" can edit, and would change the evidence.`,
+    );
+  }
+  if (!(await isRunWorktree(runRepo, reusePath))) {
+    refuse(`--worktree ${reusePath} is not one of ${runRepo}'s run worktrees.`);
+  }
+}
+
+// A dirty subject makes the exercise meaningless: the work comes back as a diff against the
+// subject's HEAD, and uncommitted work there would be credited to the run.
+if (runRepo !== repoRoot) {
+  const dirty = await worktreeChanges(runRepo);
+  if (dirty.length > 0) {
+    refuse(
+      'the subject checkout has uncommitted work, so the run diff would not be its own:',
+      dirty.slice(0, 10),
+    );
+  }
+}
+
 const notReady = [
   ...resolved.problems,
   ...readinessProblems(
@@ -206,15 +234,20 @@ const notReady = [
   ),
 ];
 
-const base = reusePath === undefined ? await headCommit(repoRoot) : await headCommit(workRoot);
+// `base` is the commit the run's worktree is checked out at, in the repository the run works
+// in — the subject's own HEAD when the work lands there.
+const base = reusePath === undefined ? await headCommit(runRepo) : await headCommit(workRoot);
 if (reusePath === undefined) {
-  // A worktree is checked out at the base commit: anything uncommitted never reaches it.
-  if (designPath !== undefined && !(await committedAt(repoRoot, base, designPath))) {
+  // A design lives in this repository even when the work happens in a subject's worktree, so
+  // whether it is committed is a question about this repository, not about the subject.
+  const designBase = await headCommit(repoRoot);
+  if (designPath !== undefined && !(await committedAt(repoRoot, designBase, designPath))) {
     notReady.push(
-      `design ${designPath} is not committed — the run works at ${base.slice(0, 7)}, and an uncommitted file never reaches it`,
+      `design ${designPath} is not committed — a run works from committed code, and an uncommitted file never reaches the worktree`,
     );
   }
-  const lockfile = await lockfileProblem(repoRoot, base);
+  // The linked modules belong to the run repository, so the lockfile to compare is its own.
+  const lockfile = await lockfileProblem(runRepo, base);
   if (lockfile !== null) notReady.push(lockfile);
 }
 if (notReady.length > 0) refuse(`"${name}" is not ready to start — missing upstream:`, notReady);
@@ -282,7 +315,7 @@ if (preflight) {
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const worktree =
   reusePath === undefined
-    ? await createRunWorktree(repoRoot, `${name}-${stamp}`, base)
+    ? await createRunWorktree(runRepo, `${name}-${stamp}`, base)
     : resolve(reusePath);
 console.error(
   `${reusePath === undefined ? 'Created' : 'Reusing'} worktree ${worktree} at ${base.slice(0, 7)}`,
@@ -495,13 +528,14 @@ let result;
 try {
   result = await runAgent({
     prompt,
-    systemPrompt: composeSystemPrompt(role),
+    systemPrompt: composeSystemPrompt(role, undefined, subjectRun),
     allowedTools: [...(role.tools ?? []), ...(browser?.tools ?? [])],
     ...(browser === null ? {} : { mcpServers: browser.mcpServers }),
     // Every role, composed the same way, so a coder that finds a gap mid-run can call
     // test-planner and the planner arrives with its skills. Only roles holding the
-    // `Agent` tool can reach these — enforced in tests/unit/roles.test.ts.
-    agents: composeRoles(roles),
+    // `Agent` tool can reach these — enforced in tests/unit/roles.test.ts. A delegated
+    // planner inherits the subject's stack too, or it would design in the wrong shape.
+    agents: composeRoles(roles, undefined, subjectRun),
     hooks: {
       PreToolUse: [
         guardHook(check, (toolName, reason) => console.error(`  refused ${toolName}: ${reason}`)),

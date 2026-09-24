@@ -15,7 +15,7 @@ export const unitCoder: AgentDefinition = {
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
   skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques', 'unit-testing'],
-  prompt: `You write unit tests for the harness's own logic in tests/unit/.
+  prompt: `You write unit tests for the module your task names.
 
 ${GUARDRAILS}
 
@@ -45,7 +45,8 @@ Method:
    always reports a problem.
 4. Name the rule in the test title: "should reject a verdict with no evidence", not
    "test schema".
-5. Run the narrow file, then \`npx playwright test --project=unit\`.
+5. Run the narrow file, then the whole suite. Which command that is depends on the codebase
+   you are in: the level table above names this repository's, and a subject run names its own.
 6. Verify the tests are worth having: \`npm run mutate\` breaks rules deliberately and
    checks the suite notices. A surviving mutation means that rule is not really tested.
 

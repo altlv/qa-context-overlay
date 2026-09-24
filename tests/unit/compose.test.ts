@@ -71,3 +71,48 @@ test.describe('composing the real roles', () => {
     }
   });
 });
+
+test.describe('composing a role whose work lands in a subject', () => {
+  const subject = {
+    app: 'mcpa',
+    repo: '../mcpa-training-bot',
+    stack: {
+      runner: 'node --test',
+      runAll: 'node --test test/*.test.js',
+      runOne: 'node --test ',
+      testsDir: 'test',
+      testFilePattern: '*.test.js',
+      moduleSystem: 'commonjs',
+      assertions: "const assert = require('node:assert/strict');",
+      exemplar: 'test/specIndexer.test.js',
+    },
+  };
+
+  test('should carry no Playwright instruction and no tests/unit path', () => {
+    // The plan's acceptance test for a portable role, in its own words. A role following
+    // this repository's conventions writes a file the subject cannot run at all: the wrong
+    // runner, the wrong directory, the wrong import. Skills are inside the string under
+    // test on purpose — the runner inlines them, so an instruction in a skill is an
+    // instruction the agent reads.
+    const prompt = composeRoles(roles, undefined, subject)['unit-coder']?.prompt ?? '';
+    expect(prompt, 'the Playwright conventions must be gone, not subordinated').not.toMatch(
+      /playwright/i,
+    );
+    expect(prompt, 'and the harness test path with them').not.toContain('tests/unit');
+    expect(prompt, 'nor the harness fixtures a role would import').not.toContain(
+      'src/fixtures/harness.js',
+    );
+    expect(prompt, 'nor the command it would run instead of the subject runner').not.toContain(
+      'npx playwright',
+    );
+    expect(prompt, 'the subject runner has to arrive in their place').toContain('node --test');
+    expect(prompt, 'and the file to read as the house style').toContain('test/specIndexer.test.js');
+  });
+
+  test('should leave a run in this repository with its own conventions', () => {
+    const prompt = composeRoles(roles)['unit-coder']?.prompt ?? '';
+    expect(prompt, 'a harness run keeps the conventions it was written against').toMatch(
+      /playwright/i,
+    );
+  });
+});

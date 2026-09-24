@@ -26,25 +26,38 @@ flow had no mechanical way to choose a target: `.claude/skills/repo-survey/SKILL
 subject's `searchIndex.js`, written by hand in a worktree of the subject, with the human
 baseline never edited.
 
-**Landed since.** C2 and C3 are in: `sourceRoot` and `testStack` on `AppConfig`, `apps/mcpa/`
-registered with a local environment and its own stack facts, and readiness taught to resolve a
-module the subject names instead of only paths that exist here. Two semantic bugs surfaced only
-by running it: a subject is a sibling of the _repository_, so resolving from a worktree one level
-deeper found nothing; and a named path is written relative to the subject's repository root, not
-to its `sourceRoot`, so resolving against the latter produced `src/src/services/x.js` and
-reported the module missing while the task named it exactly.
-`npm run role -- unit-coder "write unit tests for src/services/searchIndex.js" --app mcpa --env
-local --preflight` now reports **ready** — the first time this role has cleared readiness against
-anything.
+**Landed since.** C2, C3, C4, and the portability half of C9.
 
-**Not landed.** C4 (subject-scoped worktree), C5 (stack-aware gate), C6 (assertion floor), C7
-(the `searchIndex` mutation set), C8 (the comparator), and the half of C9 that makes the prompt
-stack-neutral — `unit-coder`'s Method still names `npx playwright test --project=unit` and its
-first line still points at `tests/unit/`. **A real run has to wait for C4**: without it the
-worktree is a worktree of the harness and the file guard confines writes there, so the agent
-could not reach the subject at all. And the tests that exist were still produced by a person
-following the skill — preflight proves the role can be _pointed_ at a subject, not that it
-writes anything.
+- **C2, C3** — `sourceRoot` and `testStack` on `AppConfig`; `apps/mcpa/` registered with a local
+  environment and its own stack facts; readiness taught to resolve a module the subject names
+  instead of only paths that exist in this repository.
+- **C4** — the run's worktree is a worktree of the _subject_, at the subject's own HEAD; the file
+  guard confines writes to it unchanged; the subject's `node_modules` are linked beside the runs
+  folder, the arrangement that also survives being removed; a subject checkout with uncommitted
+  work is refused by name, because a diff taken against a dirty checkout would not be the run's
+  own. `--worktree` reuse now asks its question of the right repository.
+- **C9** — `composeSystemPrompt` takes an optional subject, and the two sections describing _this_
+  repository's stack are **replaced** by the subject's own, matched on the exported constants
+  rather than rewritten into eight role files. The acceptance test the plan set is now a test: the
+  composed prompt for `--app mcpa` carries no Playwright instruction, no `tests/unit` path, no
+  harness fixture and no harness runner — asserted over the role's text _and_ its inlined skills,
+  because the runner sends both and an instruction inside a skill is an instruction.
+
+Three semantic bugs surfaced only by running it: a subject is a sibling of the _repository_, so
+resolving from a worktree one level deeper found nothing; a named path is written relative to the
+subject's repository root rather than to its `sourceRoot`, so resolving against the latter produced
+`src/src/services/x.js`; and the first draft of the subject's prompt block named Playwright in order
+to deny it, which the literal acceptance test correctly refused.
+
+`--preflight` against mcpa/local reports **ready**, at the subject's own commit, and refuses a dirty
+subject checkout by name.
+
+**Not landed.** C5 (stack-aware gate), C6 (assertion floor), C7 (the `searchIndex` mutation set) and
+C8 (the comparator). A run is now _possible_ — the worktree, the guard and the prompt all point at
+the subject. What it cannot yet be is _judged_: the post-run gate filters changed files by
+`/\.(?:spec|test)\.ts$/`, so for this subject it reports that there was nothing to check. And the
+tests that exist were still produced by a person following the skill: preflight proves the role can
+be _pointed_ at a subject, not that it writes anything.
 
 **The credential is deliberately unproven.** No `ANTHROPIC_API_KEY` is set, and this worktree
 carries no environment file. `src/agents/client.ts` refuses to pre-check for one, because gating

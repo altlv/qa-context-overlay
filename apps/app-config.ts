@@ -1,6 +1,7 @@
 import type { Environment } from '../src/qe/exploration-policy.js';
+import type { TestStack } from '../src/qe/test-stack.js';
 
-export type { Environment };
+export type { Environment, TestStack };
 
 /**
  * One deployment of an app. The key it is filed under carries the safety
@@ -36,32 +37,8 @@ export const EFFECT_TAGS = {
 
 export type EffectTag = (typeof EFFECT_TAGS)[keyof typeof EFFECT_TAGS];
 
-/**
- * How a subject's tests are written and run.
- *
- * Facts, not prose. A coder role composes its stack knowledge from here instead of
- * assuming this repo's own Playwright — the assumption that made `unit-coder` unable to
- * produce one valid file for a subject using `node:test`. Every field is something a role
- * would otherwise have to guess or read out of a config file itself.
- */
-export interface TestStack {
-  /** What runs them: `node --test`, `vitest`, `jest`, `npx playwright test`. */
-  runner: string;
-  /** The command that runs the whole suite. */
-  runAll: string;
-  /** The command that runs one file, with the file path appended. */
-  runOne: string;
-  /** Where tests live, relative to `sourceRepo`, without a trailing slash. */
-  testsDir: string;
-  /** What marks a file as a test, for the gate and the source map. */
-  testFilePattern: string;
-  /** `commonjs` | `esm` | `typescript` — how a test file imports what it needs. */
-  moduleSystem: string;
-  /** One line showing how assertions are obtained, as the subject writes it. */
-  assertions: string;
-  /** One test file to read as the house style, relative to `sourceRepo`. */
-  exemplar: string;
-}
+// `TestStack` comes from `src/qe/test-stack.ts` and is re-exported above: the harness's own
+// modules never import from `apps/`, so the shape has to live on their side of the line.
 
 export interface AppConfig {
   /** Folder name under apps/, and the Playwright project name. */
