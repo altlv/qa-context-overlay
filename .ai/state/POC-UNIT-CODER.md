@@ -65,9 +65,15 @@ touched no file in the subject's own checkout, and then failed before any model 
 `Agent auth failed. Either sign in with claude login, or set ANTHROPIC_API_KEY in .env`. Nothing was
 spent, and the empty worktrees were removed afterwards. `src/agents/client.ts` refuses to pre-check
 for a credential, because gating on the variable refuses everyone signed in through `claude login`,
-so only an attempt can answer the question. One detail matters for whichever route is taken:
-`src/env.ts` anchors the environment file to its own module, so a key belongs in _this_ checkout's
-`.env`, not the shared one's.
+so only an attempt can answer the question — and it has been answered: `claude auth status` reports
+`loggedIn: false` with `authMethod: none` on this machine. There is no session for the SDK to find,
+which is the whole blocker.
+
+**The route is `claude auth login`, in a person's own terminal, and nothing belongs in `.env`.** The
+key is documented as optional and CI-only; the line that once called it required is what caused a key
+to be issued that nobody needed, and it should be removed rather than honoured. `src/env.ts` anchors
+the environment file to its own module, so a key in the shared checkout would not reach a worktree
+run anyway — the wrong diagnosis, corrected here so the next person does not act on it.
 
 **Not proven, and worth repeating.** A run is now possible: the worktree, the guard, the prompt and
 the gate all point at the subject. What has never happened is a single agent turn. The tests that
