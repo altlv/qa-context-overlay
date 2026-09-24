@@ -42,6 +42,27 @@ export const findingSchema = z.object({
   where: z.string().optional(),
   /** Which oracle or check says this is wrong. Required for a defect claim. */
   basis: z.string().optional(),
+  /**
+   * How sure the session is, which is a different axis from how much it matters.
+   *
+   * `severity` says what it costs if real. This says whether it is real. Without the
+   * middle grade a session must round: a thing it is fairly sure about becomes either
+   * a defect it cannot fully support, or a question that understates it. Rounding up
+   * spends credibility; rounding down loses the finding.
+   *
+   * `potential` is the working term — "probably wrong" describes the tester's state,
+   * and a reader deciding what to act on needs a word about the thing.
+   */
+  certainty: z.enum(['confirmed', 'potential']).optional(),
+  /**
+   * Whether the charter led here, or a surprise did.
+   *
+   * Session-based testing separates the two because they answer different questions:
+   * chartered work says whether the plan was carried out, opportunity work says
+   * whether the plan was any good. A session whose opportunity work outproduced its
+   * charter has found something about the charter, and nowhere to say so until now.
+   */
+  origin: z.enum(['charter', 'opportunity']).optional(),
 });
 
 /** The severities that assert something is wrong, and therefore owe an oracle. */
@@ -126,6 +147,25 @@ export const charterSchema = z.object({
 export const coverageSchema = z.object({
   /** The product's own decision rules, their classes, and the four failure shapes. */
   rules: z.string().min(3),
+  /**
+   * Which test techniques were applied, to what, and which were considered and
+   * skipped.
+   *
+   * Across every session so far the reports mention boundary values nine times and
+   * equivalence partitioning, decision tables, state transitions and pairwise **not
+   * once** — while `test-techniques` teaches all eight. The ones common knowledge
+   * supplies got used; the ones the skill exists to supply did not. One session
+   * declared "sequence probes — not run", which is the honest version of what the
+   * others left unsaid.
+   *
+   * **Optional here and required by the audit**, which is not a hedge. Making it
+   * required at parse made every report written before it unreadable — four sessions
+   * of evidence became "no readable report" the moment the field was added, including
+   * the ones a later run is supposed to be compared against. A schema that reads
+   * history is worth more than one that is tidy, so the parser stays permissive and
+   * the rule lives where rules live.
+   */
+  techniques: z.string().min(3).optional(),
   /** Partitions, boundaries, absent, empty, malformed and hostile values. */
   inputs: z.string().min(3),
   /** Order, repetition, recovery, navigation, and what persists across them. */
@@ -363,6 +403,16 @@ export function auditReport(report: Report): ReportProblem[] {
         level: 'error',
         message:
           'No coverage block. Account for each dimension — rules, inputs, state, data, accessibility, platform, content, performance, security — with what you did, or "gap: …", or "not applicable, because …". Any of those three is a complete answer; leaving one out is not, because an unmentioned dimension reads afterwards as one that was fine.',
+      });
+    }
+
+    // Enforced here rather than in the schema, so reports written before this field
+    // existed still parse and can still be compared against.
+    if (report.coverage !== undefined && report.coverage.techniques === undefined) {
+      problems.push({
+        level: 'error',
+        message:
+          'coverage names no techniques. Say which you applied and to what, and which you considered and skipped — across every session so far the reports mention boundary values repeatedly and equivalence partitioning, decision tables, state transitions and pairwise not once, which is what an unaccounted-for dimension looks like.',
       });
     }
 

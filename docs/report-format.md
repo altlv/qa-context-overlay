@@ -39,6 +39,8 @@ findings:
     summary: One sentence stating the defect or observation.
     where: apps/todo-fixture/tests/todos.api.spec.ts:42
     basis: Internal consistency — the list and the detail view disagree.
+    certainty: potential # confirmed | potential — whether it is real, not what it costs
+    origin: opportunity # charter | opportunity — did the plan lead here, or a surprise
 not_covered:
   - Mobile viewports — desktop Chrome only.
 not_run:
@@ -63,6 +65,7 @@ preflight: # exploratory-session only, and required there — the visual-inspect
   document_head: title, charset and viewport present; favicon 404s
 coverage: # exploratory-session only, and required there — account for each, do not comply with each
   rules: the discount table, all four rows plus the member-first-order hole
+  techniques: boundary values on total; decision table over the four discount rows; pairwise considered and skipped
   inputs: partitions and boundaries on total and promo code; empty and malformed both refused
   state: repeat submit, back after submit, recovery after a failed payment
   data: ASCII, accented and CJK names; NFC and NFD forms of the same name
@@ -111,6 +114,7 @@ Free markdown, but lead with these in order:
 | **Session:** charter names fewer than two `lenses`                         | error   |
 | **Session:** no `preflight` block — the sweep is declared, never silent    | error   |
 | **Session:** no `coverage` block — every dimension accounted for           | error   |
+| **Session:** `techniques` is one of those dimensions                       | error   |
 
 ```bash
 npm run check-report                 # everything under reports/

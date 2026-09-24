@@ -2,7 +2,7 @@ import '../env.js';
 import { chromium } from '@playwright/test';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { apps } from '../../apps/registry.js';
@@ -16,6 +16,7 @@ import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/r
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
 import type { SnapshotMode } from '../qe/browser-tools.js';
 import { launchChromium } from '../qe/browser-launch.js';
+import { parseConsoleLog, reportConsole, summariseConsole } from '../qe/console-log.js';
 import { browserGuard, movesThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
@@ -498,6 +499,24 @@ try {
 } catch (error) {
   if (error instanceof AgentAuthError) refuse(error.message);
   throw error;
+}
+
+// The console, with our own refusals taken out of it. Across four earlier runs the
+// harness recorded 120 console errors of which 116 were its own origin guard, which is
+// why no session ever found the channel worth watching.
+if (browser !== null) {
+  try {
+    const shots = join(worktree, 'artifacts', 'browser');
+    const logs = (await readdir(shots)).filter((file) => file.startsWith('console-'));
+    const entries = (
+      await Promise.all(logs.map((file) => readFile(join(shots, file), 'utf8')))
+    ).flatMap((text) => parseConsoleLog(text));
+    console.error('');
+    for (const line of reportConsole(summariseConsole(entries))) console.error(line);
+  } catch {
+    // No console capture is not a failure. Saying nothing about it would be.
+    console.error('\nConsole: not captured for this run.');
+  }
 }
 
 // What it actually used, before anything else is said about what it did.

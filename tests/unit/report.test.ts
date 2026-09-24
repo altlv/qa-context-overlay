@@ -193,6 +193,8 @@ test.describe('a session is checked as a session', () => {
 
   const coverage = {
     rules: 'the discount table: all four rows exercised, plus the member-first-order hole',
+    techniques:
+      'boundary values on total and promo length; decision table over the four discount rows; pairwise considered and skipped, only two dimensions interact',
     inputs:
       'partitions and boundaries on total and promo code; empty and malformed both refused cleanly',
     state: 'repeat submit, back after submit, and recovery after a failed payment',
@@ -397,5 +399,128 @@ test.describe('a session is checked as a session', () => {
         .join('\n'),
       'a rule that fires on every document is a rule nobody reads',
     ).not.toMatch(/charter|No questions raised|coverage_candidates/);
+  });
+});
+
+test.describe('certainty and origin are separate axes from severity', () => {
+  test('should accept a finding that is serious and unconfirmed at once', () => {
+    // Without a middle grade a session rounds: up spends credibility, down loses the
+    // finding. "potential" is the working term because a reader deciding what to act
+    // on needs a word about the thing, not about the tester's state of mind.
+    const problems = auditReport(
+      report({
+        findings: [
+          {
+            id: 'F1',
+            severity: 'major',
+            evidence: 'direct',
+            certainty: 'potential',
+            origin: 'opportunity',
+            summary: 'The total may be recalculated on a stale rate.',
+            basis: 'Internal consistency — two views disagreed once, not reproduced.',
+          },
+        ],
+      }),
+    ).filter((problem) => problem.level === 'error');
+
+    expect(problems, 'severity says what it costs; certainty says whether it is real').toEqual([]);
+  });
+
+  test('should let a finding record that a surprise led there, not the charter', () => {
+    // Chartered work says whether the plan was carried out; opportunity work says
+    // whether the plan was any good.
+    const parsed = parseReport(
+      VALID_DOC.replace(
+        '    basis: Claims — the API documents 201 on create.',
+        '    basis: Claims — the API documents 201 on create.\n    origin: opportunity\n    certainty: confirmed',
+      ),
+    );
+
+    expect(parsed.ok, 'origin and certainty must parse on a finding').toBe(true);
+    if (parsed.ok) {
+      expect(parsed.report.findings[0]?.origin).toBe('opportunity');
+      expect(parsed.report.findings[0]?.certainty).toBe('confirmed');
+    }
+  });
+
+  test('should keep both optional, so a report written before them still parses', () => {
+    expect(parseReport(VALID_DOC).ok).toBe(true);
+  });
+
+  test('should refuse a certainty it does not recognise', () => {
+    // "probably wrong" is a description of the tester. The schema takes a word about
+    // the finding, and silently accepting anything would make the field meaningless.
+    const parsed = parseReport(
+      VALID_DOC.replace(
+        '    basis: Claims — the API documents 201 on create.',
+        '    basis: Claims — the API documents 201 on create.\n    certainty: probably-wrong',
+      ),
+    );
+    expect(parsed.ok).toBe(false);
+  });
+});
+
+test.describe('tightening a schema must not destroy the evidence it reads', () => {
+  test('should still parse a session report written before techniques existed', () => {
+    // Making `techniques` required at parse turned four sessions of evidence into
+    // "no readable report" — including the runs a later comparison depends on.
+    const before = `---
+report: exploratory-session
+target: https://example.test
+date: 2026-09-20
+author: exploratory-tester
+confidence: high
+evidence:
+  direct: 2
+  inferred: 0
+  claimed: 0
+findings:
+  - id: F1
+    severity: major
+    evidence: direct
+    summary: The grand total exceeds the sum of its parts.
+    basis: Arithmetic.
+not_covered:
+  - mobile widths
+coverage:
+  rules: five families tabled
+  inputs: perpage given eight values
+  state: cart empty to one item
+  data: not covered, no free-text input exercised
+  accessibility: partial, alt text counted
+  platform: single browser, two viewports
+  content: every visible string read
+  performance: not covered
+  security: partial
+---
+
+Body.
+`;
+    expect(
+      parseReport(before).ok,
+      'a report that could be read yesterday must be readable today',
+    ).toBe(true);
+  });
+
+  test('should still require techniques of a session that supplies a coverage block', () => {
+    // Permissive parsing, enforced rule. The rule lives where rules live.
+    const problems = auditReport(
+      report({
+        report: 'exploratory-session',
+        coverage: {
+          rules: 'tabled',
+          inputs: 'probed',
+          state: 'walked',
+          data: 'not covered',
+          accessibility: 'partial',
+          platform: 'one browser',
+          content: 'read',
+          performance: 'not covered',
+          security: 'partial',
+        },
+      }),
+    );
+
+    expect(problems.some((problem) => problem.message.includes('no techniques'))).toBe(true);
   });
 });
