@@ -277,3 +277,64 @@ works for `mcpa` has proved nothing about roles.
 The other four coder roles. The integration, api and e2e levels. Registering `mcpa` for
 exploratory work — different experiment, same subject, later. Anything on `main`: this
 branch exists so the exploratory work and this proceed without either waiting.
+
+---
+
+## 9. Change, not just create — what the gate has to carry
+
+Added 2026-09-24, after the skill's first real use. A coder has to be able to **create** a
+test, **improve** one that does not prove what it claims, and **remove** one that no longer
+proves anything. Creating is covered. Improving has a single line — _strengthen the
+assertion rather than adding another test beside it_. Removal has nothing at all, and the
+gate is where both have to become checkable, because the gate is the only component that
+still holds the pre-change revision: a run's worktree sits at a named base commit, so
+`git show <base>:<file>` is the old suite and `git diff` is what went.
+
+**Removal needs grounds, not judgement.** `GUARDRAILS` already says _"never widen a selector
+or delete an assertion to make a test pass"_, so a deletion and a concealment are the same
+keystrokes and only the evidence tells them apart. Four grounds are acceptable, each with a
+companion fact something else can check:
+
+| Ground           | Means                                       | Checked against                                      |
+| ---------------- | ------------------------------------------- | ---------------------------------------------------- |
+| `subject-gone`   | the code it tested was removed              | the symbol is absent from the source, by `file:line` |
+| `rule-gone`      | the behaviour was dropped by decision       | the diff touches the source that held the rule       |
+| `duplicate`      | another test asserts the same rule          | the twin is named and present after the change       |
+| `proves-nothing` | it survives a mutation of the rule it names | the named mutation, before and after                 |
+
+Anything else is taste, and taste is not a ground for deleting a test.
+
+**Where each half runs — three mechanisms that already exist.**
+
+1. **A declaration in the report.** `docs/report-format.md` already carries per-type blocks
+   whose _presence_ is enforced (`charter` and `preflight` for `exploratory-session`, `cases`
+   for `test-design`). A `removed` block joins them: one entry per removed test, carrying
+   `ground`, `evidence`, and the companion fact above. `check-report` validates the entries
+   exactly as it validates a charter's lenses.
+2. **A problem in the gate plan.** `run-gate.ts` already decides things without running
+   anything — _"test-planner wrote no design file under apps/<app>/designs/"_. The same shape
+   carries: **the diff removes a test and the report declares none**, or declares a ground
+   whose companion fact is missing from the repo. It reads the diff and the report, so it is
+   a `problems` entry, not a step.
+3. **A strength step, once an instrument exists.** Run the mutation set against the
+   pre-change suite and the post-change suite, and require `survivors(after) ⊆
+survivors(before)`: a change may never leave the suite weaker than it found it. This is
+   the mechanical form of the guardrail, and it is the only part needing something that does
+   not exist yet — C7 (a unit-level mutation set for this subject) and C8 (a comparator that
+   takes a test file rather than one hard-coded path). Both are already in the table above;
+   this makes the strength delta their consumer.
+
+**Measured by a second run, not this one.** Phase F freezes the baseline — "the agent writes
+a new file; the human baseline is never edited" — which is what makes E1 and E3 a clean
+comparison, and which also removes improve and remove from the measurement entirely. Keep
+the freeze for the first run. A second run invites editing, and its E3 changes shape: from
+_which rules does your file cover_ to _what did you change, and is the suite stronger_.
+
+The corpus for that run is already identified: the human baseline holds two tests whose
+assertions sit inside `if (results.length > 0)`, so they can pass having asserted nothing,
+and one that asserts only that its result is shorter than its input. That is **improve** with
+real work to do on the first day.
+
+**Ownership.** C5 (`src/qe/run-gate.ts`) and C6 (`src/quality/`) belong to the other builder.
+This is the spec for the half that lives there; the report block is the half that reaches
+into `docs/report-format.md` and `src/qe/report.ts`.
