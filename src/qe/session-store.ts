@@ -59,6 +59,7 @@ export function keepsakes(runDir: string): Keepsake[] {
     { from: join(runDir, 'summary.md'), as: 'summary.md', expected: false },
     { from: join(runDir, 'session-notes.md'), as: 'session-notes.md', expected: false },
     { from: join(runDir, 'gate.json'), as: 'gate.json', expected: true },
+    { from: join(runDir, 'tool-use.jsonl'), as: 'tool-use.jsonl', expected: false },
     { from: join(runDir, 'shots'), as: 'shots', expected: false },
     { from: join('artifacts', 'browser'), as: 'browser', expected: false },
   ];

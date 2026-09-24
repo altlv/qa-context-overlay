@@ -15,6 +15,7 @@ import { budgetForTier, resolveModel } from '../agents/models.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
 import type { SnapshotMode } from '../qe/browser-tools.js';
+import { launchChromium } from '../qe/browser-launch.js';
 import { browserGuard, movesThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
@@ -31,6 +32,7 @@ import { acquireLock, lockPathFor, releaseLock } from '../qe/run-lock.js';
 import { findReport } from '../qe/run-report.js';
 import { resolveRunTarget } from '../qe/run-target.js';
 import { harvestSession, indexLine, noteInIndex } from '../qe/session-store.js';
+import { ToolLedger } from '../qe/tool-ledger.js';
 import {
   committedAt,
   createRunWorktree,
@@ -319,7 +321,9 @@ if (access !== undefined && runTarget !== null) {
   let actions = '';
   if (prescan) {
     process.stderr.write(`Scanning ${runTarget.baseURL} before the session… `);
-    const chrome = await chromium.launch();
+    const scanBrowser = await launchChromium();
+    const chrome = scanBrowser.browser;
+    if (scanBrowser.note !== null) console.error(`  WARNING: ${scanBrowser.note}`);
     const page = await chrome.newPage();
     const network = NetworkRecorder.attach(page, { captureBodies: policy.captureBodies });
     try {
@@ -352,7 +356,9 @@ if (access !== undefined && runTarget !== null) {
   // gets no state model because it cannot change state; its ceiling is its tool list.
   const cdpPort = await freePort();
   const cdpEndpoint = `http://127.0.0.1:${cdpPort}`;
-  const driven = await chromium.launch({ args: [`--remote-debugging-port=${cdpPort}`] });
+  const launched = await launchChromium({ args: [`--remote-debugging-port=${cdpPort}`] });
+  const driven = launched.browser;
+  if (launched.note !== null) console.error(`  WARNING: ${launched.note}`);
   const eyes = await chromium.connectOverCDP(cdpEndpoint);
   const observer = pageObserver(() => activePage(eyes));
   // Closing in this order matters: the observer connection first, so tearing it down
@@ -436,13 +442,22 @@ const shell = shellGuard({
 });
 const files = fileToolGuard(worktree);
 const allow: GuardDecision = { allowed: true, reason: 'no guard applies' };
-const check = (toolName: string, input: Record<string, unknown>): GuardDecision => {
+// Every tool call already passes through here on its way to being allowed or refused.
+// Recording it costs nothing and replaces the only evidence we had about a session's
+// method — the session's own prose about itself.
+const ledger = new ToolLedger(role.skills ?? []);
+const decide = (toolName: string, input: Record<string, unknown>): GuardDecision => {
   if (toolName === 'Bash') {
     return shell.check(typeof input.command === 'string' ? input.command : '');
   }
   const fileDecision = files.check(toolName, input);
   if (fileDecision !== null) return fileDecision;
   return browser === null ? allow : browser.guard.check(toolName, input);
+};
+const check = (toolName: string, input: Record<string, unknown>): GuardDecision => {
+  const decision = decide(toolName, input);
+  ledger.record(toolName, input, decision.allowed, decision.reason);
+  return decision;
 };
 
 let result;
@@ -484,6 +499,12 @@ try {
   if (error instanceof AgentAuthError) refuse(error.message);
   throw error;
 }
+
+// What it actually used, before anything else is said about what it did.
+await mkdir(join(worktree, runDirForHarvest), { recursive: true });
+await writeFile(join(worktree, runDirForHarvest, 'tool-use.jsonl'), ledger.asJsonl(), 'utf8');
+console.error('');
+for (const line of ledger.report()) console.error(line);
 
 // The agent is done and its notes exist. Keep them now, before the gate runs — the
 // gate spawns test commands that can hang or throw, and a session's log must not
