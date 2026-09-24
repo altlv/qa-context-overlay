@@ -159,3 +159,43 @@ test.describe('reading paths out of a task', () => {
     ]);
   });
 });
+
+test.describe('a task that names a module outside this repository', () => {
+  const subjectContext: ReadinessContext = {
+    ...context,
+    existsInSubject: (path) => path === 'src/services/searchIndex.js',
+  };
+
+  test('should start when the subject holds the module the task names', () => {
+    // Regression: every named path resolved against this repository, so a subject module
+    // named precisely was reported as "nothing named to test" — refused for naming its
+    // target exactly, which is the opposite of what the check is for.
+    expect(
+      readinessProblems(
+        { role: 'unit-coder', task: 'write unit tests for src/services/searchIndex.js' },
+        subjectContext,
+      ),
+      'a path the subject holds is a named target, not a missing one',
+    ).toEqual([]);
+  });
+
+  test('should still refuse a path neither the harness nor the subject holds', () => {
+    expect(
+      readinessProblems(
+        { role: 'unit-coder', task: 'write unit tests for src/services/gone.js' },
+        subjectContext,
+      ).join(' '),
+      'the check must not become a rubber stamp',
+    ).toContain('nothing named to test');
+  });
+
+  test('should refuse the same path when no subject is configured', () => {
+    expect(
+      readinessProblems(
+        { role: 'unit-coder', task: 'write unit tests for src/services/searchIndex.js' },
+        context,
+      ).join(' '),
+      'without a subject root there is nothing to resolve against',
+    ).toContain('nothing named to test');
+  });
+});

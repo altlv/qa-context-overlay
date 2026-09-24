@@ -36,6 +36,33 @@ export const EFFECT_TAGS = {
 
 export type EffectTag = (typeof EFFECT_TAGS)[keyof typeof EFFECT_TAGS];
 
+/**
+ * How a subject's tests are written and run.
+ *
+ * Facts, not prose. A coder role composes its stack knowledge from here instead of
+ * assuming this repo's own Playwright — the assumption that made `unit-coder` unable to
+ * produce one valid file for a subject using `node:test`. Every field is something a role
+ * would otherwise have to guess or read out of a config file itself.
+ */
+export interface TestStack {
+  /** What runs them: `node --test`, `vitest`, `jest`, `npx playwright test`. */
+  runner: string;
+  /** The command that runs the whole suite. */
+  runAll: string;
+  /** The command that runs one file, with the file path appended. */
+  runOne: string;
+  /** Where tests live, relative to `sourceRepo`, without a trailing slash. */
+  testsDir: string;
+  /** What marks a file as a test, for the gate and the source map. */
+  testFilePattern: string;
+  /** `commonjs` | `esm` | `typescript` — how a test file imports what it needs. */
+  moduleSystem: string;
+  /** One line showing how assertions are obtained, as the subject writes it. */
+  assertions: string;
+  /** One test file to read as the house style, relative to `sourceRepo`. */
+  exemplar: string;
+}
+
 export interface AppConfig {
   /** Folder name under apps/, and the Playwright project name. */
   name: string;
@@ -64,6 +91,19 @@ export interface AppConfig {
   external?: boolean;
   /** Where the app itself lives, when it is not in this repo. */
   sourceRepo?: string;
+  /**
+   * Where the subject's own source lives, relative to `sourceRepo`.
+   *
+   * A role asked to test a module names it the way the subject does — `src/services/x.js`
+   * — and readiness resolves that against this, because the path does not exist in this
+   * repository and never will.
+   */
+  sourceRoot?: string;
+  /**
+   * How the subject's tests are written and run, for a run whose work lands in the
+   * subject rather than here. Absent means this repo's own stack.
+   */
+  testStack?: TestStack;
   /**
    * Hosts a run against this app may reach beyond its base URL — an auth provider, a
    * separate API. The allowlist a role run's browser and shell guard both honour.

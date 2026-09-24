@@ -26,12 +26,30 @@ flow had no mechanical way to choose a target: `.claude/skills/repo-survey/SKILL
 subject's `searchIndex.js`, written by hand in a worktree of the subject, with the human
 baseline never edited.
 
-**Not landed.** C2 (`sourceRoot` + `testStack`), C3 (mcpa registration), C4 (subject-scoped
-worktree), C5 (stack-aware gate), C6 (assertion floor), C7 (the `searchIndex` mutation set),
-C8 (the comparator), and the half of C9 that makes the prompt stack-neutral — `unit-coder`'s
-Method still names `npx playwright test --project=unit`. So `npm run role -- unit-coder …
---app mcpa` still cannot run: nothing is registered to point it at. **The tests were produced
-by a person following the skill, not by the role**, and this PoC exists to fix exactly that.
+**Landed since.** C2 and C3 are in: `sourceRoot` and `testStack` on `AppConfig`, `apps/mcpa/`
+registered with a local environment and its own stack facts, and readiness taught to resolve a
+module the subject names instead of only paths that exist here. Two semantic bugs surfaced only
+by running it: a subject is a sibling of the _repository_, so resolving from a worktree one level
+deeper found nothing; and a named path is written relative to the subject's repository root, not
+to its `sourceRoot`, so resolving against the latter produced `src/src/services/x.js` and
+reported the module missing while the task named it exactly.
+`npm run role -- unit-coder "write unit tests for src/services/searchIndex.js" --app mcpa --env
+local --preflight` now reports **ready** — the first time this role has cleared readiness against
+anything.
+
+**Not landed.** C4 (subject-scoped worktree), C5 (stack-aware gate), C6 (assertion floor), C7
+(the `searchIndex` mutation set), C8 (the comparator), and the half of C9 that makes the prompt
+stack-neutral — `unit-coder`'s Method still names `npx playwright test --project=unit` and its
+first line still points at `tests/unit/`. **A real run has to wait for C4**: without it the
+worktree is a worktree of the harness and the file guard confines writes there, so the agent
+could not reach the subject at all. And the tests that exist were still produced by a person
+following the skill — preflight proves the role can be _pointed_ at a subject, not that it
+writes anything.
+
+**The credential is deliberately unproven.** No `ANTHROPIC_API_KEY` is set, and this worktree
+carries no environment file. `src/agents/client.ts` refuses to pre-check for one, because gating
+on that variable refuses everyone signed in through `claude login` — so whether a paid run can
+authenticate is settled by attempting one, not by inspection.
 
 **Measured, on one mutation set and one subject commit, against the human baseline** (§6 is
 the method): the agent's suite kills 18 of 20 mutations, the baseline kills 12 of 20, and both

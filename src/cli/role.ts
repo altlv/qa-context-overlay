@@ -159,12 +159,43 @@ const resolved = resolveRunTarget(
 );
 const runTarget = resolved.target;
 
+/**
+ * The repository's main checkout — not whichever worktree this process happens to run in.
+ *
+ * A subject recorded as a sibling path is a sibling of the *repository*, so resolving it
+ * against a worktree one level deeper finds nothing and readiness then refuses a task that
+ * named its target exactly. `--git-common-dir` answers with the main checkout's `.git` from
+ * any worktree, and with this checkout's own from the repository itself, so one call covers
+ * both. Falling back to `repoRoot` keeps a non-git checkout usable.
+ */
+async function mainCheckout(repoRoot: string): Promise<string> {
+  try {
+    const { stdout } = await exec('git', ['-C', repoRoot, 'rev-parse', '--git-common-dir']);
+    return dirname(resolve(repoRoot, stdout.trim()));
+  } catch {
+    return repoRoot;
+  }
+}
+
+// The subject's own checkout, when this run tests code the harness does not contain.
+// A named path is written the way the *subject* names it — `src/services/x.js`, relative to
+// its repository root — so it resolves there. Resolving against `sourceRoot` instead
+// produced `src/src/services/x.js`, and the path was reported as missing while the task
+// named it exactly.
+const subjectConfig =
+  runTarget === null ? undefined : apps.find((app) => app.name === runTarget.app);
+const subjectRepo =
+  subjectConfig?.sourceRepo !== undefined
+    ? resolve(await mainCheckout(repoRoot), subjectConfig.sourceRepo)
+    : null;
+
 const notReady = [
   ...resolved.problems,
   ...readinessProblems(
     { role: name, task, app: appArg, environment: envArg, design: designPath },
     {
       exists: (path) => existsSync(resolve(workRoot, path)),
+      existsInSubject: (path) => subjectRepo !== null && existsSync(resolve(subjectRepo, path)),
       readDesign: (path) => {
         const parsed = parseReport(readFileSync(resolve(workRoot, path), 'utf8'));
         return parsed.ok
