@@ -32,6 +32,7 @@
     "precommit": "tsx src/cli/precommit.ts",
     "plan:facts": "tsx src/cli/plan-facts.ts",
     "ideas": "tsx src/cli/ideas.ts",
+    "candidates": "tsx src/cli/candidates.ts",
     "fault-check": "tsx src/cli/fault-check.ts",
     "archive-results": "tsx src/cli/archive-results.ts",
     "sessions": "tsx src/cli/sessions.ts"

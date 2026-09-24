@@ -46,7 +46,14 @@ this file.
    results", the tokeniser, the scorer and the ranking step are one unit under test.
    Drawing it around a private helper gives you a test that breaks on the next refactor,
    covers nothing the caller can observe, and cannot be deleted because nothing else
-   covers the promise.
+   covers the promise. Start from the scripted map rather than from memory:
+   `npm run candidates -- <path>` lists every exported unit with a verdict — unit,
+   needs-control (reads the clock or randomness), not-unit (reaches a file, a wire, a
+   process or a database), or unknown — and names the candidates no test mentions. It
+   decides reach from the symbol's own body, so a pure wrapper around an I/O call still
+   reads as unit: take its output as a floor and a map, never as the decision, and read
+   the body before trusting the label. Classing a whole class as not-unit because one of
+   its methods writes a file is how pure methods beside it stay untested.
 
 3. **Choose what to assert, in this order of preference.**
    - **The returned value, compared whole** — cheapest to read and the hardest to fool.
