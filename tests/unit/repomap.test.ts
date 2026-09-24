@@ -143,7 +143,7 @@ test.describe('building the map', () => {
       [file('src/store.ts', 'export const store = 1;')],
       [
         file('tests/store.test.ts', "import { store } from '../src/store.js';"),
-        file('tests/notes.test.ts', '// the store module is exercised elsewhere'),
+        file('tests/notes.test.ts', '// see src/store.ts — the module is exercised elsewhere'),
       ],
     );
 
@@ -154,10 +154,38 @@ test.describe('building the map', () => {
     ]);
   });
 
-  test('lists a file no test points at as a gap', () => {
+  test('lists a file no test imports as a gap', () => {
     const map = buildRepoMap([file('src/orphan.ts', 'export const x = 1;')], []);
 
     expect(map.gaps.map((gap) => gap.path)).toEqual(['src/orphan.ts']);
+  });
+
+  test('does not let a mention close a gap', () => {
+    // Regression: the gap rule accepted a mention as coverage, so a file that six unrelated
+    // test files happened to "mention" was reported as tested — in the tool's own CLI. The
+    // instruction this tool serves says a mention is weaker evidence; now the tool agrees.
+    const map = buildRepoMap(
+      [file('src/orphan.ts', 'export const x = 1;')],
+      [file('tests/notes.test.ts', '// src/orphan.ts is mentioned but never imported')],
+    );
+
+    expect(
+      map.gaps.map((gap) => gap.path),
+      'a mention must not close the gap',
+    ).toEqual(['src/orphan.ts']);
+    expect(map.gaps[0]?.why, 'and the reason has to name the weaker signal it found').toContain(
+      'mention is not coverage',
+    );
+  });
+
+  test('does not count a bare word as a mention of the file', () => {
+    const map = buildRepoMap(
+      [file('src/cli/candidates.ts', 'export const x = 1;')],
+      [file('tests/unrelated.test.ts', '// candidates for removal are listed here')],
+    );
+
+    expect(map.files[0]?.mentionedBy, 'a word is not a reference to a file').toEqual([]);
+    expect(map.gaps.map((gap) => gap.path)).toEqual(['src/cli/candidates.ts']);
   });
 
   test('separates an import of a real file outside the roots from a broken path', () => {

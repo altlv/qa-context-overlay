@@ -306,8 +306,13 @@ export function buildRepoMap(
         (specifier) => resolveSpecifier(test.path, specifier, exists) === source.path,
       );
       if (importsThis) testedBy.push(test.path);
-      else if (base.length > 2 && new RegExp(`\\b${base}\\b`).test(test.text)) {
-        mentionedBy.push(test.path);
+      else if (base.length > 2) {
+        // The mention has to look like the file — `store.ts`, or a path ending in it — not
+        // merely be that word. A bare basename matched six test files that happened to
+        // contain "candidates", and that noise is what hid a real gap.
+        const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const looksLikeTheFile = new RegExp(`\\b${escaped}\\.[cm]?[jt]sx?\\b|[/\\\\]${escaped}\\b`);
+        if (looksLikeTheFile.test(test.text)) mentionedBy.push(test.path);
       }
     }
 
@@ -336,14 +341,20 @@ export function buildRepoMap(
     file.unresolved.map((specifier) => ({ from: file.path, specifier })),
   );
 
+  // A gap is decided by what tests *import*, never by what they merely mention. A mention
+  // is a string match, and this tool's own instruction says it is weaker evidence — letting
+  // one close a gap hid a real one in the tool's own CLI, which six unrelated test files
+  // "mentioned" only by containing the word.
   const gaps = files
-    .filter((file) => file.testedBy.length === 0 && file.mentionedBy.length === 0)
+    .filter((file) => file.testedBy.length === 0)
     .map((file) => ({
       path: file.path,
       why:
-        file.importedBy.length === 0
-          ? 'nothing imports it and no test names it — dead code, an entry point, or an orphan'
-          : `imported by ${file.importedBy.length} file(s) and named by no test`,
+        file.mentionedBy.length > 0
+          ? `named by ${file.mentionedBy.length} test file(s) but imported by none — a mention is not coverage`
+          : file.importedBy.length === 0
+            ? 'nothing imports it and no test names it — dead code, an entry point, or an orphan'
+            : `imported by ${file.importedBy.length} file(s) and no test imports it`,
     }));
 
   return { files, brokenImports, gaps };
@@ -417,7 +428,7 @@ export function formatRepoMap(map: RepoMap, scope?: Scope): string {
     for (const file of map.files) lines.push(...formatFile(file, 'file    '), '');
   }
 
-  lines.push(`${map.files.length} source file(s), ${map.gaps.length} with no test pointing at it.`);
+  lines.push(`${map.files.length} source file(s), ${map.gaps.length} with no test importing it.`);
   if (map.brokenImports.length > 0) {
     lines.push(
       'Imports that resolved to nothing:',
@@ -425,7 +436,7 @@ export function formatRepoMap(map: RepoMap, scope?: Scope): string {
     );
   }
   if (map.gaps.length > 0) {
-    lines.push('No test points at:', ...map.gaps.map((gap) => `  ${gap.path} — ${gap.why}`));
+    lines.push('No test imports:', ...map.gaps.map((gap) => `  ${gap.path} — ${gap.why}`));
   }
 
   lines.push(
