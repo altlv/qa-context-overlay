@@ -385,3 +385,73 @@ real work to do on the first day.
 **Ownership.** C5 (`src/qe/run-gate.ts`) and C6 (`src/quality/`) belong to the other builder.
 This is the spec for the half that lives there; the report block is the half that reaches
 into `docs/report-format.md` and `src/qe/report.ts`.
+
+---
+
+## 10. Open tasks — everything left, for whoever picks this up
+
+Written 2026-09-24, for a context that has none of this conversation. Read it beside
+`HANDOFF.md` and the commits on `poc/unit-coder-mcpa`; nothing else is needed.
+
+### The one thing only a person can do
+
+The run needs a Claude Code session and this machine has none: `claude auth status` reports
+`loggedIn: false` with `authMethod: none`. Three attempts created a worktree of the subject,
+released the lock, touched nothing, and then failed before any model call with
+`Not logged in · Please run /login`. **The fix is `claude auth login`, run by a person in
+their own terminal, and nothing belongs in `.env`** — the key is documented as optional and
+CI-only, and `PLAN.md` item 6 already records OAuth as the route that works.
+
+### Then this command, and the objective's last clause is met
+
+```bash
+npm run role -- unit-coder 'write unit tests for src/services/searchIndex.js' --app mcpa --env local
+```
+
+The role writes into a worktree of the subject at `mcpa-training-bot-runs/<run-id>`; the diff
+there is its work, and the subject's own checkout is never touched. Score it against the bar
+that already exists: the hand-written suite in `c8d7549` kills 18 of 20 mutations, the human
+baseline kills 12. **A mutation the baseline kills and the role does not is the finding this
+PoC exists to surface** — report it by name rather than quoting a rate.
+
+### Work already identified, in dependency order
+
+1. **C5's remainder — a vacuity check for subject tests.** `fault-check` proves an app _spec_
+   notices its server failing. Nothing proves a subject _test_ notices its process failing, a
+   file that was not written, or an exit code that was swallowed. `src/qe/run-gate.ts` now
+   runs a subject's changed test files with the subject's runner, so the hook exists.
+2. **C6 — the assertion floor for a subject's stack.** `assert-quality` reads TypeScript specs
+   only, so a `node:test` file can wrap every assertion in a conditional and pass having
+   asserted nothing. The subject's own suite does exactly that in two tests, and one asserts
+   only that its result is shorter than its input.
+3. **C7 — a mutation set for the search-index unit.** Fifteen seam-level mutations already
+   exist for the subject's routes and MCP server, written before this experiment. The unit has
+   none; the twenty used here live in a throwaway worktree rather than in this repository.
+4. **C8 — the comparator.** Apply one mutation, run a named suite, record killed or survived,
+   restore in a `finally`, and restore once more at the end. Built once as
+   `mutate-search-index.mjs` beside the subject; it takes the suite file as an argument, which
+   is what made the 18-versus-12 comparison possible. It belongs in the repo, and §9 gives it a
+   second consumer in the strength delta.
+5. **The report block and the four deletion grounds** (§9). A `removed` block in the report
+   envelope, enforced the way a charter is; a gate problem when the diff removes a test and the
+   report declares none; and the strength step requiring `survivors(after)` to be a subset of
+   `survivors(before)`. That is the create / improve / remove capability, and the gate is the
+   only component holding the pre-change revision.
+6. **An integration test for the two new CLIs.** `tests/integration/cli.int.test.ts` covers
+   every other CLI here; `src/cli/candidates.ts` and `src/cli/survey.ts` have none.
+
+### Loose ends, and where the artefacts are
+
+- **The hand-written tests are untracked**, in `mcpa-training-bot-runs/c8d7549/test/searchIndex.unit.test.js`.
+  That worktree is throwaway: copy the file somewhere durable before removing it, or re-derive
+  it. It is the incumbent the role's output is measured against.
+- **`mcpa-training-bot-runs/mutation/`** holds the comparator and a scope probe. Also throwaway.
+- **Two manual worktrees of the subject exist** (`c8d7549` and `mutation`) beside the run
+  worktrees. Neither touches the subject's own checkout, which is clean at `c8d7549`.
+- **This worktree locks the branch.** `qa-context-overlay-worktrees/unit-coder-mcpa` holds
+  `poc/unit-coder-mcpa`, so the shared checkout cannot switch to it. Remove the worktree to hand
+  the branch back — and note that the two `POC-*.md` files sitting untracked in the shared
+  checkout are now tracked on the branch, so they must be deleted there first or the switch
+  refuses.
+- **Keep the subject's checkouts committed.** A dirty subject is refused by name, because a diff
+  measured against uncommitted work would not be the run's own.

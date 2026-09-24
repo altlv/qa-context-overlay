@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `8fa5ce1` — the commit this file was last checked against. A file cannot name
+Head is `24909b2` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -469,9 +469,25 @@ Three separate problems, and conflating them is the trap:
 | 56  | **A scorer for targets that ship an answer key.** `capture-the-bugs` gives each seeded bug a `matchText` field written for semantic matching against free-text reports. Until this exists every recall figure in `docs/model-comparison-eprimer.md` is one person's judgement, and that judgement has already been wrong in both directions — it under-credited techniques as "not wired" when the pipeline had in fact delivered the `O'Brien` probe straight into a finding, and it counted #32, #41 and #73 as misses where the sessions had measured the key to be wrong                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | 57  | **Run the next model comparison against a DIFFERENT target.** Four runs against eprimer risk tuning the harness to one static, single-page, client-side text tool: no server state, no authentication, no navigation, one state for the whole session. **The principles are the deliverable, not eprimer's bug list.** Pick a subject with at least server state and more than one screen, keep the charter and settings identical, and treat any guidance that only helps on eprimer as overfitting to be deleted                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
+| 58 | **`npm run mutate -- --changed` reports success when it checked nothing.** The mutations are a hand-registered list per file, so a new file scopes to zero of them: it printed "Nothing to check here" and exited 0 | — | A verification that cannot fail reports as _checked_ — the mutation-that-cannot-fail trap one level up, and the reason a capability can land with no mutation coverage at all. Either make zero-coverage a non-zero outcome, or generate candidate mutations from what `npm run candidates` and `npm run survey` already know about a file. Caught on 2026-09-24: four new source files, no mutation, green gate |
+| 59 | **A subject's unit tests have no assertion floor** (C6). `npm run assert-quality` reads TypeScript specs, so a `node:test` file can wrap every assertion in a conditional and pass having asserted nothing | — | The floor is stack-shaped, and the first subject we do not own already exercises the hole: two tests in its own suite assert inside a conditional, one asserts only that its result is shorter than its input. What the floor cannot see has to be stated in its own output, not implied. Detail in `.ai/state/POC-UNIT-CODER.md` §10 |
+| 60 | **Nothing proves a subject test notices its process failing** (C5's remainder). `fault-check` covers app specs and their server; a spawned process, a file that was not written, or a swallowed exit code has no equivalent | — | The gate now runs a subject's changed test files with the subject's runner, so the hook is in place and only the check is missing. Without it a green subject test says nothing about whether it would notice a fault — the same gap the mutation work covers at unit level |
+| 61 | **A change to a test file can make the suite weaker and nothing notices.** The four grounds for removing a test, a `removed` block in the report envelope, and a strength step requiring `survivors(after)` to be a subset of `survivors(before)` | 58 | Specced 2026-09-24 in `.ai/state/POC-UNIT-CODER.md` §9. The coder roles have to be able to create, improve _and_ remove, and only creation is covered; `GUARDRAILS` forbids deleting an assertion to make a test pass, so removal and concealment are the same keystrokes and only evidence separates them. The gate is the only component holding the pre-change revision. Blocked by 58 because the strength delta consumes a comparator |
+| 62 | **Two new CLIs have no integration test.** `src/cli/candidates.ts` and `src/cli/survey.ts` were added on `poc/unit-coder-mcpa` and no test points at either; `tests/integration/cli.int.test.ts` covers every other CLI here | — | The repo convention is that CLI behaviour is tested at integration level, and a new command that nothing exercises is a command whose flags rot silently — the same failure the toolbox test exists to catch for prompts |
+| 63 | **`src/qe/source-mtime.ts` has no test.** Found by `npm run survey -- src --tests tests`, which reports it as imported by two files and named by no test | — | A real pre-existing coverage gap in this repository's own suite, found by the source map on its first run against the harness rather than by reading. It is the map demonstrating it can find a gap nobody was looking for |
+
 ## Waiting on the user
 
 Raised, recommended, and not yet answered. Only the user can close these.
+
+- **Run `claude auth login` before the unit-coder run.** The PoC's last step needs a Claude
+  Code session and this machine has none: `claude auth status` reports `loggedIn: false` with
+  `authMethod: none`, and three attempts at the run failed before any model call with
+  `Not logged in · Please run /login`. Nothing belongs in `.env` — `ANTHROPIC_API_KEY` is
+  optional and CI-only, item 6 records OAuth as the route that works, and the line that once
+  called the key required is the reason one was issued that nobody needed. Agents must not
+  edit `.env`; this one is the user's. On 2026-09-24 an earlier note recommended the key route
+  and was wrong.
 
 - **Should `oracle-check` reach the coding family?** `tests/unit/roles.test.ts` refuses
   it, and `risk-assessment`, on any coding role. Clarified on 2026-09-14: role
