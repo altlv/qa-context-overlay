@@ -59,14 +59,15 @@ every subject we do not own. What it still lacks is a vacuity check at that leve
 proves an app _spec_ notices its server failing, and nothing yet proves a subject _test_ notices its
 process failing.
 
-**The run was attempted twice and stops at authentication.** Both attempts created a worktree of the
-subject at `c8d7549` beside it — which is the direct evidence that C4 works end to end — released the
-lock, touched no file in the subject's own checkout, and then failed before any model call with
+**Every run attempt so far has stopped at authentication.** Each one created a worktree of the
+subject at `c8d7549` beside it — the direct evidence that C4 works end to end — released the lock,
+touched no file in the subject's own checkout, and then failed before any model call with
 `Agent auth failed. Either sign in with claude login, or set ANTHROPIC_API_KEY in .env`. Nothing was
-spent. `src/agents/client.ts` refuses to pre-check for a credential, because gating on the variable
-refuses everyone signed in through `claude login`, so only an attempt can answer the question — and
-two now have. One detail matters for whichever route is taken: `src/env.ts` anchors the environment
-file to its own module, so a key belongs in _this_ checkout's `.env`, not the shared one's.
+spent, and the empty worktrees were removed afterwards. `src/agents/client.ts` refuses to pre-check
+for a credential, because gating on the variable refuses everyone signed in through `claude login`,
+so only an attempt can answer the question. One detail matters for whichever route is taken:
+`src/env.ts` anchors the environment file to its own module, so a key belongs in _this_ checkout's
+`.env`, not the shared one's.
 
 **Not proven, and worth repeating.** A run is now possible: the worktree, the guard, the prompt and
 the gate all point at the subject. What has never happened is a single agent turn. The tests that
