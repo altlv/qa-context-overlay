@@ -330,6 +330,19 @@ scan`, which costs no tokens and grades the selectors as well.
   process is gone marks an orphan rather than something a person is using. The same
   check distinguishes "this session holds it", which is normal and clears on exit,
   from a leak, which does not clear at all.
+- **A scoped verification that checks nothing reports success.** `mutate --changed`
+  filters a hand-registered list of mutations by the files you touched, so a new file
+  with no entry scopes to zero mutations: it printed "Nothing to check here" and exited 0. The instruction to run it was satisfied vacuously, and no count moved because no
+  count was taken. This is the mutation-that-cannot-fail trap one level up — a
+  verification that cannot fail reports as _checked_. When a capability lands, confirm
+  the gate meant to judge it actually ran something before trusting its silence.
+- **A lexical masker that does not know about regex literals will swallow the file.**
+  A quote character inside a pattern — `['"]` — opens a "string" for any hand-written
+  scanner, and everything after it is read as string content; the repo map reported
+  nonsense about its own source for exactly this reason. Bound single- and double-quoted
+  strings to one line: in valid JavaScript they cannot span one, so a newline ends them
+  whether or not a closing quote was seen. Backticks may span. A capture containing
+  whitespace is then also provably not a module specifier, which is a cheap second net.
 
 ## Credentials
 

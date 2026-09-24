@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `7f9e3df` — the commit this file was last checked against. A file cannot name
+Head is `fd31632` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -275,6 +275,12 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
 - **Self-healing has never faced a change someone else made.**
 - Framework detection is largely unverified; three tiers confirmed against live sites.
 - Six of eight roles have never run. No role has written a browser spec.
+- **The unit tier has a skill and a map, and no agent has used either.** `unit-testing` and
+  `repo-survey` are declared by their roles, and `npm run candidates` / `npm run survey` are
+  enforced by tests — but a person ran them, not a role. What that proves is that the tools
+  classify this repo's source and a subject's source as described, including the gaps they
+  find. What it does not prove is that a coder given them writes better tests, which is the
+  claim a run against a subject is meant to settle.
 
 ## The measured gap
 
