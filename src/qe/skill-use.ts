@@ -112,6 +112,8 @@ export function methodsTaught(skillText: string): Method[] {
 
 export interface SkillUse {
   skill: string;
+  /** The report names the skill itself, which the heading match cannot always see. */
+  namedItself?: boolean;
   /** Every method the skill teaches. */
   taught: string[];
   /** The ones the report names. */
@@ -182,10 +184,18 @@ export function skillUse(
       // run. The gate has already passed by the time this prints.
       taught = [];
     }
+    // A session that names the skill itself has used it, whatever its headings look
+    // like. rule-modelling teaches only steps, so nothing of it is matchable — and a
+    // session then named it five times in its declared methods while the score read
+    // "unmeasurable". Crediting the skill's own name costs nothing and recovers
+    // exactly the case the heading rule cannot see.
+    const byName = names(reportText, { name: skill, needle: skill.toLowerCase() });
+    const matched = taught.filter((method) => names(reportText, method)).map((m) => m.name);
     return {
       skill,
       taught: taught.map((method) => method.name),
-      named: taught.filter((method) => names(reportText, method)).map((method) => method.name),
+      named: matched,
+      namedItself: byName,
     };
   });
 }
@@ -199,19 +209,26 @@ export function skillUse(
  * would read as a shortfall in the session instead of a fact about the skill.
  */
 export function reportSkillUse(uses: SkillUse[]): string[] {
-  const procedural = uses.filter((use) => use.taught.length > 0);
+  const procedural = uses.filter((use) => use.taught.length > 0 || use.namedItself === true);
   if (procedural.length === 0) return [];
 
   const lines = ['Skill methods the report names (a claim of use, not proof of it):'];
   for (const use of procedural) {
     const score = `${use.named.length}/${use.taught.length}`;
-    lines.push(
-      use.named.length === 0
-        ? `  ${use.skill}: ${score} — nothing from this skill reached the report`
-        : `  ${use.skill}: ${score} — ${use.named.join(', ')}`,
-    );
+    if (use.taught.length === 0) {
+      lines.push(`  ${use.skill}: named by the session (its steps are not matchable)`);
+    } else {
+      const also = use.namedItself === true ? ', and named by the session' : '';
+      lines.push(
+        use.named.length === 0 && use.namedItself !== true
+          ? `  ${use.skill}: ${score} — nothing from this skill reached the report`
+          : `  ${use.skill}: ${score} — ${use.named.join(', ') || 'no method by name'}${also}`,
+      );
+    }
   }
-  const silent = procedural.filter((use) => use.named.length === 0).length;
+  const silent = procedural.filter(
+    (use) => use.named.length === 0 && use.namedItself !== true,
+  ).length;
   if (silent > 0) {
     lines.push(
       `  ${silent} of ${procedural.length} procedural skill(s) left no trace. They are inlined` +

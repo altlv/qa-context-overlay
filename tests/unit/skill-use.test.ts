@@ -59,7 +59,9 @@ test.describe('matching a report against them', () => {
     const broken = (): string => {
       throw new Error('gone');
     };
-    expect(skillUse(['t'], 'anything', broken)).toEqual([{ skill: 't', taught: [], named: [] }]);
+    expect(skillUse(['t'], 'anything', broken)).toEqual([
+      { skill: 't', taught: [], named: [], namedItself: false },
+    ]);
   });
 });
 
@@ -134,5 +136,30 @@ test.describe('telling a method name from a procedure step', () => {
     // something it could not see.
     const taught = methodsTaught(readSkill('rule-modelling'));
     expect(taught, 'every heading here is a step, so nothing is measurable').toEqual([]);
+  });
+});
+
+test.describe('a skill the session names outright', () => {
+  const stepsOnly = (): string => '### 1. Write it\n### 2. Probe the four failure shapes\n';
+
+  test('should credit a skill whose steps are unmatchable when the report names it', () => {
+    // rule-modelling teaches only steps, so nothing of it is matchable by heading —
+    // and a session then named it five times in its declared methods while the score
+    // read "unmeasurable". Crediting the skill's own name recovers exactly the case
+    // the heading rule cannot see.
+    const [use] = skillUse(['rule-modelling'], 'rule-modelling, boundary-leakage probe', stepsOnly);
+    expect(use?.namedItself).toBe(true);
+    expect(reportSkillUse([use!]).join('\n')).toContain('named by the session');
+  });
+
+  test('should still drop a steps-only skill the report never mentions', () => {
+    // Silence about an unmatchable skill is honest. Scoring it 0 would be a claim the
+    // measurement cannot support.
+    expect(reportSkillUse(skillUse(['rule-modelling'], 'nothing here', stepsOnly))).toEqual([]);
+  });
+
+  test('should not count it as silent once it has been named', () => {
+    const lines = reportSkillUse(skillUse(['rule-modelling'], 'I used rule-modelling', stepsOnly));
+    expect(lines.join('\n')).not.toContain('left no trace');
   });
 });
