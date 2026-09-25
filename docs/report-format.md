@@ -41,6 +41,7 @@ findings:
     basis: Internal consistency — the list and the detail view disagree.
     certainty: potential # confirmed | potential — whether it is real, not what it costs
     origin: opportunity # charter | opportunity — did the plan lead here, or a surprise
+    method: boundary value analysis on the quantity field # what found it — technique, lens or sweep
 not_covered:
   - Mobile viewports — desktop Chrome only.
 not_run:

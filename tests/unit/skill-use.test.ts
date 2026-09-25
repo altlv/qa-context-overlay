@@ -111,3 +111,28 @@ test.describe('against the role as it is actually configured', () => {
     expect(procedural.length, 'no skill teaches a recoverable method').toBeGreaterThanOrEqual(4);
   });
 });
+
+test.describe('telling a method name from a procedure step', () => {
+  test('should skip a heading that opens with an imperative verb', () => {
+    // "Write it" is step 6 of bug-report and it matched a report that never opened the
+    // skill, because prose reaches for that phrase anyway — use claimed where there was
+    // none. Steps are instructions to the tester, not labels for what was done.
+    expect(methodsTaught('### 6. Write it')).toEqual([]);
+    expect(methodsTaught('### 1. Reproduce and reduce')).toEqual([]);
+    expect(methodsTaught('### 5. Probe the four failure shapes')).toEqual([]);
+  });
+
+  test('should keep a short method name, because length is the wrong filter', () => {
+    // "Pairwise" is eight characters and a real technique. A length rule dropped it.
+    expect(methodsTaught('## 5. Pairwise').map((m) => m.name)).toEqual(['Pairwise']);
+  });
+
+  test('should drop a skill whose headings are all steps, rather than score it zero', () => {
+    // rule-modelling scored 0/6 against a session that demonstrably modelled a rule,
+    // built a table and chose an independent oracle. That was our phrasing, not its
+    // method, and reporting it as a shortfall was a measurement claiming to know
+    // something it could not see.
+    const taught = methodsTaught(readSkill('rule-modelling'));
+    expect(taught, 'every heading here is a step, so nothing is measurable').toEqual([]);
+  });
+});

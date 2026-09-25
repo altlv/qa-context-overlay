@@ -34,6 +34,59 @@ export interface Method {
 }
 
 /** `## 3. Decision tables` and `### 5. Probe the four failure shapes`. */
+/**
+ * Verbs that open an instruction rather than name a technique.
+ *
+ * A skill's numbered headings are two different things wearing one shape. Some name a
+ * method — "Equivalence partitioning", "Decision tables", "Pairwise" — and a report
+ * that used it will say the name. Others are steps in a procedure — "Write it",
+ * "Reproduce and reduce", "Probe the four failure shapes" — and no report echoes those,
+ * because they are instructions to the tester, not labels for what was done.
+ *
+ * Scoring a step is worse than skipping it in both directions. "Write it" is step 6 of
+ * bug-report and it matched a report that never opened the skill, because prose reaches
+ * for that phrase anyway — use claimed where there was none. And rule-modelling, whose
+ * six headings are all steps, scored 0/6 against a session that demonstrably modelled a
+ * rule, built a table and chose an independent oracle — use denied where there was some.
+ *
+ * Length cannot separate them: "Pairwise" is eight characters and a real method.
+ * The grammar can. A heading that opens with an imperative verb is a step.
+ */
+const STEP_VERBS = new Set([
+  'write',
+  'reproduce',
+  'find',
+  'generalise',
+  'generalize',
+  'name',
+  'assess',
+  'recover',
+  'choose',
+  'enumerate',
+  'probe',
+  'test',
+  'run',
+  'check',
+  'look',
+  'decide',
+  'read',
+  'record',
+  'report',
+  'rank',
+  'start',
+  'keep',
+  'make',
+  'ask',
+  'take',
+  'pick',
+  'apply',
+]);
+
+function isStep(name: string): boolean {
+  const first = (name.split(/\s+/)[0] ?? '').toLowerCase().replace(/[^a-z]/g, '');
+  return STEP_VERBS.has(first);
+}
+
 const NUMBERED = /^#{2,3}\s+\d+\.\s+(.+?)\s*$/gm;
 
 /**
@@ -50,6 +103,7 @@ export function methodsTaught(skillText: string): Method[] {
     const heading = (match[1] ?? '').trim();
     const name = (heading.split(/\s+[—–-]\s+/)[0] ?? heading).trim();
     if (name === '') continue;
+    if (isStep(name)) continue;
     const needle = name.toLowerCase();
     if (!methods.some((method) => method.needle === needle)) methods.push({ name, needle });
   }
