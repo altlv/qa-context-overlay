@@ -20,6 +20,7 @@ function report(over: Partial<Report> = {}): Report {
     ],
     not_covered: ['mobile'],
     not_run: [],
+    unknowns: [],
     cases: [],
     coverage_candidates: [],
     ...over,
@@ -228,6 +229,15 @@ test.describe('a session is checked as a session', () => {
       ],
       evidence: { direct: 1, inferred: 0, claimed: 1 },
       coverage_candidates: ['O1'],
+      // A well-formed session now names what it could not find out. Real sessions
+      // wrote exactly this in prose — "cannot test, forbidden" — where nothing counted it.
+      unknowns: [
+        {
+          what: 'Whether the phantom surplus survives into the payment total.',
+          why: 'Checkout is forbidden by the charter.',
+          settled_by: 'A run with payment authorisation, or the server-side order record.',
+        },
+      ],
       ...over,
     });
 

@@ -228,6 +228,38 @@ export const caseSchema = z.object({
   heuristic: z.string().optional(),
 });
 
+/**
+ * A thing that is true, that the session could not find out.
+ *
+ * The schema already had two kinds of absence and this is neither. `not_covered` is
+ * "I chose not to look there". `not_run` is "a check that should have run did not".
+ * An unknown truth is the third: **I looked, there is an answer, and I cannot reach
+ * it from here.** Whether the cart's phantom $100 survives to the payment total.
+ * Whether an image 404s for real users when our own origin guard blocks that host
+ * either way. What the stock figure would be on a site we are not sharing with
+ * strangers. Every one of those was written by a real session, in prose, at the end,
+ * where nothing could count it.
+ *
+ * **This matters more for an agent than for a person.** A tester who does not know
+ * says so, and says it out loud, because being caught guessing is worse than
+ * admitting ignorance. A model's two failure modes both run the other way: assert it
+ * confidently, or leave it out entirely — and the second is the dangerous one,
+ * because a report that never mentions a question reads exactly like a report that
+ * answered it. An unknown with no place to go gets rounded to a claim or to silence.
+ *
+ * `settled_by` is the field that earns this section. "I do not know" closes nothing;
+ * "I do not know, and here is the specific thing that would tell us" is the next
+ * session's charter, written by the one that hit the wall.
+ */
+export const unknownSchema = z.object({
+  /** The question, stated so someone else could go and answer it. */
+  what: z.string().min(10),
+  /** Why this session could not: a bound, a permission, a tool it did not hold. */
+  why: z.string().min(5),
+  /** What would settle it — an access, a tool, an environment, a person to ask. */
+  settled_by: z.string().min(5),
+});
+
 export const reportSchema = z.object({
   report: z.enum([
     'test-design',
@@ -245,6 +277,12 @@ export const reportSchema = z.object({
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: evidenceCountsSchema,
   findings: z.array(findingSchema),
+  /**
+   * What the session could not find out, as opposed to what it chose not to look at.
+   * Required in substance for an exploratory session: an empty list claims the run
+   * reached every answer that exists, which is almost never true and never checkable.
+   */
+  unknowns: z.array(unknownSchema).default([]),
   /** What this report deliberately did not cover. Required — an empty list is a claim. */
   not_covered: z.array(z.string()),
   /** Checks that were expected but did not run. Silence about a skipped check reads as a pass. */
@@ -368,6 +406,14 @@ export function auditReport(report: Report): ReportProblem[] {
         message: `${finding.id}: an observation is something you saw, so it needs direct evidence, not "${finding.evidence}".`,
       });
     }
+  }
+
+  if (report.report === 'exploratory-session' && report.unknowns.length === 0) {
+    problems.push({
+      level: 'error',
+      message:
+        'unknowns is empty — that claims the session reached every answer that exists. Sessions have written "cannot test, forbidden" and "I cannot say it 404s for real users" into their prose while filing nothing here. State what you could not find out, why, and what would settle it.',
+    });
   }
 
   if (report.not_covered.length === 0) {

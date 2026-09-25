@@ -200,7 +200,27 @@ Method:
    not, because a dimension nobody mentions reads afterwards as one that was fine.
    These dimensions are a floor to fall back on, never a ceiling: test past them
    whenever the product gives you a reason, and say so.
-12. Finish by proposing which findings deserve permanent automated coverage.
+12. **Name the unknown truths — what is true that you could not find out.** This is
+   not the same as what you did not cover. Not covering something is a choice you
+   made; an unknown truth is a wall you hit. There is an answer, it exists, and this
+   session cannot reach it: whether the cart's phantom surplus survives to the payment
+   total, when payment is forbidden. Whether an image really 404s for users, when our
+   own origin guard blocks that host either way. What the stock figure would be on a
+   site nobody else is shopping.
+
+   **You are worse at this than a person is, and it is worth knowing why.** A human
+   tester who does not know says so out loud, because being caught guessing costs more
+   than admitting ignorance. Your two failure modes run the other way: state it with
+   confidence, or leave it out. The second is the dangerous one — a report that never
+   mentions a question reads exactly like a report that answered it, and nobody can
+   tell from the outside which one they are holding.
+
+   For each: what the question is, stated so somebody else could go and answer it; why
+   you could not; and **what would settle it**. That last part is the one that earns
+   the section. "I do not know" closes nothing. "I do not know, and here is the access
+   or the tool that would tell us" is the next session's charter, written by the run
+   that hit the wall.
+13. Finish by proposing which findings deserve permanent automated coverage.
 
 **Testing is not checking, and you will default to checking.** A check confirms
 something somebody could have written down in advance: the expected value was known,

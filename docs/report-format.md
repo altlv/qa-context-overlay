@@ -46,6 +46,10 @@ not_covered:
   - Mobile viewports — desktop Chrome only.
 not_run:
   - npm run test:external — third-party site was unreachable.
+unknowns: # what you could not find out — NOT what you chose not to look at
+  - what: Whether the phantom $100 survives into the payment total.
+    why: Checkout is forbidden by the charter.
+    settled_by: A run with payment authorisation, or the server-side order record.
 commit: 6e03534 # test-design only — the commit it was written against, for the staleness warning
 charter: # exploratory-session only, and required there
   explore: the cart and checkout flow
@@ -97,25 +101,26 @@ Free markdown, but lead with these in order:
 
 ## Rules the checker enforces
 
-| Rule                                                                       | Level   |
-| -------------------------------------------------------------------------- | ------- |
-| A `blocker` must carry `direct` evidence                                   | error   |
-| `claimed` evidence is only valid on a `question`                           | error   |
-| A `PASS` verdict cannot coexist with claimed evidence                      | error   |
-| Findings should have a `basis` — the oracle or check that says it is wrong | warning |
-| `evidence` counts should total the number of findings                      | warning |
-| `not_covered` should not be empty                                          | warning |
-| Some evidence should be `direct`                                           | warning |
-| An `observation` must carry `direct` evidence                              | error   |
-| **Session:** `exploratory-session` needs a `charter`                       | error   |
-| **Session:** every defect claim needs a `basis` — warning in other reports | error   |
-| **Session:** no observations recorded                                      | warning |
-| **Session:** no questions raised                                           | warning |
-| **Session:** `coverage_candidates` empty                                   | warning |
-| **Session:** charter names fewer than two `lenses`                         | error   |
-| **Session:** no `preflight` block — the sweep is declared, never silent    | error   |
-| **Session:** no `coverage` block — every dimension accounted for           | error   |
-| **Session:** `techniques` is one of those dimensions                       | error   |
+| Rule                                                                                      | Level   |
+| ----------------------------------------------------------------------------------------- | ------- |
+| A `blocker` must carry `direct` evidence                                                  | error   |
+| `claimed` evidence is only valid on a `question`                                          | error   |
+| A `PASS` verdict cannot coexist with claimed evidence                                     | error   |
+| Findings should have a `basis` — the oracle or check that says it is wrong                | warning |
+| **Session:** `unknowns` must not be empty — an empty list claims every answer was reached | error   |
+| `evidence` counts should total the number of findings                                     | warning |
+| `not_covered` should not be empty                                                         | warning |
+| Some evidence should be `direct`                                                          | warning |
+| An `observation` must carry `direct` evidence                                             | error   |
+| **Session:** `exploratory-session` needs a `charter`                                      | error   |
+| **Session:** every defect claim needs a `basis` — warning in other reports                | error   |
+| **Session:** no observations recorded                                                     | warning |
+| **Session:** no questions raised                                                          | warning |
+| **Session:** `coverage_candidates` empty                                                  | warning |
+| **Session:** charter names fewer than two `lenses`                                        | error   |
+| **Session:** no `preflight` block — the sweep is declared, never silent                   | error   |
+| **Session:** no `coverage` block — every dimension accounted for                          | error   |
+| **Session:** `techniques` is one of those dimensions                                      | error   |
 
 ```bash
 npm run check-report                 # everything under reports/
