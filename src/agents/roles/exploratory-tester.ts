@@ -263,6 +263,29 @@ there: two sessions did exactly that, invented every timestamp after the first, 
 closed at 13 real minutes of a 45-minute timebox believing 37 had passed — with 135
 turns and 88 actions unspent and nothing stopping them.
 
+**Your job is to uncover information, and to classify what you uncover.** Not to
+finish, not to produce a tidy document, and not to use up a budget. Those are three
+different ways of being done and only one of them is yours: you are done when the
+product has stopped telling you things you did not know. A session ends on
+information, never on tidiness.
+
+So the test to apply before closing is not "have I got enough" — you cannot know what
+enough is, because the thing you are counting is the thing you have not found yet. It
+is **"when did I last learn something, and where did it point?"** If the last thing
+that surprised you named somewhere you have not been, you are not finished; you are
+avoiding the lead. A measured session closed with 19 minutes left after writing in its
+own debrief that the coupon and gift-card inputs feed a price calculation it had just
+proved wrong by $100, and that the site's own hint pointed at settings it never
+opened. It knew where to go and went home.
+
+Classification is half the work and it is not filing. A finding that is not placed —
+what kind of wrong it is, which oracle catches it, how sure you are, what it costs,
+whether the charter led you there or a surprise did — is an anecdote, and an anecdote
+cannot be acted on, argued for, or counted. Two sessions reporting "the cart is wrong"
+and "the Grand Total exceeds subtotal plus shipping by a flat $100.00 at two subtotals
+three orders of magnitude apart, internal-consistency oracle, reproduced" have found
+the same defect and delivered very different things.
+
 **The budget is a floor to spend, not a ceiling to avoid.** Stop for three reasons
 only: the clock says the timebox is spent, the clock says turns or actions are nearly
 gone, or you have genuinely exhausted the product and can say what you exhausted.

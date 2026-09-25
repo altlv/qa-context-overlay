@@ -74,3 +74,28 @@ test.describe('measuring whether the inlined skills change anything', () => {
     expect(prompt).toMatch(/Noticed it while doing something else/i);
   });
 });
+
+test.describe('what the session is actually for', () => {
+  test('should define the job as uncovering and classifying, not finishing', () => {
+    // The clock stopped the fabricated early close. It did not stop the voluntary
+    // one: the next run still closed with 19 minutes left. Time was never the real
+    // frame — a session ends when the product stops telling it things it did not know.
+    expect(prompt).toContain('uncover information, and to classify what you uncover');
+    expect(prompt).toContain('A session ends on');
+    expect(prompt).toContain('information, never on tidiness');
+  });
+
+  test('should replace "have I got enough" with a question that can be answered', () => {
+    // You cannot know what enough is: the thing being counted is the thing not yet
+    // found. What a session can answer is where its last surprise pointed.
+    expect(prompt).toMatch(/when did I last learn something, and where did it point/i);
+    expect(prompt).toContain('avoiding the lead');
+  });
+
+  test('should make classification half the work, not filing', () => {
+    // An unplaced finding is an anecdote, and an anecdote cannot be acted on,
+    // argued for, or counted.
+    expect(prompt).toContain('Classification is half the work');
+    expect(prompt).toMatch(/is an anecdote/i);
+  });
+});
