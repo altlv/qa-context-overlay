@@ -353,3 +353,150 @@ test.describe('survey CLI', () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+/**
+ * The comparator against a fixture repository: one mutation the suite catches, one it does not, and
+ * a second suite that catches less. Everything here is a real process, because the thing under test
+ * applies a mutation to a file, runs a runner over it, and puts it back.
+ */
+const RULE_SOURCE =
+  'function classify(score) {\n' +
+  '  if (score > 10) return "high";\n' +
+  '  return "low";\n' +
+  '}\n' +
+  'function unused() { return 1; }\n' +
+  'module.exports = { classify, unused };\n';
+
+// `node:test` exports `test`; it is not a global. Omit this line and the fixture suite is red for
+// its own reason, which is exactly what the comparator refuses to score — as it should.
+const STRONG_SUITE =
+  "const test = require('node:test');\n" +
+  "const assert = require('node:assert/strict');\n" +
+  "const { classify } = require('../src/rule');\n" +
+  "test('high above the boundary', () => { assert.equal(classify(11), 'high'); });\n" +
+  "test('low at the boundary', () => { assert.equal(classify(10), 'low'); });\n";
+
+const WEAK_SUITE =
+  "const test = require('node:test');\n" +
+  "const assert = require('node:assert/strict');\n" +
+  "const { classify } = require('../src/rule');\n" +
+  "test('high above the boundary', () => { assert.equal(classify(11), 'high'); });\n";
+
+const MUTATIONS = [
+  {
+    file: 'src/rule.js',
+    find: 'score > 10',
+    replace: 'score >= 10',
+    breaks: 'the boundary counts as high',
+  },
+  {
+    file: 'src/rule.js',
+    find: 'function unused() { return 1; }',
+    replace: 'function unused() { return 2; }',
+    breaks: 'the unused helper returns one',
+  },
+];
+
+async function comparatorFixture(mutations: unknown): Promise<string> {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'src'), { recursive: true });
+  await mkdir(join(dir, 'test'), { recursive: true });
+  await writeFile(join(dir, 'src', 'rule.js'), RULE_SOURCE, 'utf8');
+  await writeFile(join(dir, 'test', 'rule.test.js'), STRONG_SUITE, 'utf8');
+  await writeFile(join(dir, 'test', 'rule.weak.test.js'), WEAK_SUITE, 'utf8');
+  await writeFile(join(dir, 'mutations.json'), JSON.stringify(mutations), 'utf8');
+  return dir;
+}
+
+/** The comparator's own command line: this fixture, run by this node, over one file. */
+function comparatorArgs(dir: string, extra: string[] = []): string[] {
+  return [
+    '--mutations',
+    join(dir, 'mutations.json'),
+    '--repo',
+    dir,
+    '--suite',
+    process.execPath,
+    '--test',
+    'test/rule.test.js',
+    ...extra,
+  ];
+}
+
+test.describe('mutation-compare CLI', () => {
+  test('should name the mutation a suite does not catch, and exit non-zero', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, `a survivor must not exit zero:\n${result.stdout}${result.stderr}`).toBe(1);
+    expect(result.stdout, 'a count with no names cannot be acted on').toContain('1/2 killed');
+    expect(result.stdout).toContain('the unused helper returns one');
+    expect(
+      result.stdout,
+      'the mutation the suite did catch must not be reported as a survivor',
+    ).not.toContain('survived: the boundary counts as high');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should report the suite that is weaker than the one before it', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+
+    const result = await cli('mutation-compare.ts', [
+      ...comparatorArgs(dir),
+      '--against',
+      process.execPath,
+      '--test',
+      'test/rule.weak.test.js',
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr, 'a change may never leave the suite weaker than it found it').toContain(
+      'weaker',
+    );
+    expect(result.stderr, 'and it must name the rule that stopped being tested').toContain(
+      'the boundary counts as high',
+    );
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse an empty set rather than score it', async () => {
+    const dir = await comparatorFixture([]);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(
+      result.code,
+      'a perfect score over no mutations is the failure this tool exists for',
+    ).toBe(2);
+    expect(result.stderr).toContain('perfect score of nothing');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a rotted anchor rather than report it as a survivor', async () => {
+    const dir = await comparatorFixture([
+      { file: 'src/rule.js', find: 'nope', replace: 'yep', breaks: 'something that moved' },
+    ]);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, 'a rule that was never applied must not be scored').toBe(2);
+    expect(result.stderr).toContain('does not resolve to exactly one place');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse to score a suite that is already red', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+    await writeFile(
+      join(dir, 'test', 'rule.test.js'),
+      `${STRONG_SUITE}test('a failing test', () => { assert.equal(classify(1), 'high'); });\n`,
+      'utf8',
+    );
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, 'a suite that is already red reports every mutation as caught').toBe(2);
+    expect(result.stderr).toContain('fails before any mutation');
+    await rm(dir, { recursive: true, force: true });
+  });
+});

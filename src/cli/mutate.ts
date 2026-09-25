@@ -825,6 +825,26 @@ const MUTATIONS: Mutation[] = [
     breaks: 'A role that works at no test level must be given no level definition',
   },
   {
+    // The comparator's own rules. They are enforced by its unit tests and by the integration test
+    // that drives it as a process, which is why they can live in a different file from the rest.
+    file: 'src/qe/mutation-compare.ts',
+    find: '  if (hits !== 1) return null;',
+    replace: '  if (false) return null;',
+    breaks: 'A mutation must apply to exactly one place, or not at all',
+  },
+  {
+    file: 'src/qe/mutation-compare.ts',
+    find: '  const known = new Set(before);\n  return after.filter((name) => !known.has(name));',
+    replace: '  return [];',
+    breaks: 'A suite that stopped catching a mutation must be reported as weaker',
+  },
+  {
+    file: 'src/cli/mutation-compare.ts',
+    find: 'if (mutations.length === 0) {',
+    replace: 'if (false) {',
+    breaks: 'An empty mutation set must be refused, not scored as a perfect result',
+  },
+  {
     file: 'src/agents/models.ts',
     find: '    timeoutMs: declaredSeconds * 1000,',
     replace: '    timeoutMs: 180_000,',

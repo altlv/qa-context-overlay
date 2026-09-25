@@ -480,7 +480,15 @@ PoC exists to surface** — report it by name rather than quoting a rate.
    restore in a `finally`, and restore once more at the end. Built once as
    `mutate-search-index.mjs` beside the subject; it takes the suite file as an argument, which
    is what made the 18-versus-12 comparison possible. It belongs in the repo, and §9 gives it a
-   second consumer in the strength delta.
+   second consumer in the strength delta. **DONE 2026-09-24:** `src/qe/mutation-compare.ts` holds the
+   rules and `src/cli/mutation-compare.ts` is the command —
+   `npm run mutation-compare -- --mutations <set> --repo <path> --suite <command…> [--against …]` —
+   with three mutations, each verified by hand against the projection that can kill it. Two things
+   it found while being built: the wrapper must take the suite as argv, because `node --test x.js`
+   has flags of its own, and a suite that is already red is refused rather than scored, which is how
+   a fixture of mine turned out to be genuinely broken. What is still missing is a mutation _set_ for
+   the integration seam: the subject's own script runs a fixed list of five suites and cannot grade
+   a file an agent writes.
 5. **The report block and the four deletion grounds** (§9). A `removed` block in the report
    envelope, enforced the way a charter is; a gate problem when the diff removes a test and the
    report declares none; and the strength step requiring `survivors(after)` to be a subset of
