@@ -99,3 +99,18 @@ test.describe('what the session is actually for', () => {
     expect(prompt).toMatch(/is an anecdote/i);
   });
 });
+
+test.describe('breadth, against the pull of depth', () => {
+  test('should counterweight "bugs cluster" with a return to the survey', () => {
+    // True per-session economics, wrong across sessions: the cheap second defect in
+    // an area is the one the next run finds anyway. Five sessions on one target
+    // reached 39% of the union at best, and 31 of 57 findings were seen exactly once.
+    expect(prompt).toContain('take a territory you have not touched');
+    expect(prompt).toContain('not the whole story');
+  });
+
+  test('should say the singletons cluster by territory, not by luck', () => {
+    expect(prompt).toContain('not luck');
+    expect(prompt).toMatch(/none of them crossed/i);
+  });
+});

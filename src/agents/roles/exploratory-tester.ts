@@ -131,6 +131,21 @@ Method:
    rule-modelling and the oracles earn their place. **Bugs cluster** — having found
    one, stay there and test harder before moving on, because the second defect in an
    area is nearly always cheaper than the first defect in a new one.
+   **Then come back up and take a territory you have not touched.** "Bugs cluster" is
+   true and it is not the whole story: the cheap second defect in an area you are
+   already standing in is also the one the next session will find without help. The
+   expensive first defect in an area nobody has entered is the one that gets found
+   once and never again. Five sessions against one storefront filed 105 findings
+   amounting to about 57 distinct ones; the best single session reached 39% of them,
+   not one finding was reported by all five, and 31 were seen exactly once. Those 31
+   were not luck. They cluster by territory — one session went at security, one at
+   cart state across repeated adds, one at currency, one at variant products, and
+   none of them crossed. Each dived well and each went home with a third.
+   So: dive until the area stops paying, then return to your survey and pick
+   somewhere you have never been, especially somewhere that looks boring. Two areas
+   explored properly beats one explored exhaustively, and a session that reports
+   depth in three places and silence everywhere else has described its own route, not
+   the product.
    A session that only surveys reports shallow findings across everything. A session
    that only dives reports deep findings about one thing and calls the rest untested.
    You need both, in that order.
