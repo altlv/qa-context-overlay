@@ -122,6 +122,18 @@ repo has no mock provider and no record/replay (PLAN items 43–46) — the hone
 the dependency at the cluster's edge, at component level, and say so in the report rather than
 asserting against a live model and calling it deterministic.
 
+Ground it in this subject, because it has both branches and that is easy to miss:
+`src/services/chatService.js` lazily loads `src/services/modelConfig.js`, which picks a provider
+from `CHAT_PROVIDER` (openai, openrouter, groq, xai, mistral, ollama — all OpenAI-compatible), and
+**falls back to BM25 search plus template responses when no provider is configured**. So the
+deterministic half of that path is testable today by controlling the environment, with no
+record/replay infrastructure at all; only the provider-backed half needs its dependency fixed.
+Require the skill to say that plainly: the fallback is a real code path with a real contract and it
+has to be reached rather than assumed, and a test that asserts a model's wording is testing the
+model, while one that asserts the fallback, the flow and the error handling is testing the subject.
+`src/services/modelConfig.js` is a fair target in its own right at this level — its behaviour is a
+function of which keys and variables are set, which is environment control rather than mocking.
+
 ## Constraints
 
 - No inventory counts anywhere in the file. Name the command that produces the number instead.
