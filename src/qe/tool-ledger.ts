@@ -9,10 +9,21 @@
  * The data was already passing through: `guardHook` sees every `PreToolUse` call and
  * discarded all of it except refusals. This keeps it.
  *
- * It also answers the question the role's design rests on — **are the injected skills
- * being used?** A skill is loaded by reading `.claude/skills/<name>/SKILL.md`, so a
- * ledger of Read calls is a ledger of skills. Eight are injected on every turn at
- * roughly 16k tokens; whether a session opens any of them was, until now, unknowable.
+ * It used to claim it answered a second question — **are the injected skills being
+ * used?** — on the premise that "a skill is loaded by reading
+ * `.claude/skills/<name>/SKILL.md`, so a ledger of Read calls is a ledger of skills."
+ *
+ * **That premise was false, and this ledger spent three runs reporting a failure that
+ * was correct behaviour.** `composeSystemPrompt` inlines the full text of every
+ * declared skill into the system prompt — 85k characters for this role, roughly 21k
+ * tokens — and then tells the agent in as many words: "it is already here — do not
+ * spend a turn reading its SKILL.md." A session that opens none of them is obeying the
+ * prompt. "Skills opened: NONE" could never have read anything else.
+ *
+ * A count of Read calls cannot measure whether a skill was used, because using one
+ * costs no tool call. What the ledger can honestly say is how the skills were
+ * delivered and what they cost, so it says that instead and leaves the question of use
+ * to the report's own techniques and oracles, where the evidence actually is.
  */
 
 export interface ToolCall {
@@ -129,9 +140,9 @@ export class ToolLedger {
   /**
    * What a person reads at the end of a run.
    *
-   * States the unopened skills plainly. A skill injected and never opened is paid for
-   * on every turn and used on none, and saying so is the only way that fact ever
-   * surfaces — the model will not report it about itself.
+   * Skill lines report delivery and cost, never "use". A session cannot open an
+   * inlined skill, so a read count is evidence about our own wiring and nothing about
+   * the session. Reporting it as a shortfall taught three debriefs the wrong lesson.
    */
   report(): string[] {
     const summary = this.summary();
@@ -148,13 +159,21 @@ export class ToolLedger {
       lines.push(`  … and ${summary.byTool.length - 12} more tool(s)`);
     }
 
-    lines.push(
-      summary.skillsLoaded.length === 0
-        ? '  Skills opened: NONE — every injected skill was paid for and none was read.'
-        : `  Skills opened: ${summary.skillsLoaded.join(', ')}`,
-    );
-    if (summary.skillsUnopened.length > 0) {
-      lines.push(`  Skills never opened: ${summary.skillsUnopened.join(', ')}`);
+    if (this.injectedSkills.length > 0) {
+      lines.push(
+        `  Skills: ${this.injectedSkills.length} inlined into the system prompt by the runner` +
+          ' — delivery is not in question. Whether they were USED shows in the report’s' +
+          ' techniques, oracles and coverage, not in tool calls.',
+      );
+    }
+    // Only worth a line when it happened: a session re-reading a file it was already
+    // given is either a wiring fault or a prompt that contradicts itself, and both are
+    // worth seeing. Silence is the expected case, not a shortfall.
+    if (summary.skillsLoaded.length > 0) {
+      lines.push(
+        `  Re-read despite being inlined: ${summary.skillsLoaded.join(', ')}` +
+          ' — the prompt says not to; find out what sent it to the file.',
+      );
     }
     return lines;
   }

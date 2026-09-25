@@ -45,6 +45,9 @@ import {
 } from '../qe/run-worktree.js';
 import { shellGuard } from '../qe/shell-guard.js';
 import { guardHook, observerHook } from '../qe/tool-hook.js';
+import { reportSkillUse, searchable, skillUse } from '../qe/skill-use.js';
+import { skillFile } from '../agents/compose.js';
+import { clockHook } from '../qe/session-clock.js';
 import { NetworkRecorder } from '../capture/network.js';
 import { formatProbe, probePage } from '../tools/probe.js';
 
@@ -473,6 +476,27 @@ try {
     // `Agent` tool can reach these — enforced in tests/unit/roles.test.ts.
     agents: composeRoles(roles),
     hooks: {
+      // Fires once per resolved batch, before the next model request. Two measured
+      // sessions stopped at 13 minutes of 45 on timestamps they invented; this is the
+      // only channel that can hand them a number they did not make up.
+      PostToolBatch: [
+        clockHook(() => {
+          const spent = budget.spent();
+          return {
+            elapsedMs: spent.elapsedMs,
+            timeboxMs: budget.limits.timeoutMs,
+            turns: spent.turns,
+            maxTurns: budget.limits.maxTurns,
+            costUsd: spent.costUsd,
+            ...(browser === null
+              ? {}
+              : {
+                  actions: browser.guard.spent(),
+                  maxActions: policyFor(runTarget!.environment).maxActions,
+                }),
+          };
+        }),
+      ],
       PreToolUse: [
         guardHook(check, (toolName, reason) => console.error(`  refused ${toolName}: ${reason}`)),
       ],
@@ -524,6 +548,29 @@ await mkdir(join(worktree, runDirForHarvest), { recursive: true });
 await writeFile(join(worktree, runDirForHarvest, 'tool-use.jsonl'), ledger.asJsonl(), 'utf8');
 console.error('');
 for (const line of ledger.report()) console.error(line);
+
+// And whether the skills it was handed changed anything. Delivery is guaranteed —
+// the runner inlines them — so the only open question is use, and use leaves no tool
+// call behind. What it leaves is the method a finding names.
+try {
+  const written = await findReport(worktree);
+  if (written !== null) {
+    const text = readFileSync(written.path, 'utf8');
+    const parsed = parseReport(text);
+    const prose = searchable(parsed.ok ? parsed.report : { findings: [] }, text);
+    const uses = skillUse(role.skills ?? [], prose, (skill) =>
+      readFileSync(join(repoRoot, skillFile(skill)), 'utf8'),
+    );
+    const lines = reportSkillUse(uses);
+    if (lines.length > 0) {
+      console.error('');
+      for (const line of lines) console.error(line);
+    }
+  }
+} catch {
+  // A measurement of our own investment must never be what ends a run. The session's
+  // work is already kept by this point and the gate has its report.
+}
 
 // The agent is done and its notes exist. Keep them now, before the gate runs — the
 // gate spawns test commands that can hang or throw, and a session's log must not

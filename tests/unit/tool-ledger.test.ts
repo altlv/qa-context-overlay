@@ -77,8 +77,9 @@ test.describe('the ledger', () => {
   });
 
   test('should name the skills a session opened and the ones it never did', () => {
-    // The question this exists to answer: eight skills are injected on every turn at
-    // roughly 16k tokens, and until now nothing could say whether any were read.
+    // The fields stay: knowing WHICH files a session re-read is still worth having.
+    // It is the interpretation that changed — a read is now an anomaly, not the
+    // expected route, because the runner inlines every skill before the run starts.
     const ledger = new ToolLedger(INJECTED);
     ledger.record('Read', { file_path: '.claude/skills/visual-inspection/SKILL.md' }, true);
     ledger.record('Read', { file_path: '.claude/skills/oracle-check/SKILL.md' }, true);
@@ -93,13 +94,27 @@ test.describe('the ledger', () => {
     expect(summary.skillsUnopened).not.toContain('oracle-check');
   });
 
-  test('should say plainly when a session opened no skill at all', () => {
-    // The silence that matters most. A model will not volunteer that it ignored
-    // everything it was given, so the runner has to say it.
+  test('should report skills as delivered, never as a shortfall', () => {
+    // This asserted 'Skills opened: NONE' for three runs, on the premise that reading
+    // a SKILL.md is how a skill is loaded. composeSystemPrompt inlines every declared
+    // skill and tells the agent not to read the files, so NONE was the only possible
+    // answer and the runner was printing correct behaviour as a failure.
     const ledger = new ToolLedger(INJECTED);
     ledger.record('browser_click', { element: 'Submit' }, true);
 
-    expect(ledger.report().join('\n')).toContain('Skills opened: NONE');
+    const report = ledger.report().join('\n');
+    expect(report).toContain(`Skills: ${INJECTED.length} inlined into the system prompt`);
+    expect(report, 'a read count cannot measure use').not.toContain('Skills opened: NONE');
+    expect(report).not.toContain('Skills never opened');
+  });
+
+  test('should flag a skill re-read, because the prompt says not to', () => {
+    // The inverse is now the interesting signal: a session sent to a file it was
+    // already handed means our wiring or our prompt is contradicting itself.
+    const ledger = new ToolLedger(INJECTED);
+    ledger.record('Read', { file_path: '.claude/skills/oracle-check/SKILL.md' }, true);
+
+    expect(ledger.report().join('\n')).toContain('Re-read despite being inlined: oracle-check');
   });
 
   test('should emit one JSON object per line, parseable back', () => {

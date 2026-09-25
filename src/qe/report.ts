@@ -63,6 +63,21 @@ export const findingSchema = z.object({
    * charter has found something about the charter, and nowhere to say so until now.
    */
   origin: z.enum(['charter', 'opportunity']).optional(),
+  /**
+   * What found this — the technique, lens or sweep that produced it.
+   *
+   * The runner inlines roughly 21k tokens of skill text into every session and had no
+   * way to tell whether any of it changed the work. Using a skill costs no tool call,
+   * so no ledger of calls can see it; scanning the prose for a skill's vocabulary only
+   * works for skills whose headings are names ("Decision tables") and fails for those
+   * whose headings are steps ("Write it as a table"), which measures our phrasing
+   * rather than the session's method.
+   *
+   * A declared field sidesteps both. It also asks something worth asking on its own:
+   * a finding whose author cannot say what led to it was probably stumbled over, and
+   * a session that stumbles over everything cannot repeat its own result.
+   */
+  method: z.string().min(3).optional(),
 });
 
 /** The severities that assert something is wrong, and therefore owe an oracle. */
