@@ -12,7 +12,7 @@ import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
 import { budgetForTier, resolveModel } from '../agents/models.js';
-import { describeBudget } from '../agents/budget-line.js';
+import { describeBudget, describeSpend } from '../agents/budget-line.js';
 import { levelOfRole } from '../agents/subject-prompt.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
@@ -596,9 +596,13 @@ await keepEvidence('the session finished');
 
 const spent = budget.spent();
 console.error(
-  `\n${name}: ${spent.turns} turns, $${spent.costUsd.toFixed(4)}, ` +
-    `${Math.round(spent.elapsedMs / 1000)}s` +
-    (result.stoppedBy === null ? '' : ` — STOPPED: ${result.stoppedBy}`),
+  `\n${name}: ` +
+    describeSpend({
+      turns: spent.turns,
+      costUsd: spent.costUsd,
+      elapsedMs: spent.elapsedMs,
+      stoppedBy: result.stoppedBy,
+    }),
 );
 // The point of measuring rather than capping: a session that was cut off and one that
 // found little look the same in a report. Said out loud so the number gets recorded

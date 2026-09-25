@@ -49,3 +49,39 @@ export function describeBudget(line: BudgetLine): string {
     `max ${line.maxTurns} turns, ${spend}, ${line.timeoutSeconds}s (${notes.join(' · ')})`
   );
 }
+
+/**
+ * What the run cost, as the run reports it afterwards.
+ *
+ * The defect this closes: a run stopped by its wall clock printed `0 turns, $0.0000`, because the
+ * spend is recorded from the SDK's result message and an abort means no result message ever
+ * arrived. The session was not free — it was **unmeasured**, and a report that says a five-minute
+ * session cost nothing is believed.
+ *
+ * The signal is zero turns *together with* a stop. Every completed run reports at least one turn,
+ * so a stopped run reporting none is one whose numbers were never collected. Stated as an
+ * assumption because it is one: if the SDK ever reports a result with zero turns, this would call a
+ * cheap run unmeasured rather than wrong.
+ */
+export interface SpendLine {
+  turns: number;
+  costUsd: number;
+  elapsedMs: number;
+  stoppedBy: string | null;
+}
+
+export function describeSpend(line: SpendLine): string {
+  const seconds = Math.round(line.elapsedMs / 1000);
+  const unmeasured = line.turns === 0 && line.stoppedBy !== null;
+
+  // The "spend was measured, not capped" case is reported separately by the runner, because it is a
+  // paragraph rather than a number: this line says what was spent, and refuses to invent a figure.
+  const spend = unmeasured
+    ? 'cost unmeasured (stopped before any result message arrived)'
+    : `$${line.costUsd.toFixed(4)}`;
+
+  return (
+    `${line.turns} turns, ${spend}, ${seconds}s` +
+    (line.stoppedBy === null ? '' : ` — STOPPED: ${line.stoppedBy}`)
+  );
+}
