@@ -12,6 +12,7 @@ import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
 import { budgetForTier, resolveModel } from '../agents/models.js';
+import { describeBudget } from '../agents/budget-line.js';
 import { levelOfRole } from '../agents/subject-prompt.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
@@ -485,15 +486,24 @@ const budget = Budget.fromEnv({
   ...(override('AGENT_MAX_USD') ? {} : { maxUsd: scaled.maxUsd }),
   ...(override('AGENT_TIMEOUT_MS') ? {} : { timeoutMs: scaled.timeoutMs }),
 });
+// The line is built by `describeBudget`, which is pure and tested: printed inline it needed a paid
+// run to observe, and a real defect lived in that blind spot — an operator's AGENT_TIMEOUT_MS
+// replaced this role's declared wall clock while the text still read as the role's own budget.
 console.error(
-  `Running ${name} on ${chosen.id} (${chosen.tier}) — max ${budget.limits.maxTurns} turns, ` +
-    (budget.measuringSpendOnly()
-      ? `spend MEASURED not capped (reference $${budget.limits.maxUsd.toFixed(2)})`
-      : `$${budget.limits.maxUsd.toFixed(2)}`) +
-    `, ${budget.limits.timeoutMs / 1000}s` +
-    (budget.limits.maxTurns === scaled.maxTurns
-      ? ` (role asks ${declaredTurns} × ${chosen.tier})`
-      : ` (AGENT_MAX_TURNS overrides the role's ${declaredTurns})`),
+  describeBudget({
+    role: name,
+    modelId: chosen.id,
+    tier: chosen.tier,
+    declaredTurns,
+    declaredSeconds: WALL_CLOCK_SECONDS[name] ?? DEFAULT_LIMITS.timeoutMs / 1000,
+    maxTurns: budget.limits.maxTurns,
+    maxUsd: budget.limits.maxUsd,
+    timeoutSeconds: budget.limits.timeoutMs / 1000,
+    measuringSpendOnly: budget.measuringSpendOnly(),
+    overrodeTurns: override('AGENT_MAX_TURNS'),
+    overrodeUsd: override('AGENT_MAX_USD'),
+    overrodeTimeout: override('AGENT_TIMEOUT_MS'),
+  }),
 );
 
 // ── The guarded agent loop, inside the worktree ───────────────────────────────────
