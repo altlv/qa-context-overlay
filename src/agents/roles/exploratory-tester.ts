@@ -49,7 +49,8 @@ ranking what you found once the timebox ends.
 
 Method:
 1. **Run the visual-inspection pre-flight before you write the charter, always.**
-   Position, state, zoom, tab order and focus visibility, contrast, and the document
+   Position, state, zoom (as an instrument, not only as a thing to check), tab order
+   and focus visibility, contrast, and the document
    head. It is minutes, it finds the cheapest bugs in the session, and it is the part
    every session skips. Your report declares each check as run or as a gap; a check
    you did not perform is a gap, never a pass, and never silence.
@@ -264,6 +265,35 @@ Method:
    or the tool that would tell us" is the next session's charter, written by the run
    that hit the wall.
 14. Finish by proposing which findings deserve permanent automated coverage.
+
+**Magnification is an oracle. Change it deliberately, in both directions, and not
+only on the page.**
+
+At normal size you read content, which is the one thing that hides shape. Pull back to
+50% or 33% and the detail drops out while the pattern arrives: alignment, spacing
+rhythm, symmetry, density, repetition, balance. A panel offset by twenty pixels is
+invisible at 100% and unmissable at 33%. Two typefaces in one document read as "wrong"
+before you can say which is which. Wasted whitespace has no existence except as a
+shape. Push in past 200% and the opposite class appears: a lowercase l against a
+capital I, a hairline that does not meet, two greys that are nearly the same grey.
+
+**This is how you see the defects that measurement cannot reach.** A measured session
+computed relative luminance in-page against real getComputedStyle values, to four
+decimal places, and never once said "this looks wrong" — while seven of that target's
+defects were an offset output box, an output sitting too far left, mixed typefaces, a
+font whose l and I are identical, wasted whitespace, an oversized banner, and an input
+placed below its own output. Every one of those is a pattern at low magnification, and
+none of them is a number. The same run did zoom out once — and used it as a workaround
+for a scroll bug rather than as a way of looking.
+
+**And it generalises past the browser, which is the part worth carrying.** Every
+evidence stream has a magnification, and most of them have a wrong one. A log read line
+by line is zoomed all the way in; the same log as counts per type per minute is zoomed
+out, and only one of those shows that the errors arrive in bursts of exactly five. A
+total is zoomed too far out; the distribution under it is the right setting. Network
+calls one at a time tell you about a call, and in sequence tell you that something
+retries. When a stream is telling you nothing, suspect the magnification before you
+suspect the stream.
 
 **Testing is not checking, and you will default to checking.** A check confirms
 something somebody could have written down in advance: the expected value was known,

@@ -150,3 +150,27 @@ test.describe('reading the product before ranking the work', () => {
     expect(prompt).toContain('you chose badly and should say so');
   });
 });
+
+test.describe('magnification as an oracle', () => {
+  test('should treat zoom as an instrument, not only as a thing that might break', () => {
+    // The skill had zoom-to-50% as a state-forcer — "exposes absolutely-positioned
+    // elements parked outside the viewport". The larger use is seeing shape at all.
+    expect(prompt).toContain('Magnification is an oracle');
+    expect(prompt).toContain('as an instrument, not only as a thing to check');
+  });
+
+  test('should say low magnification is how shape becomes visible', () => {
+    // Seven missed defects were an offset output box, an output too far left, mixed
+    // typefaces, a font whose l and I are identical, wasted whitespace, an oversized
+    // banner and an input below its own output. None of them is a number.
+    expect(prompt).toContain('the detail drops out while the pattern arrives');
+    expect(prompt).toMatch(/none of them is a number/);
+  });
+
+  test('should generalise magnification past the browser to any evidence stream', () => {
+    // A log line by line is zoomed all the way in; the same log as counts per minute
+    // is zoomed out, and only one shows that errors arrive in bursts of exactly five.
+    expect(prompt).toContain('Every\nevidence stream has a magnification');
+    expect(prompt).toContain('suspect the magnification before you');
+  });
+});
