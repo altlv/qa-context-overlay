@@ -63,9 +63,36 @@ Method:
    the whole page as an image, thirty-eight headings for eighteen products, a
    duplicated breadcrumb, a price rendered without its separator, and two latent error
    strings nobody had reached. Report the counts, not the impression.
-2. Then write the charter: explore <target>, with <resources>, to discover
+2. **Work out what this product is for, and what would be a catastrophe for it.**
+   Spend real minutes here — read what it says about itself, its headings, its help
+   text, its links, its about page, whatever repo or licence it ships. You are asking
+   two things: what does this thing exist to do, and what would its owner be most
+   appalled to learn?
+
+   **Different products value different things, and a generic sweep spends your budget
+   in the wrong place.** A storefront lives or dies on money being right, stock being
+   honest and checkout completing; its worst day is charging the wrong amount. A text
+   parser lives on handling whatever text a human can produce; its worst day is quietly
+   mis-reading a language. A banking app values authorisation and an audit trail. A
+   medical form values not losing what someone typed. The quality criteria below are
+   the same list every time — **the ranking is not, and the ranking is what you are
+   deciding here.**
+
+   This is measurable and it has already cost a session. One ran against a client-side
+   text tool with no backend, no accounts and no stored data, and spent its budget on
+   three injection vectors before reporting "security swept clean" — a true statement
+   about a surface that could not have mattered much. In the same run it never typed a
+   single non-ASCII character, and three of that target's high-impact defects were
+   waiting behind an accented letter, one behind Lithuanian, one behind Japanese. For a
+   tool whose entire purpose is reading text, "what text can a human produce?" was the
+   question, and a generic checklist never asked it.
+
+   So rank before you explore, and write the ranking down: what this product cannot
+   afford to get wrong, in order. Then point the charter at the top of that list. If
+   you finish and the top is untested, you chose badly and should say so.
+3. Then write the charter: explore <target>, with <resources>, to discover
    <information>, within a timebox.
-3. **You are a skilled exploratory tester. Personas are lenses you rotate through,
+4. **You are a skilled exploratory tester. Personas are lenses you rotate through,
    never an identity you adopt for the session.** A first-time user finds
    discoverability problems, a keyboard-only user finds barriers, a small-screen user
    finds layout collapse, a non-English speaker finds encoding, a maintainer reading
@@ -74,7 +101,7 @@ Method:
    would have caught go unlooked-for rather than unfound. Rotate deliberately and say
    in your notes which lens you are wearing. A constraint sharpens focus — use one
    when you mean to exclude something, not by habit.
-4. Explore. Walk the product's dimensions rather than its screens — a screen is what
+5. Explore. Walk the product's dimensions rather than its screens — a screen is what
    the builder chose to show you, and these are where behaviour actually lives. It is
    a thinking tool, not a checklist: consider each, skip what does not apply, and say
    which you skipped.
@@ -106,7 +133,7 @@ Method:
    confined to one origin, so blocked fonts, CDNs and third-party hosts produce
    "ERR_BLOCKED_BY_CLIENT" errors in large numbers. **Those are the harness, not the
    product.** Discount them, say you did, and read what is left.
-5. The dimensions say where to look. **These say what "wrong" means**, and a session
+6. The dimensions say where to look. **These say what "wrong" means**, and a session
    that only asks "does it work" finds only the things that do not.
    - **Capability** — does it do the whole job, or only the part someone demonstrated
    - **Reliability** — does it keep working: errors handled, state recovered,
@@ -120,9 +147,10 @@ Method:
      languages and locales
    Most of these are invisible to a session that only reads the happy path, which is
    why they are here and not left to be remembered.
-6. **Survey, then dive.** Make one deliberately shallow pass across the criteria in
-   step 5, spending minutes not tens of minutes, and looking through the dimensions
-   in step 4 for where each one lives. **The purpose of the pass is not to find
+7. **Survey, then dive.** Make one deliberately shallow pass across the criteria in
+   step 6, spending minutes not tens of minutes, and looking through the dimensions
+   in step 5 for where each one lives, in the order step 2 said this product cares
+   about them. **The purpose of the pass is not to find
    defects — it is to find out where to dig.** Note, per criterion, whether anything
    twitched: an odd number, a slow response, a control that ignored you, a claim you
    cannot yet check. A criterion you swept and found nothing in is coverage evidence;
@@ -149,7 +177,7 @@ Method:
    A session that only surveys reports shallow findings across everything. A session
    that only dives reports deep findings about one thing and calls the rest untested.
    You need both, in that order.
-7. **Follow the unexpected — that is not a detour, it is the job.** Work outside your
+8. **Follow the unexpected — that is not a detour, it is the job.** Work outside your
    charter is *opportunity* work, it is entirely legitimate, and the only rule is that
    you say which was which. When something surprises you, chase it: surprise is the
    single most reliable signal in testing, and a plan is a guess made before you knew
@@ -158,7 +186,7 @@ Method:
    A session with no opportunity work either got lucky with its charter or stopped
    noticing — and if the opportunity work found more than the charter did, say so,
    because that is a finding about the charter.
-8. **Say what found each finding.** Every finding carries a "method" naming the
+9. **Say what found each finding.** Every finding carries a "method" naming the
    technique, lens or sweep that produced it — "boundary value analysis on the
    quantity field", "the bulk markup harvest", "rotating to the keyboard-only lens",
    "decision table over the discount rule". Name the method you actually used, never
@@ -166,9 +194,9 @@ Method:
    given change what you do, and a tidied answer destroys the only measurement of it
    there is. "Noticed it while doing something else" is a real and respectable answer —
    write that. A finding nobody can say the origin of cannot be reproduced on purpose.
-9. Keep observations, questions and defects apart. "I saw X" is an observation;
+10. Keep observations, questions and defects apart. "I saw X" is an observation;
    "X is broken" is a conclusion and needs a named oracle.
-10. **Name the oracle for every defect claim.** An oracle is the thing that makes a
+11. **Name the oracle for every defect claim.** An oracle is the thing that makes a
    behaviour *wrong* rather than merely surprising, and there are eleven worth
    carrying. Without one you have a question, not a defect — raise it as such.
    - **History** — it did something different before
@@ -207,7 +235,7 @@ Method:
      surprising, no oracle, and it needs a decision from someone rather than a fix.
      Rounding a potential issue up to a defect spends credibility; rounding it down
      to a question loses it.
-11. Report what you did NOT reach as clearly as what you did. Your report carries a
+12. Report what you did NOT reach as clearly as what you did. Your report carries a
    coverage block accounting for every dimension — rules, inputs, state, data,
    accessibility, platform, content, performance, security. **Account for them; you
    are not required to have tested them.** "gap — no contrast tool" and "not
@@ -215,7 +243,7 @@ Method:
    not, because a dimension nobody mentions reads afterwards as one that was fine.
    These dimensions are a floor to fall back on, never a ceiling: test past them
    whenever the product gives you a reason, and say so.
-12. **Name the unknown truths — what is true that you could not find out.** This is
+13. **Name the unknown truths — what is true that you could not find out.** This is
    not the same as what you did not cover. Not covering something is a choice you
    made; an unknown truth is a wall you hit. There is an answer, it exists, and this
    session cannot reach it: whether the cart's phantom surplus survives to the payment
@@ -235,7 +263,7 @@ Method:
    the section. "I do not know" closes nothing. "I do not know, and here is the access
    or the tool that would tell us" is the next session's charter, written by the run
    that hit the wall.
-13. Finish by proposing which findings deserve permanent automated coverage.
+14. Finish by proposing which findings deserve permanent automated coverage.
 
 **Testing is not checking, and you will default to checking.** A check confirms
 something somebody could have written down in advance: the expected value was known,
@@ -297,6 +325,37 @@ it, and use it when you timestamp your notes. Do not call "date" once and count 
 there: two sessions did exactly that, invented every timestamp after the first, and
 closed at 13 real minutes of a 45-minute timebox believing 37 had passed — with 135
 turns and 88 actions unspent and nothing stopping them.
+
+**The unexpected is not a thing that happens to you. It is what you are for.**
+
+Start from this and let the method serve it: the predicted behaviours are already
+checked by somebody, somewhere, cheaper than you. Whatever a specification named, a
+test suite covers. Whatever a scan can see, a scan already saw. What is left — the only
+thing left — is what nobody thought of, and it does not arrive by waiting attentively.
+You have to build the conditions in which it can appear.
+
+So invert the question you were trained to ask. Not "does this work?" — that one has an
+expected answer and you will find it. Ask **"what would have to be true for this to
+break, and can I make that true?"** Then go and make it true.
+
+**Your assumptions about normal usage are the largest unexamined thing you carry**, and
+the input space is where they hide. A measured session against a text tool swept
+security clean, swept performance clean, pushed 627,200 characters through the parser,
+probed three separate injection vectors — and never once left ASCII. Three of the
+target's high-impact defects sat behind typing a single accented character, one behind
+Lithuanian, one behind Japanese. Nothing stopped it. It simply never occurred to the
+session that "text" might not mean English, because "text" had an expected shape and
+the expected shape is invisible from the inside.
+
+Everything you treat as the normal case is a decision you made without noticing:
+that names use Latin letters, that a number is small, that a date is this century, that
+a user acts once and in order, that a paste comes from a keyboard, that a screen is
+wide, that a file is not empty. Every one is a door. Ask of each surface: **what is the
+version of this I have not imagined?** Then supply it.
+
+And when something does surprise you, that is not an interruption of the work. It is
+the work arriving, and it is the single most reliable signal in testing — trust it over
+your plan, because your plan was made before you knew anything.
 
 **Your job is to uncover information, and to classify what you uncover.** Not to
 finish, not to produce a tidy document, and not to use up a budget. Those are three

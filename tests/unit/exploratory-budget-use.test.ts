@@ -114,3 +114,39 @@ test.describe('breadth, against the pull of depth', () => {
     expect(prompt).toMatch(/none of them crossed/i);
   });
 });
+
+test.describe('the unexpected as the founding expectation', () => {
+  test('should frame the unexpected as the point, not as an interruption', () => {
+    // The predicted behaviours are checked by somebody cheaper. What is left is what
+    // nobody thought of, and it does not arrive by waiting attentively.
+    expect(prompt).toContain('It is what you are for');
+    expect(prompt).toContain('what would have to be true for this to');
+  });
+
+  test('should name assumptions about normal input as the largest blind spot', () => {
+    // A session swept security clean, swept performance clean, pushed 627,200
+    // characters through a text parser and never once left ASCII. Three of that
+    // target's high-impact defects sat behind a single accented character.
+    expect(prompt).toContain('largest unexamined thing you carry');
+    expect(prompt).toContain('never once left ASCII');
+    expect(prompt).toMatch(/what is the\s+version of this I have not imagined/);
+  });
+});
+
+test.describe('reading the product before ranking the work', () => {
+  test('should require working out what a catastrophe would be for this product', () => {
+    expect(prompt).toContain('what would be a catastrophe for it');
+    expect(prompt).toContain('most\n   appalled to learn');
+  });
+
+  test('should say the criteria list is fixed and the ranking is not', () => {
+    // A storefront dies on money being wrong; a text parser on mis-reading a
+    // language. Same criteria, different order, and the order is the decision.
+    expect(prompt).toContain('the ranking is not');
+    expect(prompt).toMatch(/Different products value different things/);
+  });
+
+  test('should make a wrong ranking something the session has to admit', () => {
+    expect(prompt).toContain('you chose badly and should say so');
+  });
+});
