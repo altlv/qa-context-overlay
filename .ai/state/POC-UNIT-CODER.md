@@ -511,4 +511,6 @@ PoC exists to surface** — report it by name rather than quoting a rate.
   What it still lacks is a skill, the comparator, and the vacuity check: PLAN ids 65, 66 and 60,
   and `.ai/state/POC-UNIT-CODER.md` §10 item 4 for the comparator. Its baseline is already there:
   the subject's `labs-routes`, `mcp-server`, `api`, `data-integrity` and `docs` suites, and the 13
-  mutations its own `scripts/mutate-app.mjs` runs against exactly those five files.
+  mutations its own `scripts/mutate-app.mjs` runs against exactly those five files. The skill's
+  brief is written: `.ai/state/POC-INTEGRATION-CODER-DEEPSEEK.md`, with component integration and
+  app integration as its spine because this subject has both.
