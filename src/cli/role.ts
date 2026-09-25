@@ -12,6 +12,7 @@ import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
 import { budgetForTier, resolveModel } from '../agents/models.js';
+import { levelOfRole } from '../agents/subject-prompt.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
 import type { SnapshotMode } from '../qe/browser-tools.js';
@@ -188,10 +189,17 @@ const subjectRepo =
 const runRepo = subjectRepo ?? repoRoot;
 
 // The stack facts a subject run composes its prompt from, when the app declares them. Absent
-// for a run in this repository, which keeps its own conventions and level table.
+// for a run in this repository, which keeps its own conventions and level table. The level comes
+// from the role's name: the same subject stack means a different job to a unit coder and to an
+// integration coder, and the composed level block has to say which one this run is.
 const subjectRun =
   subjectConfig?.testStack !== undefined && subjectRepo !== null
-    ? { app: subjectConfig.name, repo: subjectRepo, stack: subjectConfig.testStack }
+    ? {
+        app: subjectConfig.name,
+        repo: subjectRepo,
+        stack: subjectConfig.testStack,
+        level: levelOfRole(name),
+      }
     : undefined;
 
 if (reusePath !== undefined) {
@@ -694,6 +702,11 @@ const plan = planGate({
   // The subject's stack, when the work landed in a subject: the gate then checks the changed
   // tests with the subject's own runner, where before it reported nothing to check at all.
   ...(subjectConfig?.testStack === undefined ? {} : { testStack: subjectConfig.testStack }),
+  // A subject run's worktree is a worktree of the subject, so the gate's own script paths do
+  // not exist in it and every script-shaped step failed before it looked at the work. The
+  // harness's scripts come from this checkout in that case; when the worktree is this
+  // repository, the worktree's own copy is what runs.
+  ...(subjectRepo === null ? {} : { harnessRoot: repoRoot }),
 });
 
 console.error(`\nPost-run gate — ${changed.length} file(s) changed in the worktree:`);

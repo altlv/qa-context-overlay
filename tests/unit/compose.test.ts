@@ -7,6 +7,7 @@ import {
   skillFile,
 } from '../../src/agents/compose.js';
 import { roles } from '../../src/agents/roles.js';
+import { levelOfRole, type SubjectRun } from '../../src/agents/subject-prompt.js';
 
 /**
  * A declared skill must reach the agent as text. Before this, it reached a top-level
@@ -73,7 +74,7 @@ test.describe('composing the real roles', () => {
 });
 
 test.describe('composing a role whose work lands in a subject', () => {
-  const subject = {
+  const subject: SubjectRun = {
     app: 'mcpa',
     repo: '../mcpa-training-bot',
     stack: {
@@ -86,7 +87,11 @@ test.describe('composing a role whose work lands in a subject', () => {
       assertions: "const assert = require('node:assert/strict');",
       exemplar: 'test/specIndexer.test.js',
     },
+    level: 'unit',
   };
+
+  const composed = (role: string, over: Partial<SubjectRun> = {}): string =>
+    composeRoles(roles, undefined, { ...subject, ...over })[role]?.prompt ?? '';
 
   test('should carry no Playwright instruction and no tests/unit path', () => {
     // The plan's acceptance test for a portable role, in its own words. A role following
@@ -114,5 +119,76 @@ test.describe('composing a role whose work lands in a subject', () => {
     expect(prompt, 'a harness run keeps the conventions it was written against').toMatch(
       /playwright/i,
     );
+  });
+
+  test('should give an integration run the integration level, not the unit one', () => {
+    const prompt = composed('integration-coder', { level: 'integration' });
+
+    // The bug this closes: the level block was written for the unit PoC, so composed for an
+    // integration run it told the role that anything needing a process or a file "is not this
+    // level" — a prompt arguing against the job it had just been started for.
+    expect(prompt, 'the integration level has to arrive in the subject’s terms').toContain(
+      'exercise the real entry point rather than importing around it',
+    );
+    expect(prompt, 'and the unit boundary must not be there telling it to stop').not.toContain(
+      'doubling the world to reach it',
+    );
+    expect(prompt, 'nor the harness integration path').not.toContain('tests/integration');
+    expect(prompt, 'nor the harness runner it would use instead of the subject’s').not.toContain(
+      'npx playwright',
+    );
+    expect(prompt, 'the subject runner has to arrive in their place').toContain('node --test');
+  });
+
+  test('should keep the unit level for a unit run', () => {
+    const prompt = composed('unit-coder');
+
+    expect(prompt, 'the unit run still gets its own boundary').toContain(
+      'doubling the world to reach it',
+    );
+    expect(
+      prompt,
+      'and the integration definition would invite tests this level has to refuse',
+    ).not.toContain('exercise the real entry point rather than importing around it');
+  });
+
+  test('should not tell an e2e role there is no browser', () => {
+    // True for three levels and a lie for the fourth, so it is asserted in both directions: a
+    // block that dropped it everywhere would otherwise pass.
+    expect(
+      composed('e2e-coder', { level: 'e2e' }),
+      'a level block denying the browser tells an e2e coder its own job is out of scope',
+    ).not.toContain('There is no browser in this run');
+    expect(composed('api-coder', { level: 'api' }), 'an api run still drives no page').toContain(
+      'There is no browser in this run',
+    );
+    expect(composed('api-coder', { level: 'api' }), 'and is told what its level is').toContain(
+      'a request, a response, a status code',
+    );
+  });
+
+  test('should give a role that works at no level no level at all', () => {
+    const prompt = composed('test-planner', { level: null });
+
+    expect(
+      prompt,
+      'the planner used to be handed the unit definition as if it were the planner’s own job',
+    ).toContain('does not work at one of the four test levels');
+    expect(prompt, 'and no unit definition with it').not.toContain('pinned on its own');
+  });
+});
+
+test.describe('the level a subject run works at', () => {
+  test('should read the level from every coder role, and only from those', () => {
+    const named = Object.keys(roles)
+      .filter((name) => levelOfRole(name) !== null)
+      .sort();
+
+    expect(
+      named,
+      'the four coders are the roles named for a level; a fifth has to be added here deliberately',
+    ).toEqual(['api-coder', 'e2e-coder', 'integration-coder', 'unit-coder']);
+    expect(levelOfRole('test-planner'), 'the planner works at no level').toBeNull();
+    expect(levelOfRole('exploratory-tester')).toBeNull();
   });
 });

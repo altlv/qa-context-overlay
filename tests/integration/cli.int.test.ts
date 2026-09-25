@@ -215,3 +215,141 @@ test.describe('assert-quality CLI', () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+test.describe('assertion-floor CLI', () => {
+  const IMPORT = "const assert = require('node:assert/strict');";
+
+  test('should pass a subject test that asserts on what the code returned', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'search.test.js');
+    await writeFile(
+      file,
+      `${IMPORT}\ntest('finds the term', () => {\n  assert.equal(search('alpha').length, 1);\n});\n`,
+      'utf8',
+    );
+
+    const result = await cli('assertion-floor.ts', ['--assertions', IMPORT, file]);
+
+    expect(result.code, `the floor refused a real test:\n${result.stdout}`).toBe(0);
+    expect(result.stdout).toContain('0 finding(s)');
+    expect(
+      result.stdout,
+      'a floor that says OK without saying what it did not read reads as a review',
+    ).toContain('Not checked here');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should fail a subject test whose every assertion is inside a conditional', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'search.test.js');
+    await writeFile(
+      file,
+      `${IMPORT}\ntest('finds the term', () => {\n  const results = search('alpha');\n  if (results.length > 0) {\n    assert.equal(results[0].id, 'a');\n  }\n});\n`,
+      'utf8',
+    );
+
+    const result = await cli('assertion-floor.ts', ['--assertions', IMPORT, file]);
+
+    expect(result.code, 'a test that asserts only when a branch is taken was accepted').toBe(1);
+    expect(result.stdout).toContain('conditional-only');
+    expect(result.stdout, 'the finding must say which test and why').toContain('finds the term');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should exit 2 rather than report a pass when nothing was checked', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'helpers.js');
+    await writeFile(file, `${IMPORT}\nconst helper = (value) => value;\n`, 'utf8');
+
+    const result = await cli('assertion-floor.ts', [file]);
+
+    expect(
+      result.code,
+      'a file with nothing to read exited 0, which is the verification that cannot fail',
+    ).toBe(2);
+    expect(result.stdout).toContain('nothing was checked');
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+/**
+ * Both map commands are advisory — they exit 0 whatever they find — so what these
+ * check is the flag handling and the two things a reader relies on: the classification
+ * reaches the output, and a root with no source is refused rather than reported as an
+ * empty map. A command nothing exercises is a command whose flags rot silently.
+ */
+const FIXTURE_SOURCE =
+  'const helper = (x) => x * 2;\n' +
+  'function add(a, b) {\n  return a + b;\n}\n' +
+  'module.exports = { add, helper };\n';
+const FIXTURE_TEST =
+  "const assert = require('node:assert/strict');\n" +
+  "const { add } = require('../lib/math');\n" +
+  "test('adds', () => {\n  assert.equal(add(1, 2), 3);\n});\n";
+
+async function sourceFixture(): Promise<string> {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'lib'), { recursive: true });
+  await mkdir(join(dir, 'test'), { recursive: true });
+  await writeFile(join(dir, 'lib', 'math.js'), FIXTURE_SOURCE, 'utf8');
+  await writeFile(join(dir, 'test', 'math.test.js'), FIXTURE_TEST, 'utf8');
+  return dir;
+}
+
+test.describe('candidates CLI', () => {
+  test('should classify a fixture’s exports and name the one no test uses', async () => {
+    const dir = await sourceFixture();
+
+    const result = await cli('candidates.ts', [join(dir, 'lib'), '--tests', join(dir, 'test')]);
+
+    expect(result.code, `the map command refused its own fixture:\n${result.stderr}`).toBe(0);
+    expect(result.stdout, 'the reader needs the classification, not just a list').toContain(
+      'exported unit(s)',
+    );
+    expect(result.stdout, 'and which candidate nothing references yet').toContain('helper');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a root with no source rather than print an empty map', async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, 'notes.txt'), 'nothing to map here\n', 'utf8');
+
+    const result = await cli('candidates.ts', [dir]);
+
+    expect(result.code, 'an empty map reads as "there is nothing to test"').toBe(2);
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+test.describe('survey CLI', () => {
+  test('should map a fixture’s source and write the map when asked', async () => {
+    const dir = await sourceFixture();
+    const out = join(dir, 'map.json');
+
+    const result = await cli('survey.ts', [
+      join(dir, 'lib'),
+      '--tests',
+      join(dir, 'test'),
+      '--save',
+      out,
+    ]);
+
+    expect(result.code, `the survey refused its own fixture:\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('math.js');
+    const map = JSON.parse(await readFile(out, 'utf8')) as {
+      files: { path: string; units?: unknown[] }[];
+    };
+    expect(map.files.length, 'a saved map with no files is a map nothing can read').toBe(1);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a root with no source', async () => {
+    const dir = await tempDir();
+
+    const result = await cli('survey.ts', [dir]);
+
+    expect(result.code, 'an empty map reads as "there is nothing here to survey"').toBe(2);
+    expect(result.stderr).toContain('No source files found');
+    await rm(dir, { recursive: true, force: true });
+  });
+});

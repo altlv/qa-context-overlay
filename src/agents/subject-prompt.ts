@@ -23,6 +23,31 @@ export interface SubjectRun {
   /** The subject's repository, absolute. `git` reports paths against it. */
   repo: string;
   stack: TestStack;
+  /**
+   * The level this run works at, from the role's name, or null for a role that does not work at
+   * one of the four test levels.
+   *
+   * Carried beside the stack because the level decides what the stack *means*. The same `test/`
+   * directory and the same `node --test` are a different job at unit level and at integration
+   * level, and a block that describes only the first tells an integration coder that the thing
+   * it exists to do is out of scope — which is what it did while it was a constant written for
+   * the unit PoC.
+   */
+  level: SubjectLevel | null;
+}
+
+export type SubjectLevel = 'unit' | 'integration' | 'api' | 'e2e';
+
+/**
+ * The level a role works at, read from its name.
+ *
+ * The four coders are named for their level, which is where that fact already lives: a second
+ * table listing the same four names against the same four levels would be the copy that drifts,
+ * and `tests/unit/compose.test.ts` holds this one to the roles that actually exist.
+ */
+export function levelOfRole(role: string): SubjectLevel | null {
+  const match = /^(unit|integration|api|e2e)-coder$/.exec(role);
+  return match === null ? null : (match[1] as SubjectLevel);
 }
 
 export function subjectConventions(subject: SubjectRun): string {
@@ -45,16 +70,54 @@ from this harness: ${stack.runner} runs the tests here.
 `.trim();
 }
 
+/**
+ * The subject's levels, in the subject's terms, for the level this run works at.
+ *
+ * Written for unit and integration — the two levels this pair of PoCs runs. api and e2e get one
+ * line each saying what the level is and are otherwise left to the subject's own suite: neither
+ * has been composed into a run, and inventing their method from this side of the fence would be
+ * untested advice in a prompt. A role that works at no level gets no level at all, rather than
+ * the unit one, which is what it used to get.
+ */
 export function subjectLevels(subject: SubjectRun): string {
-  const { stack } = subject;
+  const { stack, level } = subject;
+
+  if (level === null) {
+    return `
+Test levels, in the subject's terms.
+
+This role does not work at one of the four test levels, so none is defined here. ${stack.runner} is what runs a test in this subject, and the repository conventions above say where they live.
+`.trim();
+  }
+
+  const definition: Record<SubjectLevel, string> = {
+    unit: 'unit — pure logic with no I/O. Input to output and nothing to stand up, so a rule can be pinned on its own.',
+    integration:
+      'integration — modules wired together through their real entry points: a spawned process, the actual filesystem, real exit codes. The risk is between the components, so exercise the real entry point rather than importing around it.',
+    api: "api — the subject's own HTTP surface: a request, a response, a status code.",
+    e2e: 'e2e — the subject through a real browser.',
+  };
+
+  const boundary: Record<SubjectLevel, string> = {
+    unit: 'Anything needing a process, a file, or a running server is not this level. Say so rather than doubling the world to reach it.',
+    integration: 'A browser is not this level: nothing here drives a page.',
+    api: 'Reaching a route by importing its handler is a unit test of that handler, not this level.',
+    e2e: 'The real browser is the boundary here, so use whatever this subject uses to drive one.',
+  };
+
+  // True for three of the four levels and a lie for the fourth, so it is written rather than
+  // repeated. An e2e run told there is no browser is being told its own job is out of scope.
+  const browser =
+    level === 'e2e'
+      ? ''
+      : `
+
+There is no browser in this run and no page to drive, whatever the sections above say. If a check can only be made through one, it belongs to a different role.`;
+
   return `
 Test levels, in the subject's terms.
 
-- unit — pure logic with no I/O, in \`${stack.testsDir}/\`, run by ${stack.runner}.
-- Anything needing a process, a file, or a running server is not this level. Say so, rather
-  than doubling the world to reach it.
-
-There is no browser in this run and no page to drive, whatever the sections above say. If a
-check can only be made through one, it belongs to a different role.
+- ${definition[level]}
+- ${boundary[level]}${browser}
 `.trim();
 }

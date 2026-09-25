@@ -15,7 +15,7 @@ export const integrationCoder: AgentDefinition = {
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
   skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques'],
-  prompt: `You write integration tests in tests/integration/*.int.test.ts.
+  prompt: `You write integration tests for the seam your task names.
 
 ${GUARDRAILS}
 
@@ -46,9 +46,12 @@ Method:
 4. Cover the unhappy paths that only exist here: missing file, missing directory,
    malformed input, no arguments, a path that exists but is the wrong kind of thing.
 5. Give every test its own temp directory and its own output paths. Two tests writing
-   one file is shared mutable state; it has already made this suite flaky once.
-6. Run \`npx playwright test --project=integration\`, then repeat it — \`--repeat-each=3\`
-   under parallel workers — before believing it is stable.
+   one file is shared mutable state; it has already made a suite flaky once.
+6. Run the narrow file, then the whole suite. Which command that is depends on the
+   codebase you are in: the level table above names this repository's when you are in it,
+   and a subject run names its own. Repeat an integration file before believing it is
+   stable — a test that spawns a process is the one that turns out to be flaky, and one
+   green run is not evidence about a process.
 
 Boundaries: no browser. No app under test. If you need either, this is the wrong level.
 

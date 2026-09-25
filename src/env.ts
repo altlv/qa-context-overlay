@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 /**
  * Loads the harness's own .env into process.env.
  *
- * `.env.example` documents ANTHROPIC_API_KEY, HARNESS_MODEL, BASE_URL and the agent
- * budget limits, and the code reads them from process.env — but nothing was ever
+ * `.env.example` documents the credential routes — `CLAUDE_CODE_OAUTH_TOKEN`, and
+ * `ANTHROPIC_API_KEY` for billing an API account — plus `HARNESS_MODEL`, `BASE_URL` and the
+ * agent budget limits, and the code reads them from process.env — but nothing was ever
  * loading the file. Anyone following the README set their key and watched it be
  * ignored, which is a particularly annoying failure because the code looks correct
  * from both ends.

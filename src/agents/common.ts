@@ -153,6 +153,7 @@ they are free, exact, and repeatable, and your turns are none of those things.
 | npm run survey -- <path>           | What the source under test is made of: exported units, who calls what, which tests import a file and which merely name it, and the files no test imports. --changed <ref> scopes it to a diff plus one hop |
 | npm run candidates -- <path>       | Which exported units a unit test could pin, and which no test names |
 | npm run assert-quality             | Refuses a test that asserts nothing, or checks a write only by its render |
+| npm run assertion-floor -- <file>   | The same floor for a subject's own stack — \`node:test\`, vitest, whatever its config declares. Refuses a test that asserts nothing, one whose every assertion sits inside a branch, and one asserting only on literals. Exits 2 when it can read nothing, and prints what it did not look at |
 | npm run fault-check -- <spec>      | Proves an app spec notices its server failing: reruns it with every response a 500 and refuses one that stays green |
 | npm run mutate -- --changed        | Proves the harness's own rules are tested. It never touches app specs — for those, fault-check |
 | npm run gate                       | PASS / CONDITIONAL / FAIL, with staleness detection            |

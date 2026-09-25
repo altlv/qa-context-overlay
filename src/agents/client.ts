@@ -43,7 +43,8 @@ export class AgentAuthError extends Error {}
 
 /**
  * The SDK resolves credentials itself — ANTHROPIC_API_KEY, an apiKeyHelper, a
- * managed key, or the OAuth session from a Claude Code login.
+ * managed key, the OAuth session from a Claude Code login, or a subscription token in
+ * CLAUDE_CODE_OAUTH_TOKEN.
  *
  * So do not pre-check for an API key. An earlier version of this file gated every
  * run on `ANTHROPIC_API_KEY` being set, which refuses to run for anyone signed in
@@ -65,8 +66,19 @@ export function isAuthFailure(error: unknown): boolean {
   return /authenticat|oauth|api key|unauthorized|401|not logged in|\/login/i.test(message);
 }
 
+/**
+ * What a person sees when a run cannot authenticate.
+ *
+ * It names the two OAuth routes and no key. "Or set ANTHROPIC_API_KEY in .env" used to be the
+ * second half of this sentence, and it was wrong twice over: it is not the route this harness
+ * wants anyone to take — the key is optional and CI-only, and naming it as the remedy is what
+ * caused a key to be issued that nobody needed — and ".env" does not say *which* one. `src/env.ts`
+ * loads the file beside `src/` in the checkout the command runs from, so in a run worktree the
+ * checkout a person is most likely to edit is not the one being read.
+ */
 export const AUTH_HINT =
-  'Agent auth failed. Either sign in with `claude login`, or set ANTHROPIC_API_KEY in .env.';
+  'Agent auth failed. Sign in with `claude login`, or set CLAUDE_CODE_OAUTH_TOKEN ' +
+  "(from `claude setup-token`) in this checkout's .env.";
 
 /**
  * The default model id for callers that do not choose one. Tier and budgets live in

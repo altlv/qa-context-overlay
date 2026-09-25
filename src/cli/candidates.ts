@@ -37,8 +37,20 @@ async function collect(root: string, wanted: (name: string) => boolean): Promise
 
 const argv = process.argv.slice(2);
 const testsFlag = argv.indexOf('--tests');
-const testRoots = testsFlag >= 0 ? [argv[testsFlag + 1] ?? ''] : ['test', 'tests'];
-const roots = argv.filter((arg, i) => !arg.startsWith('--') && i !== testsFlag + 1);
+const testsValue = testsFlag >= 0 ? argv[testsFlag + 1] : undefined;
+if (testsFlag >= 0 && (testsValue === undefined || testsValue.startsWith('--'))) {
+  console.error('--tests needs the directory the tests live in.');
+  process.exit(2);
+}
+// The absent-flag case is why this is not `i !== testsFlag + 1` alone: with no flag that is
+// `i !== 0`, which silently drops the path you named and maps `src` instead. The same defect
+// was fixed in `survey` and left here, and the integration test that names a fixture is what
+// found it — a path argument that is ignored is a command mapping something you did not ask
+// for.
+const testRoots = testsValue === undefined ? ['test', 'tests'] : [testsValue];
+const roots = argv.filter(
+  (arg, i) => !arg.startsWith('--') && !(testsFlag >= 0 && i === testsFlag + 1),
+);
 
 const sources = (
   await Promise.all(

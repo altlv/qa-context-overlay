@@ -26,7 +26,7 @@ flow had no mechanical way to choose a target: `.claude/skills/repo-survey/SKILL
 subject's `searchIndex.js`, written by hand in a worktree of the subject, with the human
 baseline never edited.
 
-**Landed since.** C2, C3, C4, and the portability half of C9.
+**Landed since.** C2, C3, C4, the portability half of C9, and C6.
 
 - **C2, C3** — `sourceRoot` and `testStack` on `AppConfig`; `apps/mcpa/` registered with a local
   environment and its own stack facts; readiness taught to resolve a module the subject names
@@ -52,12 +52,45 @@ to deny it, which the literal acceptance test correctly refused.
 `--preflight` against mcpa/local reports **ready**, at the subject's own commit, and refuses a dirty
 subject checkout by name.
 
-**Not landed.** C6 (assertion floor), C7 (the `searchIndex` mutation set), C8 (the comparator), and
-the rest of C5. The gate now runs a subject's changed tests with the subject's own runner, where
-before it reported that there was nothing to check for any subject not using Playwright — which is
-every subject we do not own. What it still lacks is a vacuity check at that level: `fault-check`
-proves an app _spec_ notices its server failing, and nothing yet proves a subject _test_ notices its
-process failing.
+**Not landed.** C7 (the `searchIndex` mutation set), C8 (the comparator), and the rest of C5 —
+a vacuity check proving a subject _test_ notices its process failing, where `fault-check` does
+that for an app spec. The gate now runs a subject's changed test files with the subject's own
+runner, so the hook is in place and only the check is missing.
+
+**C6 landed on 2026-09-24 — the assertion floor, and it was built against the real corpus rather
+than a fixture.** `src/quality/assertion-floor.ts` reads whichever stack an app config declares,
+taking the assertion name from that stack's own import line, and refuses three shapes: a test
+with no assertion, a test whose every assertion sits inside a conditional or a loop, and a test
+that asserts only on literals no input can change. `npm run assertion-floor` is the command and
+`src/qe/run-gate.ts` runs it on a subject's changed test files, beside the subject's own runner.
+Two checks were made before it was trusted: on the human baseline it reports **exactly the two
+conditional-only tests** recorded here from reading — `if (results.length > 0)`, lines 182 and
+193 — and on the hand-written 28-test suite it reports 0 findings. It exits 2 rather than 0 when
+a file holds nothing it can read, and prints what it cannot see on every run, because a floor
+that reports a vacuous pass is the failure it exists to prevent. Five mutations.
+
+**A defect in the gate itself, found before the run rather than by it.** Every script-shaped gate
+step named a path relative to _this_ repository, and a subject run's worktree is a worktree of the
+_subject_ — so `node <tsx> src/cli/check-report.ts` died at `ERR_MODULE_NOT_FOUND` before it looked
+at anything the agent wrote. Reproduced from the subject worktree at `c8d7549` on 2026-09-24:
+**every subject run would have been failed by the harness's own path**, and since no subject run
+has ever reached a gate, nothing had noticed. The scripts now come from the checkout that holds
+them, while a run in this repository keeps the worktree's own copy — a run that changed the
+checker must be judged by the version it changed. Unit-tested in both directions, with a mutation.
+The integration tests for `candidates` and `survey` (PLAN item 62) found a second one: without
+`--tests`, `candidates` ignored the path it was given and mapped `src` instead.
+
+**The level block was the unit's, which would have corrupted the first integration run
+(2026-09-24).** `subjectLevels()` described one level, and the one it described was the unit's:
+composed for `integration-coder` against this same subject it said "anything needing a process, a
+file, or a running server is not this level", so the run would have been argued out of its own job
+by its own prompt. The level now comes from the role's name, each of the four levels has its own
+definition and boundary, the paragraph denying a browser is written only for the three levels where
+it is true, and a role that works at no level gets no level rather than the unit one. The same pass
+gave `integration-coder` the portability its sibling already had — no `tests/integration` path in
+its opening, no `npx playwright test --project=integration` in its method — because `forSubject`
+replaces only the two shared blocks, so those lines would have survived into a subject prompt.
+Five compose tests assert it in both directions; three mutations, each caught.
 
 **Every run attempt so far has stopped at authentication.** Each one created a worktree of the
 subject at `c8d7549` beside it — the direct evidence that C4 works end to end — released the lock,
@@ -69,11 +102,15 @@ so only an attempt can answer the question — and it has been answered: `claude
 `loggedIn: false` with `authMethod: none` on this machine. There is no session for the SDK to find,
 which is the whole blocker.
 
-**The route is `claude auth login`, in a person's own terminal, and nothing belongs in `.env`.** The
-key is documented as optional and CI-only; the line that once called it required is what caused a key
-to be issued that nobody needed, and it should be removed rather than honoured. `src/env.ts` anchors
-the environment file to its own module, so a key in the shared checkout would not reach a worktree
-run anyway — the wrong diagnosis, corrected here so the next person does not act on it.
+**Two routes, not one: `claude auth login`, or `CLAUDE_CODE_OAUTH_TOKEN` from `claude
+setup-token`.** A token in `.env` or in the shell is the route CI uses and the one that needs no
+interactive session, which is the state this machine is in. What belongs in neither `.env` nor
+the environment is `ANTHROPIC_API_KEY`: it is documented as optional and CI-only, and the line
+that once called it required is what caused a key to be issued that nobody needed, so it should
+be removed rather than honoured. `src/env.ts` anchors the environment file to its own module, so
+a credential in the shared checkout would not reach a worktree run anyway — the wrong diagnosis,
+corrected here so the next person does not act on it. A token is a secret and belongs nowhere
+near a transcript.
 
 **Not proven, and worth repeating.** A run is now possible: the worktree, the guard, the prompt and
 the gate all point at the subject. What has never happened is a single agent turn. The tests that
@@ -114,14 +151,14 @@ unit but the one tested. One unit is a proof of concept, not a measurement.
 `mcpa-training-bot` at `C:/Users/PC User/Documents/GitHub/mcpa-training-bot` — a clean
 git repository at `c8d7549`, zero uncommitted files.
 
-| What it has                                          | Why it matters                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| 9 hand-written `node:test` files under `test/`       | A human baseline, written without knowing an agent would be graded against it         |
-| `scripts/mutate-app.mjs` — 13 hand-written mutations | An objective quality score that predates this experiment and was not built to flatter |
-| `src/services/searchIndex.js` — BM25, tokenize, stem | Genuine unit territory: input to output, no I/O, nothing to mock                      |
-| Routes, MCP server, Express app                      | The other four roles later, without changing subject                                  |
-| Its own `.env`                                       | Exercises the rule that a harness must never inherit a subject's environment          |
-| A clean git history                                  | Makes the isolation model below possible at all                                       |
+| What it has                                          | Why it matters                                                                                                                                                                                                     |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 11 hand-written `node:test` files under `test/`      | A human baseline, written without knowing an agent would be graded against it — and five of them are the _integration_ level's (routes, MCP server, api, data integrity, docs), which is where the next PoC starts |
+| `scripts/mutate-app.mjs` — 13 hand-written mutations | An objective quality score that predates this experiment and was not built to flatter                                                                                                                              |
+| `src/services/searchIndex.js` — BM25, tokenize, stem | Genuine unit territory: input to output, no I/O, nothing to mock                                                                                                                                                   |
+| Routes, MCP server, Express app                      | The other four roles later, without changing subject                                                                                                                                                               |
+| Its own `.env`                                       | Exercises the rule that a harness must never inherit a subject's environment                                                                                                                                       |
+| A clean git history                                  | Makes the isolation model below possible at all                                                                                                                                                                    |
 
 ## 3. Architecture
 
@@ -395,12 +432,17 @@ Written 2026-09-24, for a context that has none of this conversation. Read it be
 
 ### The one thing only a person can do
 
-The run needs a Claude Code session and this machine has none: `claude auth status` reports
+The run needs a credential and this machine has none: `claude auth status` reports
 `loggedIn: false` with `authMethod: none`. Three attempts created a worktree of the subject,
 released the lock, touched nothing, and then failed before any model call with
-`Not logged in · Please run /login`. **The fix is `claude auth login`, run by a person in
-their own terminal, and nothing belongs in `.env`** — the key is documented as optional and
-CI-only, and `PLAN.md` item 6 already records OAuth as the route that works.
+`Not logged in · Please run /login`. **Either route closes it, and a person does it: an
+interactive `claude auth login`, or `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token` set in
+`.env` or the shell** — the token is what CI uses (run 34883565980, $0.0802), it needs no
+interactive session, and `.env.example` documents it as of 2026-09-24 because a person had to
+ask. `ANTHROPIC_API_KEY` is not needed: it is optional and CI-only, and `PLAN.md` item 6 already
+records OAuth as the route that works. A token is a secret; it goes in `.env` or the
+environment, never into a transcript. **`.env` is a person's file** — an AI edits `.env.example`
+and neither reads nor edits `.env`, which the file guard enforces.
 
 ### Then this command, and the objective's last clause is met
 
@@ -420,13 +462,20 @@ PoC exists to surface** — report it by name rather than quoting a rate.
    notices its server failing. Nothing proves a subject _test_ notices its process failing, a
    file that was not written, or an exit code that was swallowed. `src/qe/run-gate.ts` now
    runs a subject's changed test files with the subject's runner, so the hook exists.
-2. **C6 — the assertion floor for a subject's stack.** `assert-quality` reads TypeScript specs
-   only, so a `node:test` file can wrap every assertion in a conditional and pass having
-   asserted nothing. The subject's own suite does exactly that in two tests, and one asserts
-   only that its result is shorter than its input.
-3. **C7 — a mutation set for the search-index unit.** Fifteen seam-level mutations already
-   exist for the subject's routes and MCP server, written before this experiment. The unit has
-   none; the twenty used here live in a throwaway worktree rather than in this repository.
+2. **C6 — the assertion floor for a subject's stack. DONE 2026-09-24.** `assert-quality` reads
+   TypeScript specs only, so a `node:test` file could wrap every assertion in a conditional and
+   pass having asserted nothing — which the subject's own suite does in two tests, and one of
+   them asserts only that its result is shorter than its input. Built as
+   `src/quality/assertion-floor.ts` plus `npm run assertion-floor`, wired into the gate for a
+   subject's changed test files; the Status section records what it was checked against.
+3. **C7 — a mutation set for the search-index unit.** Thirteen seam-level mutations already
+   exist for the subject's routes and MCP server, written before this experiment — seven in
+   `src/routes/labs.js`, two in `src/mcp/server.js`, and one each in `src/server.js`,
+   `src/services/questionService.js` and `data/topics.json` (counted 2026-09-24; this said
+   fifteen). They are the integration level's mutations, not the unit's: `scripts/mutate-app.mjs`
+   runs a **fixed list of five suite files**, so it grades the subject's own routes, MCP, api,
+   data-integrity and docs tests and cannot grade a new file. The unit has none; the twenty used
+   here live in a throwaway worktree rather than in this repository.
 4. **C8 — the comparator.** Apply one mutation, run a named suite, record killed or survived,
    restore in a `finally`, and restore once more at the end. Built once as
    `mutate-search-index.mjs` beside the subject; it takes the suite file as an argument, which
@@ -437,8 +486,10 @@ PoC exists to surface** — report it by name rather than quoting a rate.
    report declares none; and the strength step requiring `survivors(after)` to be a subset of
    `survivors(before)`. That is the create / improve / remove capability, and the gate is the
    only component holding the pre-change revision.
-6. **An integration test for the two new CLIs.** `tests/integration/cli.int.test.ts` covers
-   every other CLI here; `src/cli/candidates.ts` and `src/cli/survey.ts` have none.
+6. **An integration test for the two new CLIs. DONE 2026-09-24** — `tests/integration/cli.int.test.ts`
+   now drives `candidates` and `survey` against a fixture, plus the floor CLI. It found a real
+   defect on the first run: without `--tests`, `candidates` dropped the path it was given (the
+   `indexOf` -1 defect already fixed in `survey` and left in this one) and mapped `src` instead.
 
 ### Loose ends, and where the artefacts are
 
@@ -455,3 +506,9 @@ PoC exists to surface** — report it by name rather than quoting a rate.
   refuses.
 - **Keep the subject's checkouts committed.** A dirty subject is refused by name, because a diff
   measured against uncommitted work would not be the run's own.
+- **The integration level is prepared, and not run.** `integration-coder` is now portable and the
+  subject's level block is level-aware (2026-09-24), both on this branch — see the Status section.
+  What it still lacks is a skill, the comparator, and the vacuity check: PLAN ids 65, 66 and 60,
+  and `.ai/state/POC-UNIT-CODER.md` §10 item 4 for the comparator. Its baseline is already there:
+  the subject's `labs-routes`, `mcp-server`, `api`, `data-integrity` and `docs` suites, and the 13
+  mutations its own `scripts/mutate-app.mjs` runs against exactly those five files.

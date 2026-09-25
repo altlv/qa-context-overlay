@@ -611,6 +611,38 @@ const MUTATIONS: Mutation[] = [
     breaks: 'A tag named in a test title must not count as a tag',
   },
   {
+    file: 'src/quality/assertion-floor.ts',
+    find: '    if (calls.length === 0) {',
+    replace: '    if (false) {',
+    breaks: 'A test that asserts nothing must be refused, whatever stack it is written in',
+  },
+  {
+    file: 'src/quality/assertion-floor.ts',
+    find: '    if (unguarded.length === 0) {',
+    replace: '    if (false) {',
+    breaks: 'A test whose every assertion is inside a branch must be refused',
+  },
+  {
+    file: 'src/quality/assertion-floor.ts',
+    find: '  return parts.length > 0 && parts.every((part) => LITERAL.test(part.trim()));',
+    replace: '  return false;',
+    breaks: 'An assertion on literals alone must be refused — no input can falsify it',
+  },
+  {
+    // Read as one argument list, the table is an empty body and every table-driven case
+    // is reported as asserting nothing: a detector firing on correct code.
+    file: 'src/quality/assertion-floor.ts',
+    find: '    if (/\\.each\\b/.test(declaration[0])) {',
+    replace: '    if (false) {',
+    breaks: 'A table-driven case must be read from its second argument list, not from its table',
+  },
+  {
+    file: 'src/quality/assertion-floor.ts',
+    find: '    if (/\\.(?:skip|todo|fixme)\\b/.test(declaration[0])) {',
+    replace: '    if (false) {',
+    breaks: 'A skipped declaration must not be judged — it never ran, so it never passed',
+  },
+  {
     file: 'src/fixtures/probes.ts',
     find: '  const delta = parsedStep !== null && parsedStep > 0 ? parsedStep : 1;',
     replace: '  const delta = 1;',
@@ -699,6 +731,15 @@ const MUTATIONS: Mutation[] = [
     breaks: 'A passed gate must hand nothing to an investigator',
   },
   {
+    // The split this closes: a subject run's worktree holds no `src/cli`, so every
+    // script-shaped step died at ERR_MODULE_NOT_FOUND before it looked at the work.
+    file: 'src/qe/run-gate.ts',
+    find: '    input.harnessRoot === undefined ? path : posix(join(input.harnessRoot, path));',
+    replace: '    path;',
+    breaks:
+      'A subject run must be gated by the harness’s own scripts, not by a path that is not there',
+  },
+  {
     file: 'src/qe/run-target.ts',
     find: '  const extra = registered.extraHosts.map((host) => host.toLowerCase());',
     replace: '  const extra: string[] = [];',
@@ -745,6 +786,29 @@ const MUTATIONS: Mutation[] = [
     find: '  if (skills.length === 0) return role.prompt;',
     replace: '  return role.prompt;',
     breaks: 'A role’s declared skills must reach its prompt as text',
+  },
+  {
+    // The split this closes: the subject's level block was a constant written for the unit
+    // PoC, so composed for an integration run it told the role that anything needing a
+    // process or a file "is not this level" — a prompt arguing against its own job.
+    file: 'src/agents/subject-prompt.ts',
+    find: '  return match === null ? null : (match[1] as SubjectLevel);',
+    replace: "  return 'unit';",
+    breaks: 'A subject run’s level must come from its role, not fall back to the unit definition',
+  },
+  {
+    file: 'src/agents/subject-prompt.ts',
+    // Always present, rather than present for three levels and absent for the fourth. An e2e
+    // run told there is no browser has been told its own level is out of scope.
+    find: "  const browser =\n    level === 'e2e'\n      ? ''\n      : `",
+    replace: "  const browser =\n    false\n      ? ''\n      : `",
+    breaks: 'A role whose level is the browser must not be told there is no browser',
+  },
+  {
+    file: 'src/agents/subject-prompt.ts',
+    find: '  if (level === null) {',
+    replace: '  if (false) {',
+    breaks: 'A role that works at no test level must be given no level definition',
   },
   {
     file: 'src/agents/models.ts',
@@ -805,7 +869,8 @@ const MUTATIONS: Mutation[] = [
     file: 'src/qe/file-guard.ts',
     find: '        if (SECRET_FILE.test(value.trim())) {',
     replace: '        if (false) {',
-    breaks: 'A file tool must not read .env, even inside the worktree',
+    breaks:
+      'A file tool must not read or edit .env, even inside the worktree — it is a person’s file',
   },
   {
     file: 'apps/targets.ts',

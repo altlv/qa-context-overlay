@@ -164,6 +164,12 @@ test.describe('the role runner, before it spends anything', () => {
     expect(
       run.stderr,
       'an investigator in the wrong folder would investigate specs that never failed',
-    ).toContain("is not one of this repository's run worktrees");
+    ).toContain('is not one of');
+    // The wording stopped being "this repository's" when a run's worktree became a worktree of
+    // the *subject*: the refusal now names the repository it checked, which is the fact a person
+    // needs when the subject is not this repository. Pinned to the contract, not the sentence.
+    expect(run.stderr, 'the refusal must name what it checked the path against').toContain(
+      'run worktrees',
+    );
   });
 });

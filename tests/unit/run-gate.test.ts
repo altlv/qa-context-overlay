@@ -101,12 +101,20 @@ test.describe('the coding gate', () => {
     // not own, and the only kind this role is pointed at.
     expect(names(plan), 'the subject runner replaces the spec-shaped steps').toEqual([
       'changed test passes: test/searchIndex.unit.test.js',
+      'assertion floor',
       'report',
     ]);
     expect(plan.steps[0]?.args, 'node --test over the changed file, in the worktree').toEqual([
       '--test',
       'test/searchIndex.unit.test.js',
     ]);
+    // The runner proves the tests pass; the floor proves they assert something. `assert-quality`
+    // reads Playwright specs, so a node:test file used to clear the gate having asserted nothing.
+    const floor = plan.steps.find((step) => step.name === 'assertion floor');
+    expect(
+      floor?.args.slice(-3),
+      'the stack’s own import line, then the file the floor judges',
+    ).toEqual(['--assertions', subjectStack.assertions, 'test/searchIndex.unit.test.js']);
     expect(plan.notRun.join(' '), 'and nothing claims to have been skipped').not.toContain(
       'nothing for the coding gate to check',
     );
@@ -124,6 +132,47 @@ test.describe('the coding gate', () => {
       plan.notRun.join(' '),
       'a subject run that wrote no test must say so, and say what would have counted',
     ).toContain('*.test.js');
+  });
+
+  test('should run the harness’s own scripts from a checkout that has them', () => {
+    const plan = planGate({
+      ...base,
+      role: 'unit-coder',
+      family: 'coding',
+      changed: ['test/searchIndex.unit.test.js'],
+      testStack: subjectStack,
+      harnessRoot: 'C:\\harness',
+    });
+    const report = plan.steps.find((step) => step.name === 'report');
+
+    // A subject run's worktree is a worktree of the *subject*, which holds no `src/cli`.
+    // Read relative to it, every script-shaped step died at ERR_MODULE_NOT_FOUND before the
+    // agent's work was looked at, so the run was failed by the harness's own path —
+    // reproduced from the subject worktree at mcpa-training-bot-runs/c8d7549 on 2026-09-24.
+    expect(report?.args.slice(-2), 'the checker comes from the checkout that holds it').toEqual([
+      'C:/harness/src/cli/check-report.ts',
+      REPORT,
+    ]);
+    const floor = plan.steps.find((step) => step.name === 'assertion floor');
+    expect(
+      floor?.args[1],
+      'every script-shaped step, including the newest, resolves where the script actually is',
+    ).toBe('C:/harness/src/cli/assertion-floor.ts');
+  });
+
+  test('should keep the worktree’s own script for a run in this repository', () => {
+    const plan = planGate({
+      ...base,
+      role: 'e2e-coder',
+      family: 'coding',
+      changed: ['apps/todo-fixture/tests/add.ui.spec.ts'],
+    });
+    const quality = plan.steps.find((step) => step.name === 'assert-quality');
+
+    // Not absolute: a run that changed the checker must be judged by the version it changed.
+    expect(quality?.args[1], 'a run is judged by the copy in its own worktree').toBe(
+      'src/cli/assert-quality.ts',
+    );
   });
 
   test('should say when a coding run changed no spec', () => {
