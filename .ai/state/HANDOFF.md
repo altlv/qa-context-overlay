@@ -121,7 +121,11 @@ Curated, not appended. Delete anything that stops being true.
   committed file describes what the commit contains. The same logic bounds the plan's
   head stamp: a file cannot name the hash of the commit that includes it, so it names
   the parent, and `npm run precommit` accepts that only when the latest commit
-  actually updated the plan.
+  actually updated the plan. **Which means it has to be re-bumped before every commit in
+  a series, not once.** On 2026-09-24 two commits in a row both touched `PLAN.md`, only
+  the first was re-stamped, and the branch tip ended up naming a grandparent — fresh for
+  the author who checked before committing, stale for whoever commits next. Precommit
+  refuses it out loud, one commit late.
 - **Uncommitted work is invisible to a `git diff` self-check.** Before overwriting a
   file, run `git status` on it: if it carries uncommitted changes, whatever you are
   about to destroy was never in HEAD, so the diff afterwards cannot show it to you.
