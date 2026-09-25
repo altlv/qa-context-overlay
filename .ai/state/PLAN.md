@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `aed75eb` — the commit this file was last checked against. A file cannot name
+Head is `cc07741` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 

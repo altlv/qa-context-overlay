@@ -71,6 +71,13 @@ kind; a named gap invites the fix.
   produces a score for work that was never run.
 - **A red suite reports every mutation as caught.** Both the subject's suites and the agent's must be
   green before a score means anything; the comparator refuses rather than scoring.
+- **The seam's human baseline needs the subject's labs built first.** Measured 2026-09-24: in a bare
+  worktree of `c8d7549`, `test/labs-routes.test.js` fails at its own `startLab` with a 502 against an
+  expected 200, because the lab servers under `labs/*/build/` are not built — the registry's own
+  `startHint` says `npm run build` and nothing has run it. So the bar cannot be established, and an
+  agent's file cannot be scored, until the worktree is prepared. That belongs in the app config's
+  setup story, which for `mcpa` currently says only that the subject starts itself. The comparator
+  refusing to score a red suite is what surfaced it, in one run and by name.
 - **A short 8.3 path as `cwd` breaks a spawned process's relative resolution** — item 41, met again
   while building the comparator.
 - **One credential, one run.** The token goes in the _worktree's_ `.env`, because `src/env.ts` loads
