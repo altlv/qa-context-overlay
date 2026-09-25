@@ -124,12 +124,19 @@ test.describe('the unexpected as the founding expectation', () => {
   });
 
   test('should name assumptions about normal input as the largest blind spot', () => {
-    // A session swept security clean, swept performance clean, pushed 627,200
-    // characters through a text parser and never once left ASCII. Three of that
-    // target's high-impact defects sat behind a single accented character.
     expect(prompt).toContain('largest unexamined thing you carry');
-    expect(prompt).toContain('never once left ASCII');
     expect(prompt).toMatch(/what is the\s+version of this I have not imagined/);
+  });
+
+  test('should treat a clean sweep as a claim that owes an oracle', () => {
+    // This file asserted "never once left ASCII" for exactly one commit, and it was
+    // false. The session had swept locale properly — precomposed and combining
+    // accents, German sz, CJK, Arabic RTL, emoji, a combining mark inside a target
+    // word — and reported it clean. The target's key says three high-impact defects
+    // live exactly there. One of the two is wrong, and the report cannot say which,
+    // because a clean sweep was recorded as a result and not as a disagreement.
+    expect(prompt).toContain('that clean result is a claim too');
+    expect(prompt).toMatch(/a sweep\s+that cannot fail is a sweep that proves nothing/);
   });
 });
 
@@ -148,6 +155,14 @@ test.describe('reading the product before ranking the work', () => {
 
   test('should make a wrong ranking something the session has to admit', () => {
     expect(prompt).toContain('you chose badly and should say so');
+  });
+
+  test('should blame not ranking rather than ranking wrongly', () => {
+    // The same session ranked security worth probing on a tool with no backend, and
+    // that apparently unpromising choice produced a real seeded defect. An earlier
+    // version of this prompt cited it as budget wasted, which was simply untrue.
+    expect(prompt).toContain('Ranking badly is not the');
+    expect(prompt).toMatch(/habit\s+runs the same sweep against a bank and a spellchecker/);
   });
 });
 

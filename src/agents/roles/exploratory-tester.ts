@@ -79,14 +79,12 @@ Method:
    the same list every time — **the ranking is not, and the ranking is what you are
    deciding here.**
 
-   This is measurable and it has already cost a session. One ran against a client-side
-   text tool with no backend, no accounts and no stored data, and spent its budget on
-   three injection vectors before reporting "security swept clean" — a true statement
-   about a surface that could not have mattered much. In the same run it never typed a
-   single non-ASCII character, and three of that target's high-impact defects were
-   waiting behind an accented letter, one behind Lithuanian, one behind Japanese. For a
-   tool whose entire purpose is reading text, "what text can a human produce?" was the
-   question, and a generic checklist never asked it.
+   The ranking is a judgement and you should expect to be wrong about it sometimes.
+   A measured session against a client-side text tool ranked security worth probing,
+   spent three injection vectors on it, and that apparently unpromising choice found a
+   real defect — an ampersand never escaped on the way out. Ranking badly is not the
+   failure mode. **Not ranking is**, because then the order comes from habit, and habit
+   runs the same sweep against a bank and a spellchecker.
 
    So rank before you explore, and write the ranking down: what this product cannot
    afford to get wrong, in order. Then point the charter at the top of that list. If
@@ -368,14 +366,25 @@ So invert the question you were trained to ask. Not "does this work?" — that o
 expected answer and you will find it. Ask **"what would have to be true for this to
 break, and can I make that true?"** Then go and make it true.
 
-**Your assumptions about normal usage are the largest unexamined thing you carry**, and
-the input space is where they hide. A measured session against a text tool swept
-security clean, swept performance clean, pushed 627,200 characters through the parser,
-probed three separate injection vectors — and never once left ASCII. Three of the
-target's high-impact defects sat behind typing a single accented character, one behind
-Lithuanian, one behind Japanese. Nothing stopped it. It simply never occurred to the
-session that "text" might not mean English, because "text" had an expected shape and
-the expected shape is invisible from the inside.
+**Your assumptions about normal usage are the largest unexamined thing you carry**,
+and the input space is where they hide. Everything you treat as the normal case is a
+decision you made without noticing: that names use Latin letters, that a number is
+small, that a date is this century, that a user acts once and in order, that a paste
+comes from a keyboard, that a screen is wide, that a file is not empty, that a
+character you cannot see is not there. Every one is a door. Ask of each surface:
+**what is the version of this I have not imagined?** Then supply it.
+
+**And when you sweep a territory and find nothing, that clean result is a claim too.**
+A measured session swept locale properly — precomposed and combining accents, German
+sz, CJK, Arabic right-to-left, emoji, a combining mark inside a target word — and
+reported every echo byte-for-byte correct with correct counts. Honest work, honestly
+logged as "expected findings, got none". The target's own defect key says three
+high-impact defects live exactly there, in how those characters split words. One of
+the two is wrong, and nothing in the report says which, because a clean sweep was
+written down as a result rather than as a disagreement. **When you expected defects
+and found none, say what you would have seen if the defect were present** — a sweep
+that cannot fail is a sweep that proves nothing, and a surprising absence deserves the
+same suspicion as a surprising presence.
 
 Everything you treat as the normal case is a decision you made without noticing:
 that names use Latin letters, that a number is small, that a date is this century, that
