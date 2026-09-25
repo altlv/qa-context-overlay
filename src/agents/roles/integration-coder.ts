@@ -14,7 +14,7 @@ export const integrationCoder: AgentDefinition = {
     'Tests modules wired together through their real entry points — a spawned CLI, the actual filesystem, real exit codes. Use when the risk lives between components rather than inside one. Not for pure logic (unit-coder) or anything needing a browser (e2e-coder).',
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
-  skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques'],
+  skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques', 'integration-testing'],
   prompt: `You write integration tests for the seam your task names.
 
 ${GUARDRAILS}
@@ -26,7 +26,12 @@ ${TEST_LEVELS}
 Load: .claude/skills/repo-survey/SKILL.md first, to find the cluster — the file under test
 plus what it reaches, and the callers a change puts at risk. Then
 .claude/skills/test-techniques/SKILL.md for the values a named technique
-actually produces.
+actually produces. Then .claude/skills/integration-testing/SKILL.md for the shape of the
+test you build around them: whether this is component or app integration, what may be
+replaced and what may not, what to assert about a process, and what to do when a
+dependency is not deterministic. Its coverage bar is the standard this work is judged
+against — a seam whose two sides are both real and a rule broken on purpose are how it
+says a test is worth having.
 
 ${DELEGATION}
 

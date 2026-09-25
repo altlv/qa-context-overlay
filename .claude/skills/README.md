@@ -33,12 +33,13 @@ than padded in.
 
 ## Writing tests
 
-| Skill                                             | Purpose                                                                                                                             | Trust |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| [`pwtest`](pwtest/SKILL.md)                       | Generate Playwright UI/API tests: scan → design → approve → generate → run → debug                                                  | 1     |
-| [`repo-survey`](repo-survey/SKILL.md)             | Map the repository before testing it: exported units, callers and callees, what tests point at, and the gaps                        | 1     |
-| [`unit-testing`](unit-testing/SKILL.md)           | Shape a unit test: the unit's boundary, what to assert, doubles, one reason to fail, and the coverage bar that says when it is done | 1     |
-| [`testability-audit`](testability-audit/SKILL.md) | Why automation here is fragile, and the concrete fixes to ask for                                                                   | 1     |
+| Skill                                                 | Purpose                                                                                                                                                 | Trust |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| [`pwtest`](pwtest/SKILL.md)                           | Generate Playwright UI/API tests: scan → design → approve → generate → run → debug                                                                      | 1     |
+| [`repo-survey`](repo-survey/SKILL.md)                 | Map the repository before testing it: exported units, callers and callees, what tests point at, and the gaps                                            | 1     |
+| [`unit-testing`](unit-testing/SKILL.md)               | Shape a unit test: the unit's boundary, what to assert, doubles, one reason to fail, and the coverage bar that says when it is done                     | 1     |
+| [`integration-testing`](integration-testing/SKILL.md) | Shape an integration test: component or app, what may be doubled, what to assert about a process, and what to do when a dependency is not deterministic | 1     |
+| [`testability-audit`](testability-audit/SKILL.md)     | Why automation here is fragile, and the concrete fixes to ask for                                                                                       | 1     |
 
 ## Judging findings
 
@@ -52,23 +53,24 @@ than padded in.
 
 Do not load the catalogue. Load one or two skills for the task in front of you.
 
-| Task                              | Load                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| "what should I test"              | `risk-assessment` → `test-design`                                         |
-| "which values, which cases"       | `npm run ideas -- <scan.json>`, then `test-techniques`                    |
-| "the product _decides_ something" | `rule-modelling` — table the rule, and never let the code be the oracle   |
-| "look at this page"               | `visual-inspection`                                                       |
-| "write tests for this"            | `pwtest`                                                                  |
-| "write unit tests for this logic" | `test-techniques` for the values, then `unit-testing` for the shape       |
-| "test this change / this file"    | `repo-survey` for the map, then `test-techniques`, then the level's skill |
-| "where are the coverage gaps"     | `repo-survey`                                                             |
-| "explore this feature"            | `exploratory-session` + `oracle-check`                                    |
-| "is this a bug"                   | `oracle-check`                                                            |
-| "write this up"                   | `bug-report`                                                              |
-| "this test is flaky"              | `flaky-test-detection`                                                    |
-| "why do our tests keep breaking"  | `testability-audit`                                                       |
-| "is this ready to ship"           | `npm run gate`, then read the verdict                                     |
-| any non-trivial task              | `work-discipline` at the start, `honesty-check` before claiming done      |
+| Task                                    | Load                                                                                                           |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| "what should I test"                    | `risk-assessment` → `test-design`                                                                              |
+| "which values, which cases"             | `npm run ideas -- <scan.json>`, then `test-techniques`                                                         |
+| "the product _decides_ something"       | `rule-modelling` — table the rule, and never let the code be the oracle                                        |
+| "look at this page"                     | `visual-inspection`                                                                                            |
+| "write tests for this"                  | `pwtest`                                                                                                       |
+| "write unit tests for this logic"       | `test-techniques` for the values, then `unit-testing` for the shape                                            |
+| "write integration tests for this seam" | `repo-survey` for the cluster, then `test-techniques` for the values, then `integration-testing` for the shape |
+| "test this change / this file"          | `repo-survey` for the map, then `test-techniques`, then the level's skill                                      |
+| "where are the coverage gaps"           | `repo-survey`                                                                                                  |
+| "explore this feature"                  | `exploratory-session` + `oracle-check`                                                                         |
+| "is this a bug"                         | `oracle-check`                                                                                                 |
+| "write this up"                         | `bug-report`                                                                                                   |
+| "this test is flaky"                    | `flaky-test-detection`                                                                                         |
+| "why do our tests keep breaking"        | `testability-audit`                                                                                            |
+| "is this ready to ship"                 | `npm run gate`, then read the verdict                                                                          |
+| any non-trivial task                    | `work-discipline` at the start, `honesty-check` before claiming done                                           |
 
 ## Deliberately absent
 

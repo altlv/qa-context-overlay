@@ -124,6 +124,20 @@ const MUTATIONS: Mutation[] = [
     breaks: 'A skill that no role declares must be reported as orphaned',
   },
   {
+    // `integration-testing` has exactly one declarer, so removing it from this array orphans
+    // the skill and leaves the integration level loading only a map and a technique list.
+    file: 'src/agents/roles/integration-coder.ts',
+    find: "skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques', 'integration-testing'],",
+    replace: "skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques'],",
+    breaks: 'The integration level’s skill must be declared by the role that needs it',
+  },
+  {
+    file: 'src/agents/roles/integration-coder.ts',
+    find: 'Then .claude/skills/integration-testing/SKILL.md for the shape of the',
+    replace: 'Then the level skill for the shape of the',
+    breaks: 'A skill declared in the array and never named in the prose is loaded and unexplained',
+  },
+  {
     file: 'src/agents/roles/failure-investigator.ts',
     // maxTurns 25 is unique to this role, which is what keeps the anchor from
     // matching one of the other seven `tools:` lines. The previous anchor spanned the

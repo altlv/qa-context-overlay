@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `9cf9302` — the commit this file was last checked against. A file cannot name
+Head is `7ecc8d6` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -319,6 +319,36 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
   tests were found, but no run has yet been judged by it. What none of this proves is that a
   coder given them writes better tests, which is the claim a run against a subject is meant to
   settle.
+
+## The layer roles, and what judges each
+
+This session's scope: the roles that **create** tests at each layer, and the evaluation that
+decides whether what they wrote is worth anything. Those are two capabilities, and they are not at
+the same stage — the roles exist, the judgement exists for this repository's own stack, and only
+part of it survives the subject being swapped.
+
+| Level       | Role                   | Its level skill                          | What re-checks its output when the subject is not this repository                                          |
+| ----------- | ---------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| unit        | `unit-coder`           | `unit-testing`                           | the subject's own runner, then `npm run assertion-floor`. Mutation needs the unit's set and the comparator |
+| integration | `integration-coder`    | none yet — the brief is written          | the subject's own runner, then the floor. The comparator and item 60 are both open                         |
+| api         | `api-coder`            | none — `pwtest` and `test-techniques`    | `assert-quality`, a Playwright run, `fault-check`. It also refuses to start without a committed `--design` |
+| e2e         | `e2e-coder`            | none — as api                            | the same three, over app specs; `--design` and `--app --env` as well                                       |
+| exploratory | `exploratory-tester`   | `exploratory-session` and four more      | `check-report`, and it is the one role that has run for real                                               |
+| design      | `test-planner`         | `test-design`, `risk-assessment`         | `check-report` on the design, plus the gate's own "wrote no design" problem                                |
+| review      | `testability-reviewer` | `testability-audit`, `visual-inspection` | its report only                                                                                            |
+
+**No coder role has ever run. Three of the testing family have** — `test-planner`,
+`testability-reviewer` and `exploratory-tester` — which is exactly the asymmetry to close: a role
+that writes tests and a role that judges them are both tested here, and only the judging half has
+met a live agent. The two this pair of PoCs takes, unit and integration, are also the two whose
+judgement half is provably incomplete: the floor covers any stack, the comparator does not exist,
+and nothing yet proves a subject test notices its process failing. That is why the comparator sits
+before the next run rather than after it.
+
+For an **AI-backed** subject the judgement has four layers rather than one — deterministic
+foundations on a mock provider, reproducible reality by record and replay, success rates over runs,
+and rubric judgement — and this repository has partial foundations for the first two and none for
+the last two. Items 43–46, from `docs/sources.md`.
 
 ## The measured gap
 
