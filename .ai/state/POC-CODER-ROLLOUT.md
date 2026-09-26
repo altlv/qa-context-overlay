@@ -33,6 +33,38 @@ The comparison column is the whole PoC method — the subject ships a human base
 | e2e         | `e2e-coder`            | **probably none** (id 69) — `pwtest` covers the generation workflow | the subject's Playwright suite under `e2e/`, page objects included | baselines/heal + the subject's own suite                             | a browser installed on this machine; `--design`; the subject's front end built                   |
 | AI          | decision first (id 70) | `agent-testing` **if** the item-43 ruling stands                    | `test/chatService.test.js`                                         | the four layers: mock provider, record/replay, success rates, rubric | the item-43 ruling; layer 1 needs no new infrastructure                                          |
 
+### 2b. Performance — the role this plan left out
+
+Raised by the user on 2026-09-25: an agent for performance **test creation and maintenance**. It is the
+same shape of question as the AI-coder, so the two need the same ruling.
+
+**Performance is a quality attribute, not a level.** A performance test can live at any of the four: a
+benchmark over a pure function (unit), a service measured through its real dependency (integration), a
+load profile against the HTTP surface (api), or page weight and timings in a browser (e2e). A role
+named `performance-coder` therefore crosses the axis the four coders split on — exactly the objection
+recorded in item 43 against `agentic-coder`. **What is genuinely different is the instrument:** a
+measurement is statistical rather than pass or fail, so it needs thresholds, a baseline per metric, and
+a comparison across runs.
+
+**What already exists.** `npm run archive-results` keeps the newest 20 runs (item 26), which is the
+history a trend needs. The network-capture fixture records timings, E5b reads the live DOM, and
+`flaky-test-detection` already carries the discipline of a _rate_ rather than a verdict. PLAN item 8 —
+the scan-side performance pass, `performance.getEntriesByType`, about fifteen lines — has never been
+built.
+
+**What is missing, in order.** (1) Item 8's numbers, so a session can see page weight and timings at
+all; (2) **thresholds** — a stated budget per metric, without which a number is an opinion; (3) a
+**comparator for measurements**, the analogue of `mutation-compare`: same suite, N runs, median and
+spread, and a refusal when a metric regressed beyond its budget; (4) a gate rule that reads it; and only
+then (5) the skill, or role, that writes and maintains the suites.
+
+**The ruling, to be made with item 43 — one axis or two.** One axis keeps a role per level and puts
+performance and AI in skills plus tools; two axes adds roles named for what is measured. The
+recommendation is **skills and tools for both**, and the user's word _maintenance_ deserves its own
+answer: an owner that keeps baselines current across runs is a maintenance obligation, and this repo
+has already declined a maintenance role once (_Considered and declined_) in favour of the pre-commit
+end gate. On that precedent, maintenance belongs in the gate rather than in a role.
+
 ## 3. Tools: built, missing, and where each belongs
 
 **Built** — `candidates`, `survey`, `assertion-floor`, `mutation-compare`, `fault-check`, `gate`,
