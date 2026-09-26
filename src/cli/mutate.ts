@@ -845,6 +845,20 @@ const MUTATIONS: Mutation[] = [
     breaks: 'An empty mutation set must be refused, not scored as a perfect result',
   },
   {
+    // The two rules the first live run earned: the banner must show an operator's override, and a
+    // stopped run must not report itself as free. Both are killed by budget-line.test.ts.
+    file: 'src/agents/budget-line.ts',
+    find: '    line.overrodeTimeout',
+    replace: '    false',
+    breaks: 'An operator’s wall-clock override must be named in the banner',
+  },
+  {
+    file: 'src/agents/budget-line.ts',
+    find: '  const unmeasured = line.turns === 0 && line.stoppedBy !== null;',
+    replace: '  const unmeasured = false;',
+    breaks: 'A run stopped before any result must report its cost as unmeasured, not zero',
+  },
+  {
     file: 'src/agents/models.ts',
     find: '    timeoutMs: declaredSeconds * 1000,',
     replace: '    timeoutMs: 180_000,',
