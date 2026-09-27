@@ -19,9 +19,22 @@ const config: AppConfig = {
     local: {
       baseURL: 'http://127.0.0.1:3000',
       // No `webServer`: Playwright would run the command from this repository, where
-      // `npm start` starts nothing. The subject starts itself from its own checkout, and
-      // a unit run needs no server at all.
-      note: 'Start it in the subject checkout: npm start (PORT defaults to 3000).',
+      // `npm start` starts nothing.
+      //
+      // And no server needs starting by hand either, which is worth saying because this
+      // note used to tell a person to. A unit run needs no server. An integration test
+      // starts the app **itself**, through its real entry point on a port the OS hands
+      // out — `spawn(process.execPath, ['src/server.js'])` with PORT in its environment —
+      // which is what owning the lifecycle means: no collision between two runs, and the
+      // entry point under test rather than assumed to be up.
+      //
+      // The one shared port is the weather lab's 3001, pinned by the subject's registry
+      // rather than chosen by a test, so a lab left listening from an earlier run is
+      // reused rather than replaced.
+      note:
+        'Nothing to start by hand: a unit run needs no server, and an integration test spawns ' +
+        'src/server.js on an OS-assigned port itself. Only a browser run against this baseURL ' +
+        'needs `npm start` in the subject checkout.',
     },
   },
   defaultEnvironment: 'local',
@@ -41,6 +54,22 @@ const config: AppConfig = {
     assertions: "const assert = require('node:assert/strict');",
     exemplar: 'test/specIndexer.test.js',
   },
+  /**
+   * The three protocol labs, compiled.
+   *
+   * `test/labs-routes.test.js` starts labs over HTTP and asserts 200, and each lab is a
+   * TypeScript project whose `build/` is gitignored — 0 build files are tracked. So the
+   * suite passes 11 of 11 in the prepared checkout and is red in a bare worktree, which
+   * would score every mutation as caught.
+   *
+   * `npm install` before `npm run build` because the labs are not part of the subject's
+   * root install, and each has its own `tsc`.
+   */
+  prepare: [
+    { in: 'labs/weather-modern', run: 'npm install --no-audit --no-fund && npm run build' },
+    { in: 'labs/oauth-local', run: 'npm install --no-audit --no-fund && npm run build' },
+    { in: 'labs/gmail-draft', run: 'npm install --no-audit --no-fund && npm run build' },
+  ],
 };
 
 export default config;

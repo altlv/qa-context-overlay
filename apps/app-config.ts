@@ -82,6 +82,25 @@ export interface AppConfig {
    */
   testStack?: TestStack;
   /**
+   * What a fresh worktree of this subject needs before its own suite can pass.
+   *
+   * A worktree holds what git tracks and nothing else, and a subject's tests may need
+   * what it does not track. Measured on `mcpa` at `c8d7549`: its three protocol labs are
+   * TypeScript projects whose `build/` output is gitignored, so `test/labs-routes.test.js`
+   * is **red in a bare worktree** while passing 11 of 11 in the prepared checkout — the
+   * registry's endpoints cannot answer 200 for a lab that was never compiled.
+   *
+   * Red is the dangerous state here rather than merely an inconvenient one, because
+   * **a red suite reports every mutation as caught.** A run scored against an unprepared
+   * worktree does not fail honestly; it produces a perfect score that means nothing. So
+   * this is declared by the subject, run in the worktree before anything judges it, and a
+   * step that fails stops the run rather than being noted and passed over.
+   *
+   * Each entry is a command line and a directory to run it in, relative to the worktree.
+   * Ordered: later steps may depend on earlier ones.
+   */
+  prepare?: { in: string; run: string }[];
+  /**
    * Hosts a run against this app may reach beyond its base URL — an auth provider, a
    * separate API. The allowlist a role run's browser and shell guard both honour.
    *

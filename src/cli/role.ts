@@ -380,6 +380,40 @@ process.on('uncaughtException', (error) => {
   void keepEvidence('the run threw').then(() => process.exit(1));
 });
 
+// ── Preparing the worktree, when the subject says it needs it ─────────────────────
+//
+// A worktree holds what git tracks and nothing else. `mcpa`'s protocol labs are
+// TypeScript projects whose `build/` is gitignored, so its own `test/labs-routes.test.js`
+// passes 11 of 11 in the prepared checkout and is red in a bare worktree.
+//
+// Red is the dangerous state, not merely the inconvenient one: **a red suite reports
+// every mutation as caught.** A run judged in an unprepared worktree does not fail
+// honestly — it scores perfectly and means nothing. So a failing step ends the run here,
+// before an agent spends anything, rather than being noted and passed over.
+const prepareSteps = subjectConfig?.prepare ?? [];
+if (prepareSteps.length > 0 && reusePath === undefined) {
+  console.error(`Preparing the worktree — ${prepareSteps.length} step(s) the subject declares:`);
+  for (const step of prepareSteps) {
+    const at = resolve(worktree, step.in);
+    if (!existsSync(at)) {
+      refuse(`prepare step names ${step.in}, which does not exist in the worktree`);
+    }
+    try {
+      await exec(step.run, [], { cwd: at, shell: true, windowsHide: true, maxBuffer: 1 << 26 });
+      console.error(`  ✓ ${step.in}: ${step.run}`);
+    } catch (error) {
+      const out = error as { stdout?: string; stderr?: string };
+      for (const line of `${out.stdout ?? ''}${out.stderr ?? ''}`.trim().split('\n').slice(-12)) {
+        console.error(`      ${line}`);
+      }
+      refuse(
+        `prepare step failed in ${step.in}: ${step.run}\n` +
+          "  The subject's own suite would be red, and a red suite reports every mutation as caught.",
+      );
+    }
+  }
+}
+
 // ── The browser, when the role looks at running software and has somewhere to look ─
 
 let browser: {
