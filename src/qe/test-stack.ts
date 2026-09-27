@@ -30,15 +30,60 @@ export interface TestStack {
   exemplar: string;
 }
 
+/** `\` to `/`, so a path git spells the Windows way compares to a pattern written the other. */
+function posix(value: string): string {
+  return value.split('\\').join('/');
+}
+
+const SPECIAL = /[.+^${}()|[\]\\]/g;
+const ANY_DIRS = '\u0000d\u0000';
+const ANY = '\u0000a\u0000';
+
+/**
+ * The subset of glob a stack may declare, as a regular expression.
+ *
+ * `**` matches any run of directories, `*` any run of characters inside one segment, and
+ * everything else is literal. The two wildcards are parked on placeholders so that `**` is
+ * never rewritten a second time by the `*` substitution; NUL is the sentinel because a
+ * declared pattern cannot contain one, which no printable sentinel could promise.
+ */
+function patternToRegExp(pattern: string): RegExp {
+  const source = pattern
+    .replace(SPECIAL, '\\$&')
+    // `**/` before `**`, so the slash it owns travels with it and is not left required.
+    .split('**/')
+    .join(ANY_DIRS)
+    .split('**')
+    .join(ANY)
+    .split('*')
+    .join('[^/]*')
+    .split(ANY_DIRS)
+    .join('(?:.*/)?')
+    .split(ANY)
+    .join('.*');
+  return new RegExp(`^${source}$`);
+}
+
 /**
  * The changed paths that are test files under this stack.
  *
- * A literal suffix is enough for the patterns a stack declares — `*.test.js`, or a path
- * pattern ending in `.spec.ts`. Anything more elaborate belongs in the config as a plain
- * suffix rather than as a glob dialect this would have to reimplement.
+ * **The pattern is matched whole.** An earlier version kept only its last segment and threw
+ * the directories away, which stays quiet until a subject declares a pattern whose
+ * discrimination lives in its path. A pattern of `tests/` then `**` then `/*.js` reduced to
+ * the suffix `.js`, and so matched every changed JavaScript file in the repository, source
+ * included — the gate would run `src/index.js` as a test and fail a run that had done nothing
+ * wrong.
+ *
+ * That is the exact failure the tests beside this warn about in their own words, and they
+ * missed it because every pattern they exercised discriminates on its last segment. A matcher
+ * earns its place over a suffix precisely because the cost is asymmetric: too narrow and the
+ * gate reports nothing to check, too wide and it fails honest work.
+ *
+ * A pattern with no slash is matched against the basename, so `*.test.js` still means "a test
+ * file anywhere" — which is how every stack so far writes it.
  */
 export function subjectTests(stack: TestStack, paths: readonly string[]): string[] {
-  const lastSegment = stack.testFilePattern.slice(stack.testFilePattern.lastIndexOf('/') + 1);
-  const suffix = lastSegment.replace(/^\*/, '');
-  return paths.filter((path) => path.replace(/\\/g, '/').endsWith(suffix));
+  const declared = posix(stack.testFilePattern);
+  const matches = patternToRegExp(declared.includes('/') ? declared : `**/${declared}`);
+  return paths.filter((path) => matches.test(posix(path)));
 }

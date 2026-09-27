@@ -46,4 +46,33 @@ test.describe('picking the subject test files out of a change', () => {
   test('should find nothing in a change that touched no test', () => {
     expect(subjectTests(stack('*.test.js'), ['src/server.js', 'README.md'])).toEqual([]);
   });
+
+  // These four are the cases the tests above could not fail. Every pattern they exercise
+  // discriminates on its last segment, so an implementation that kept only that segment and
+  // discarded the directories passed all of them — while turning "tests/**/*.js" into the
+  // suffix ".js" and claiming every changed JavaScript file in the repository.
+  test('should honour the directory part of a pattern, not only its last segment', () => {
+    expect(
+      subjectTests(stack('tests/**/*.js'), ['tests/unit/x.js', 'src/index.js', 'src/deep/a.js']),
+      'a pattern whose discrimination lives in its path must not reduce to a file suffix',
+    ).toEqual(['tests/unit/x.js']);
+  });
+
+  test('should claim nothing when the declared directory is absent from the change', () => {
+    expect(subjectTests(stack('**/__tests__/*.js'), ['src/index.js', 'lib/util.js'])).toEqual([]);
+  });
+
+  test('should keep * inside one segment', () => {
+    // "src/*.js" names the files directly in src, not the tree beneath it. A matcher that
+    // let * cross a slash would hand the gate a file two directories down.
+    expect(subjectTests(stack('src/*.js'), ['src/a.js', 'src/deep/b.js'])).toEqual(['src/a.js']);
+  });
+
+  test('should treat a pattern with no slash as "anywhere"', () => {
+    // Which is how every stack so far writes it, and the reason the old suffix match looked
+    // sufficient for as long as it did.
+    expect(subjectTests(stack('*.test.js'), ['deep/nested/a.test.js'])).toEqual([
+      'deep/nested/a.test.js',
+    ]);
+  });
 });
