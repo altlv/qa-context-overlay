@@ -36,14 +36,21 @@ function fail(check: string, detail: string): void {
 }
 
 /**
- * `PLAN.md` is exempt, and deliberately.
+ * Planning documents are exempt, and deliberately.
  *
  * A plan names things that do not exist — that is what a plan is. The first run of
  * this command flagged `.ai/state/triage.json`, `apps/todo-fixture/coverage.md` and
  * `npm run plan:facts`, all three of which are queue items *because* they are
  * missing. Checking it would train everyone to ignore this command.
+ *
+ * Exempt by class rather than by list: `PLAN.md` covers the repository and a `POC-*.md`
+ * covers one piece of work, and a proof of concept names the files it has not reached yet
+ * as the point of it. The brief for such a piece names a conditional deliverable that may
+ * be the right decision *not* to produce — the `test-doubles` skill was deliberately not
+ * split out — and a checker insisting it exist would be arguing against the judgement the
+ * document asks for.
  */
-const EXEMPT = new Set(['.ai/state/PLAN.md']);
+const EXEMPT = /^\.ai\/state\/(?:PLAN|POC-[A-Za-z0-9-]+)\.md$/;
 
 /**
  * The documents to check: every tracked `.md`, or the ones named as arguments.
@@ -62,7 +69,7 @@ function documentsToCheck(): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .filter((file) => !EXEMPT.has(file.replace(/\\/g, '/')));
+    .filter((file) => !EXEMPT.test(file.replace(/\\/g, '/')));
 }
 
 /**

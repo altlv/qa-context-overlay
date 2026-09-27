@@ -25,6 +25,13 @@ collides with an existing one.
 
 - **The user owns every commit and push.** Do not commit unprompted, never push
   unasked. Reach a coherent point, say what it would contain, let them decide.
+- **`.env` belongs to a person; an AI edits `.env.example` and nothing else.** Never read one,
+  never edit one, never commit one. It holds secrets, it is gitignored so a worktree never has
+  one, and a path naming it is looking for a secret. Enforced rather than asked for:
+  `fileToolGuard` refuses `.env` and its variants on every file tool while allowing
+  `.env.example`, the shell guard refuses reading one, and `CLAUDE.md` states it. Documenting a
+  new variable — or correcting what a variable is for — happens in `.env.example`. (User,
+  2026-09-24.)
 - **mcpa-bot is its own repository.** It may be read as a benchmark; nothing from it is
   copied in.
 - **Do not put inventory counts in documentation.** Name the command that produces the
@@ -114,7 +121,11 @@ Curated, not appended. Delete anything that stops being true.
   committed file describes what the commit contains. The same logic bounds the plan's
   head stamp: a file cannot name the hash of the commit that includes it, so it names
   the parent, and `npm run precommit` accepts that only when the latest commit
-  actually updated the plan.
+  actually updated the plan. **Which means it has to be re-bumped before every commit in
+  a series, not once.** On 2026-09-24 two commits in a row both touched `PLAN.md`, only
+  the first was re-stamped, and the branch tip ended up naming a grandparent — fresh for
+  the author who checked before committing, stale for whoever commits next. Precommit
+  refuses it out loud, one commit late.
 - **Uncommitted work is invisible to a `git diff` self-check.** Before overwriting a
   file, run `git status` on it: if it carries uncommitted changes, whatever you are
   about to destroy was never in HEAD, so the diff afterwards cannot show it to you.
@@ -330,6 +341,46 @@ scan`, which costs no tokens and grades the selectors as well.
   process is gone marks an orphan rather than something a person is using. The same
   check distinguishes "this session holds it", which is normal and clears on exit,
   from a leak, which does not clear at all.
+- **A scoped verification that checks nothing reports success.** `mutate --changed`
+  filters a hand-registered list of mutations by the files you touched, so a new file
+  with no entry scopes to zero mutations: it printed "Nothing to check here" and exited 0. The instruction to run it was satisfied vacuously, and no count moved because no
+  count was taken. This is the mutation-that-cannot-fail trap one level up — a
+  verification that cannot fail reports as _checked_. When a capability lands, confirm
+  the gate meant to judge it actually ran something before trusting its silence.
+- **A lexical masker that does not know about regex literals will swallow the file.**
+  A quote character inside a pattern — `['"]` — opens a "string" for any hand-written
+  scanner, and everything after it is read as string content; the repo map reported
+  nonsense about its own source for exactly this reason. Bound single- and double-quoted
+  strings to one line: in valid JavaScript they cannot span one, so a newline ends them
+  whether or not a closing quote was seen. Backticks may span. A capture containing
+  whitespace is then also provably not a module specifier, which is a cheap second net.
+
+- **A step that names a path relative to this repository cannot run in someone else's.** Every
+  script-shaped step in the post-run gate was `node <tsx> src/cli/check-report.ts`, and a run
+  against a subject works in a worktree of the _subject_, which has no `src/cli` — so the step
+  died at `ERR_MODULE_NOT_FOUND` before it looked at anything the agent wrote. Reproduced from
+  the subject worktree on 2026-09-24: **every subject run would have been failed by the harness's
+  own path**, and because no subject run has ever reached a gate, nothing noticed. The scripts
+  now come from the checkout that holds them, while a run in this repository keeps the worktree's
+  own copy — a run that changed the checker must be judged by the version it changed. The general
+  shape: a component that runs with `cwd` set to the work under test may not assume the paths its
+  own repository uses; resolve them from the module, as `src/tool-paths.ts` does.
+
+- **An optional flag parsed with `indexOf` breaks when it is absent.** `indexOf('--tests')` gives
+  `-1`, so the guard written as `i !== flag + 1` becomes `i !== 0` and silently eats the first
+  real argument: `candidates <path>` mapped `src` while reporting success. It was found and fixed
+  in `survey` on 2026-09-24 and left in `candidates`, which was found only when an integration
+  test named a path other than the default — the fix and its sibling are one edit apart, so when
+  a parser bug is fixed, grep for the shape before moving on. A path argument that is ignored is
+  worse than a rejected one: the command answers about something else and exits 0.
+
+- **A project-scoped Playwright run replaces the shared results file.** `npx playwright test
+--project=integration <one file>` writes `artifacts/results.json` exactly as a full run does,
+  so the file then describes that project's tests alone — and `npm run gate` and
+  `npm run plan:facts` read the fixed path and believe it. Run the full `npm test` again before
+  quoting any number from it, or a scoped run has quietly moved the ground the plan stands on.
+  Met on 2026-09-24: a nine-test integration run made `plan:facts` print "9 passed" against a
+  `PLAN.md` line that said 704.
 
 ## Credentials
 
@@ -339,6 +390,14 @@ revoked.** `.env` also holds deliberately empty keys for other providers; the us
 those to observe how bad keys are handled. Do not "fix" them.
 
 `src/env.ts` loads `.env` via Node's own loader.
+
+**There are more routes than the key, and the token is the one for a machine nobody has logged
+in to.** The SDK resolves `ANTHROPIC_API_KEY`, an apiKeyHelper, a managed key, or the OAuth
+session from `claude login`, and `CLAUDE_CODE_OAUTH_TOKEN` — printed by `claude setup-token` —
+is the credential CI authenticates with and the one that works when `claude auth status` reports
+`loggedIn: false`. It goes in `.env` or the environment. A secret never goes into a transcript,
+and an agent never reads one. This was missing from `.env.example`, `README.md` and the auth
+hint until 2026-09-24, when a person had to ask whether the token was the answer — it was.
 
 **An agent never types a password into a form**, on any environment, however the
 request is framed. This was tested on 2026-09-11: credentials for a deliberately

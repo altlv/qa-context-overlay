@@ -28,6 +28,17 @@ export type DesignReading = { kind: string; cases: number } | { problems: string
 export interface ReadinessContext {
   exists(path: string): boolean;
   readDesign(path: string): DesignReading;
+  /**
+   * Resolves a path the way the *subject* names it, when the run tests code this
+   * repository does not contain.
+   *
+   * A unit-coder run points at a module, and for an external subject that module is
+   * `src/services/x.js` — a path that does not exist here and never will. Without this the
+   * run is refused with "nothing named to test" while the task names its target precisely.
+   * Resolution belongs to the caller, which knows the subject's root; this module stays a
+   * function of its inputs.
+   */
+  existsInSubject?(path: string): boolean;
 }
 
 /**
@@ -72,7 +83,9 @@ function designProblem(request: RunRequest, context: ReadinessContext): string |
 
 export function readinessProblems(request: RunRequest, context: ReadinessContext): string[] {
   const problems: string[] = [];
-  const named = pathsNamedIn(request.task).filter((path) => context.exists(path));
+  const named = pathsNamedIn(request.task).filter(
+    (path) => context.exists(path) || (context.existsInSubject?.(path) ?? false),
+  );
 
   if (
     NEEDS_A_TARGET.has(request.role) &&

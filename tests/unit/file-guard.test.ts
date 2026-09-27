@@ -43,6 +43,13 @@ test.describe('file tools inside a run worktree', () => {
     expect(allowed('Read', { file_path: join(worktree, '.env') })).toBe(false);
     expect(allowed('Read', { file_path: join(worktree, '.env.local') })).toBe(false);
     expect(allowed('Read', { file_path: join(worktree, '.env.example') })).toBe(true);
+    // The rule is about editing as much as reading: `.env` is a person's file, and an agent
+    // records a variable in `.env.example`. Pinned on the tools an agent writes with, because a
+    // guard tested on Read alone would let Write and Edit through on the same path.
+    expect(allowed('Write', { file_path: join(worktree, '.env') })).toBe(false);
+    expect(allowed('Edit', { file_path: join(worktree, '.env.local') })).toBe(false);
+    expect(allowed('MultiEdit', { file_path: join(worktree, '.env.production') })).toBe(false);
+    expect(allowed('Edit', { file_path: join(worktree, '.env.example') })).toBe(true);
   });
 
   test('should leave tools that are not file tools to the other guards', () => {

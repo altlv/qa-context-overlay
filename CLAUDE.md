@@ -53,8 +53,10 @@ locator or report the defect.
 the specific thing your test created or rejected. Parallel workers share app state,
 and a count assertion is a race. This has already bitten once.
 
-**6. Do not read or commit `.env`.** Prefer checking that a variable exists over
-reading its value.
+**6. `.env` is a person's file: do not read, edit or commit it.** An AI edits
+`.env.example` — that is what a record of the environment is for, and a new variable belongs
+there. Prefer checking that a variable exists over reading its value. The file guard refuses
+`.env` and its variants on every file tool, and the shell guard refuses reading one.
 
 **7. Destructive actions need explicit authorisation** — `git reset/clean/force`,
 deleting files, production writes. Ask first. **This includes `git commit` and
@@ -72,11 +74,12 @@ src/agents/        Budget guard, SDK client, triage, role definitions
 src/capture/       Network recorder — the evidence layer
 src/fixtures/      harness.ts for UI specs, api.ts for API specs
 src/pages/         BasePage — no assertions in page objects
-src/quality/       Static analysis gating generated tests
+src/quality/       Static analysis gating generated tests, and the source-side map
 src/qe/            Verdicts and gates; a run's preflight, guards, worktree and lock
 src/tools/         Page scanner
 tests/harness/     Tests of the harness itself
-.claude/skills/    Test design, risk, exploratory sessions, oracles, defect reporting
+.claude/skills/    Test design, risk, exploratory sessions, oracles, defect reporting,
+                   shaping unit tests, and mapping the repo before writing them
 ```
 
 ## Adding an app
@@ -105,6 +108,8 @@ npm run sessions          # what agent sessions have been kept, and what each ho
 npm run findings -- <app> # what every session against one app found between them
 npm run sessions -- rescue      # copy evidence out of a worktree before removing it
 npm run ideas -- <scan.json>    # test cases a saved scan supports
+npm run survey -- <path>        # map the source under test before writing tests for it
+npm run candidates -- <path>    # exported units that are unit-test candidates, and why
 npm run precommit         # housekeeping before handing over a commit
 ```
 

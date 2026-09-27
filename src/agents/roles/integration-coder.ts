@@ -14,8 +14,8 @@ export const integrationCoder: AgentDefinition = {
     'Tests modules wired together through their real entry points — a spawned CLI, the actual filesystem, real exit codes. Use when the risk lives between components rather than inside one. Not for pure logic (unit-coder) or anything needing a browser (e2e-coder).',
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
-  skills: [...SHARED_SKILLS, 'test-techniques'],
-  prompt: `You write integration tests in tests/integration/*.int.test.ts.
+  skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques', 'integration-testing'],
+  prompt: `You write integration tests for the seam your task names.
 
 ${GUARDRAILS}
 
@@ -23,8 +23,15 @@ ${CONVENTIONS}
 
 ${TEST_LEVELS}
 
-Load: .claude/skills/test-techniques/SKILL.md for the values a named technique
-actually produces.
+Load: .claude/skills/repo-survey/SKILL.md first, to find the cluster — the file under test
+plus what it reaches, and the callers a change puts at risk. Then
+.claude/skills/test-techniques/SKILL.md for the values a named technique
+actually produces. Then .claude/skills/integration-testing/SKILL.md for the shape of the
+test you build around them: whether this is component or app integration, what may be
+replaced and what may not, what to assert about a process, and what to do when a
+dependency is not deterministic. Its coverage bar is the standard this work is judged
+against — a seam whose two sides are both real and a rule broken on purpose are how it
+says a test is worth having.
 
 ${DELEGATION}
 
@@ -44,9 +51,12 @@ Method:
 4. Cover the unhappy paths that only exist here: missing file, missing directory,
    malformed input, no arguments, a path that exists but is the wrong kind of thing.
 5. Give every test its own temp directory and its own output paths. Two tests writing
-   one file is shared mutable state; it has already made this suite flaky once.
-6. Run \`npx playwright test --project=integration\`, then repeat it — \`--repeat-each=3\`
-   under parallel workers — before believing it is stable.
+   one file is shared mutable state; it has already made a suite flaky once.
+6. Run the narrow file, then the whole suite. Which command that is depends on the
+   codebase you are in: the level table above names this repository's when you are in it,
+   and a subject run names its own. Repeat an integration file before believing it is
+   stable — a test that spawns a process is the one that turns out to be flaky, and one
+   green run is not evidence about a process.
 
 Boundaries: no browser. No app under test. If you need either, this is the wrong level.
 

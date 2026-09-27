@@ -215,3 +215,288 @@ test.describe('assert-quality CLI', () => {
     await rm(dir, { recursive: true, force: true });
   });
 });
+
+test.describe('assertion-floor CLI', () => {
+  const IMPORT = "const assert = require('node:assert/strict');";
+
+  test('should pass a subject test that asserts on what the code returned', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'search.test.js');
+    await writeFile(
+      file,
+      `${IMPORT}\ntest('finds the term', () => {\n  assert.equal(search('alpha').length, 1);\n});\n`,
+      'utf8',
+    );
+
+    const result = await cli('assertion-floor.ts', ['--assertions', IMPORT, file]);
+
+    expect(result.code, `the floor refused a real test:\n${result.stdout}`).toBe(0);
+    expect(result.stdout).toContain('0 finding(s)');
+    expect(
+      result.stdout,
+      'a floor that says OK without saying what it did not read reads as a review',
+    ).toContain('Not checked here');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should fail a subject test whose every assertion is inside a conditional', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'search.test.js');
+    await writeFile(
+      file,
+      `${IMPORT}\ntest('finds the term', () => {\n  const results = search('alpha');\n  if (results.length > 0) {\n    assert.equal(results[0].id, 'a');\n  }\n});\n`,
+      'utf8',
+    );
+
+    const result = await cli('assertion-floor.ts', ['--assertions', IMPORT, file]);
+
+    expect(result.code, 'a test that asserts only when a branch is taken was accepted').toBe(1);
+    expect(result.stdout).toContain('conditional-only');
+    expect(result.stdout, 'the finding must say which test and why').toContain('finds the term');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should exit 2 rather than report a pass when nothing was checked', async () => {
+    const dir = await tempDir();
+    const file = join(dir, 'helpers.js');
+    await writeFile(file, `${IMPORT}\nconst helper = (value) => value;\n`, 'utf8');
+
+    const result = await cli('assertion-floor.ts', [file]);
+
+    expect(
+      result.code,
+      'a file with nothing to read exited 0, which is the verification that cannot fail',
+    ).toBe(2);
+    expect(result.stdout).toContain('nothing was checked');
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+/**
+ * Both map commands are advisory — they exit 0 whatever they find — so what these
+ * check is the flag handling and the two things a reader relies on: the classification
+ * reaches the output, and a root with no source is refused rather than reported as an
+ * empty map. A command nothing exercises is a command whose flags rot silently.
+ */
+const FIXTURE_SOURCE =
+  'const helper = (x) => x * 2;\n' +
+  'function add(a, b) {\n  return a + b;\n}\n' +
+  'module.exports = { add, helper };\n';
+const FIXTURE_TEST =
+  "const assert = require('node:assert/strict');\n" +
+  "const { add } = require('../lib/math');\n" +
+  "test('adds', () => {\n  assert.equal(add(1, 2), 3);\n});\n";
+
+async function sourceFixture(): Promise<string> {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'lib'), { recursive: true });
+  await mkdir(join(dir, 'test'), { recursive: true });
+  await writeFile(join(dir, 'lib', 'math.js'), FIXTURE_SOURCE, 'utf8');
+  await writeFile(join(dir, 'test', 'math.test.js'), FIXTURE_TEST, 'utf8');
+  return dir;
+}
+
+test.describe('candidates CLI', () => {
+  test('should classify a fixture’s exports and name the one no test uses', async () => {
+    const dir = await sourceFixture();
+
+    const result = await cli('candidates.ts', [join(dir, 'lib'), '--tests', join(dir, 'test')]);
+
+    expect(result.code, `the map command refused its own fixture:\n${result.stderr}`).toBe(0);
+    expect(result.stdout, 'the reader needs the classification, not just a list').toContain(
+      'exported unit(s)',
+    );
+    expect(result.stdout, 'and which candidate nothing references yet').toContain('helper');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a root with no source rather than print an empty map', async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, 'notes.txt'), 'nothing to map here\n', 'utf8');
+
+    const result = await cli('candidates.ts', [dir]);
+
+    expect(result.code, 'an empty map reads as "there is nothing to test"').toBe(2);
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+test.describe('survey CLI', () => {
+  test('should map a fixture’s source and write the map when asked', async () => {
+    const dir = await sourceFixture();
+    const out = join(dir, 'map.json');
+
+    const result = await cli('survey.ts', [
+      join(dir, 'lib'),
+      '--tests',
+      join(dir, 'test'),
+      '--save',
+      out,
+    ]);
+
+    expect(result.code, `the survey refused its own fixture:\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain('math.js');
+    const map = JSON.parse(await readFile(out, 'utf8')) as {
+      files: { path: string; units?: unknown[] }[];
+    };
+    expect(map.files.length, 'a saved map with no files is a map nothing can read').toBe(1);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a root with no source', async () => {
+    const dir = await tempDir();
+
+    const result = await cli('survey.ts', [dir]);
+
+    expect(result.code, 'an empty map reads as "there is nothing here to survey"').toBe(2);
+    expect(result.stderr).toContain('No source files found');
+    await rm(dir, { recursive: true, force: true });
+  });
+});
+
+/**
+ * The comparator against a fixture repository: one mutation the suite catches, one it does not, and
+ * a second suite that catches less. Everything here is a real process, because the thing under test
+ * applies a mutation to a file, runs a runner over it, and puts it back.
+ */
+const RULE_SOURCE =
+  'function classify(score) {\n' +
+  '  if (score > 10) return "high";\n' +
+  '  return "low";\n' +
+  '}\n' +
+  'function unused() { return 1; }\n' +
+  'module.exports = { classify, unused };\n';
+
+// `node:test` exports `test`; it is not a global. Omit this line and the fixture suite is red for
+// its own reason, which is exactly what the comparator refuses to score — as it should.
+const STRONG_SUITE =
+  "const test = require('node:test');\n" +
+  "const assert = require('node:assert/strict');\n" +
+  "const { classify } = require('../src/rule');\n" +
+  "test('high above the boundary', () => { assert.equal(classify(11), 'high'); });\n" +
+  "test('low at the boundary', () => { assert.equal(classify(10), 'low'); });\n";
+
+const WEAK_SUITE =
+  "const test = require('node:test');\n" +
+  "const assert = require('node:assert/strict');\n" +
+  "const { classify } = require('../src/rule');\n" +
+  "test('high above the boundary', () => { assert.equal(classify(11), 'high'); });\n";
+
+const MUTATIONS = [
+  {
+    file: 'src/rule.js',
+    find: 'score > 10',
+    replace: 'score >= 10',
+    breaks: 'the boundary counts as high',
+  },
+  {
+    file: 'src/rule.js',
+    find: 'function unused() { return 1; }',
+    replace: 'function unused() { return 2; }',
+    breaks: 'the unused helper returns one',
+  },
+];
+
+async function comparatorFixture(mutations: unknown): Promise<string> {
+  const dir = await tempDir();
+  await mkdir(join(dir, 'src'), { recursive: true });
+  await mkdir(join(dir, 'test'), { recursive: true });
+  await writeFile(join(dir, 'src', 'rule.js'), RULE_SOURCE, 'utf8');
+  await writeFile(join(dir, 'test', 'rule.test.js'), STRONG_SUITE, 'utf8');
+  await writeFile(join(dir, 'test', 'rule.weak.test.js'), WEAK_SUITE, 'utf8');
+  await writeFile(join(dir, 'mutations.json'), JSON.stringify(mutations), 'utf8');
+  return dir;
+}
+
+/** The comparator's own command line: this fixture, run by this node, over one file. */
+function comparatorArgs(dir: string, extra: string[] = []): string[] {
+  return [
+    '--mutations',
+    join(dir, 'mutations.json'),
+    '--repo',
+    dir,
+    '--suite',
+    process.execPath,
+    '--test',
+    'test/rule.test.js',
+    ...extra,
+  ];
+}
+
+test.describe('mutation-compare CLI', () => {
+  test('should name the mutation a suite does not catch, and exit non-zero', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, `a survivor must not exit zero:\n${result.stdout}${result.stderr}`).toBe(1);
+    expect(result.stdout, 'a count with no names cannot be acted on').toContain('1/2 killed');
+    expect(result.stdout).toContain('the unused helper returns one');
+    expect(
+      result.stdout,
+      'the mutation the suite did catch must not be reported as a survivor',
+    ).not.toContain('survived: the boundary counts as high');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should report the suite that is weaker than the one before it', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+
+    const result = await cli('mutation-compare.ts', [
+      ...comparatorArgs(dir),
+      '--against',
+      process.execPath,
+      '--test',
+      'test/rule.weak.test.js',
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr, 'a change may never leave the suite weaker than it found it').toContain(
+      'weaker',
+    );
+    expect(result.stderr, 'and it must name the rule that stopped being tested').toContain(
+      'the boundary counts as high',
+    );
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse an empty set rather than score it', async () => {
+    const dir = await comparatorFixture([]);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(
+      result.code,
+      'a perfect score over no mutations is the failure this tool exists for',
+    ).toBe(2);
+    expect(result.stderr).toContain('perfect score of nothing');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse a rotted anchor rather than report it as a survivor', async () => {
+    const dir = await comparatorFixture([
+      { file: 'src/rule.js', find: 'nope', replace: 'yep', breaks: 'something that moved' },
+    ]);
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, 'a rule that was never applied must not be scored').toBe(2);
+    expect(result.stderr).toContain('does not resolve to exactly one place');
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test('should refuse to score a suite that is already red', async () => {
+    const dir = await comparatorFixture(MUTATIONS);
+    await writeFile(
+      join(dir, 'test', 'rule.test.js'),
+      `${STRONG_SUITE}test('a failing test', () => { assert.equal(classify(1), 'high'); });\n`,
+      'utf8',
+    );
+
+    const result = await cli('mutation-compare.ts', comparatorArgs(dir));
+
+    expect(result.code, 'a suite that is already red reports every mutation as caught').toBe(2);
+    expect(result.stderr).toContain('fails before any mutation');
+    await rm(dir, { recursive: true, force: true });
+  });
+});

@@ -125,3 +125,17 @@ write it down — point at the thing that counts.
 `.ai/state/PLAN.md` is the deliberate exception. It is a dated snapshot
 of a moment, refreshed at the end gate, and a count there is evidence rather than
 documentation — but it still carries the date it was taken.
+
+## Unit tests, and where the floor stops
+
+The shape of a unit test — where the unit's boundary is, what to assert and never to,
+when a double is legitimate, and the coverage bar that says when the file is finished —
+lives in `.claude/skills/unit-testing/SKILL.md`. Map the source before writing one:
+`npm run survey -- <path>` names the exported units, their callers and callees, and the
+files no test imports; `npm run candidates -- <path>` says which of those units a unit
+test could pin, and which no test names.
+
+`npm run assert-quality` reads TypeScript specs. It does not read a subject's own
+`node:test` files, so a unit test there can wrap its assertions in a conditional and pass
+having asserted nothing at all. Nothing enforces that floor yet — name the tests you are
+relying on rather than treating a green suite as coverage.

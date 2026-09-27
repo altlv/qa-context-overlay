@@ -1,6 +1,8 @@
+import { join } from 'node:path';
 import type { RoleFamily } from '../agents/roles.js';
 import { PLAYWRIGHT_CLI, TSX_CLI } from '../tool-paths.js';
 import type { Environment } from './exploration-policy.js';
+import { subjectTests, type TestStack } from './test-stack.js';
 
 /**
  * The checks the runner makes after an agent finishes, on what the run changed.
@@ -51,8 +53,29 @@ export function planGate(input: {
   environment: Environment | null;
   /** This run's own folder, so the gate never writes over another run's results. */
   runDir: string;
+  /**
+   * The subject's own test stack, when the run's work landed in a subject. Absent means this
+   * repository's Playwright, which is what the spec-shaped steps below assume.
+   */
+  testStack?: TestStack;
+  /**
+   * The checkout holding this harness's own `src/cli` scripts, when the run's worktree is a
+   * worktree of a subject.
+   *
+   * Every script-shaped step below names a path relative to this repository, and a subject
+   * run's worktree does not contain it. The step then died at `ERR_MODULE_NOT_FOUND` before
+   * the agent's work was looked at, so the run was failed by the harness's own path rather
+   * than by anything a role did — reproduced from the subject worktree at
+   * `mcpa-training-bot-runs/c8d7549` on 2026-09-24.
+   *
+   * Absent means the worktree *is* this repository, where the worktree's own copy is the one
+   * that must run: a run may have changed the checker it is judged by.
+   */
+  harnessRoot?: string;
 }): GatePlan {
   const changed = input.changed.map(posix);
+  const script = (path: string): string =>
+    input.harnessRoot === undefined ? path : posix(join(input.harnessRoot, path));
   const steps: GateStep[] = [];
   const problems: string[] = [];
   const notRun: string[] = [];
@@ -61,12 +84,46 @@ export function planGate(input: {
 
   if (input.family === 'coding' && input.role !== 'testability-reviewer') {
     const specs = changed.filter((path) => SPEC.test(path));
-    if (specs.length === 0) {
-      notRun.push('no spec file changed, so there was nothing for the coding gate to check');
-    } else {
+
+    // A subject's tests are not specs. The run's worktree *is* a worktree of the subject, so
+    // the changed paths are relative to it and the subject's own runner applies. Before this,
+    // the gate reported nothing to check for every subject that does not use Playwright —
+    // which is every subject we do not own.
+    const subjectFiles =
+      input.testStack === undefined ? [] : subjectTests(input.testStack, changed);
+    for (const file of subjectFiles) {
+      steps.push({ name: `changed test passes: ${file}`, args: ['--test', file], env: {} });
+    }
+
+    if (subjectFiles.length > 0 && input.testStack !== undefined) {
+      // The runner proves the tests pass; this proves they assert something. `assert-quality`
+      // reads Playwright specs, so before it, a `node:test` file could wrap every assertion in
+      // a conditional — or assert nothing — and clear the gate on both halves. The stack's own
+      // import line is passed rather than assumed, so a subject that asserts through another
+      // name is still read.
+      steps.push({
+        name: 'assertion floor',
+        args: [
+          TSX,
+          script('src/cli/assertion-floor.ts'),
+          '--assertions',
+          input.testStack.assertions,
+          ...subjectFiles,
+        ],
+        env: {},
+      });
+    }
+
+    if (specs.length === 0 && subjectFiles.length === 0) {
+      notRun.push(
+        input.testStack === undefined
+          ? 'no spec file changed, so there was nothing for the coding gate to check'
+          : `no test file changed, so there was nothing for the coding gate to check — this subject's tests match ${input.testStack.testFilePattern}`,
+      );
+    } else if (specs.length > 0) {
       steps.push({
         name: 'assert-quality',
-        args: [TSX, 'src/cli/assert-quality.ts', ...specs],
+        args: [TSX, script('src/cli/assert-quality.ts'), ...specs],
         env: {},
       });
       steps.push({
@@ -82,7 +139,7 @@ export function planGate(input: {
       if (appSpecs.length > 0) {
         steps.push({
           name: 'fault check',
-          args: [TSX, 'src/cli/fault-check.ts', ...appSpecs],
+          args: [TSX, script('src/cli/fault-check.ts'), ...appSpecs],
           env: targetEnv,
         });
       } else {
@@ -99,7 +156,7 @@ export function planGate(input: {
     for (const design of designs) {
       steps.push({
         name: `design ${design}`,
-        args: [TSX, 'src/cli/check-report.ts', design],
+        args: [TSX, script('src/cli/check-report.ts'), design],
         env: {},
       });
     }
@@ -113,7 +170,7 @@ export function planGate(input: {
 
   steps.push({
     name: 'report',
-    args: [TSX, 'src/cli/check-report.ts', posix(input.report)],
+    args: [TSX, script('src/cli/check-report.ts'), posix(input.report)],
     env: {},
   });
   return { steps, problems, notRun };

@@ -5,6 +5,7 @@ import bugeater from './bugeater/app.config.js';
 import eprimer from './eprimer/app.config.js';
 import fakerestapi from './fakerestapi/app.config.js';
 import juiceShop from './juice-shop/app.config.js';
+import mcpa from './mcpa/app.config.js';
 import petstore from './petstore/app.config.js';
 import polymerShop from './polymer-shop/app.config.js';
 import todoFixture from './todo-fixture/app.config.js';
@@ -24,6 +25,7 @@ export const apps: AppConfig[] = [
   eprimer,
   fakerestapi,
   juiceShop,
+  mcpa,
   petstore,
   polymerShop,
 ];

@@ -12,6 +12,8 @@ import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
 import { budgetForTier, resolveModel } from '../agents/models.js';
+import { describeBudget, describeSpend } from '../agents/budget-line.js';
+import { levelOfRole } from '../agents/subject-prompt.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
 import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/browser-tools.js';
 import type { SnapshotMode } from '../qe/browser-tools.js';
@@ -137,16 +139,9 @@ for (const app of apps) {
 
 // ── Ready? ────────────────────────────────────────────────────────────────────────
 
-if (reusePath !== undefined) {
-  if (family !== 'testing') {
-    refuse(
-      `Only a testing role may run in another run's worktree — "${name}" can edit, and would change the evidence.`,
-    );
-  }
-  if (!(await isRunWorktree(repoRoot, reusePath))) {
-    refuse(`--worktree ${reusePath} is not one of this repository's run worktrees.`);
-  }
-}
+// The `--worktree` reuse check moved below the subject resolution: a run's worktree belongs
+// to the repository the run tests, so whether a path is one of ours cannot be answered
+// before knowing which repository that is.
 const workRoot = reusePath === undefined ? repoRoot : resolve(reusePath);
 
 const resolved = resolveRunTarget(
@@ -163,12 +158,85 @@ const resolved = resolveRunTarget(
 );
 const runTarget = resolved.target;
 
+/**
+ * The repository's main checkout — not whichever worktree this process happens to run in.
+ *
+ * A subject recorded as a sibling path is a sibling of the *repository*, so resolving it
+ * against a worktree one level deeper finds nothing and readiness then refuses a task that
+ * named its target exactly. `--git-common-dir` answers with the main checkout's `.git` from
+ * any worktree, and with this checkout's own from the repository itself, so one call covers
+ * both. Falling back to `repoRoot` keeps a non-git checkout usable.
+ */
+async function mainCheckout(repoRoot: string): Promise<string> {
+  try {
+    const { stdout } = await exec('git', ['-C', repoRoot, 'rev-parse', '--git-common-dir']);
+    return dirname(resolve(repoRoot, stdout.trim()));
+  } catch {
+    return repoRoot;
+  }
+}
+
+// The subject's own checkout, when this run tests code the harness does not contain.
+// A named path is written the way the *subject* names it — `src/services/x.js`, relative to
+// its repository root — so it resolves there. Resolving against `sourceRoot` instead
+// produced `src/src/services/x.js`, and the path was reported as missing while the task
+// named it exactly.
+const subjectConfig =
+  runTarget === null ? undefined : apps.find((app) => app.name === runTarget.app);
+const subjectRepo =
+  subjectConfig?.sourceRepo !== undefined
+    ? resolve(await mainCheckout(repoRoot), subjectConfig.sourceRepo)
+    : null;
+
+// Which repository the run's worktree comes from. A subject is a repository of its own, so
+// branching the harness would confine the agent to a worktree that does not contain the code
+// it was asked to test, and the file guard would refuse every write that mattered.
+const runRepo = subjectRepo ?? repoRoot;
+
+// The stack facts a subject run composes its prompt from, when the app declares them. Absent
+// for a run in this repository, which keeps its own conventions and level table. The level comes
+// from the role's name: the same subject stack means a different job to a unit coder and to an
+// integration coder, and the composed level block has to say which one this run is.
+const subjectRun =
+  subjectConfig?.testStack !== undefined && subjectRepo !== null
+    ? {
+        app: subjectConfig.name,
+        repo: subjectRepo,
+        stack: subjectConfig.testStack,
+        level: levelOfRole(name),
+      }
+    : undefined;
+
+if (reusePath !== undefined) {
+  if (family !== 'testing') {
+    refuse(
+      `Only a testing role may run in another run's worktree — "${name}" can edit, and would change the evidence.`,
+    );
+  }
+  if (!(await isRunWorktree(runRepo, reusePath))) {
+    refuse(`--worktree ${reusePath} is not one of ${runRepo}'s run worktrees.`);
+  }
+}
+
+// A dirty subject makes the exercise meaningless: the work comes back as a diff against the
+// subject's HEAD, and uncommitted work there would be credited to the run.
+if (runRepo !== repoRoot) {
+  const dirty = await worktreeChanges(runRepo);
+  if (dirty.length > 0) {
+    refuse(
+      'the subject checkout has uncommitted work, so the run diff would not be its own:',
+      dirty.slice(0, 10),
+    );
+  }
+}
+
 const notReady = [
   ...resolved.problems,
   ...readinessProblems(
     { role: name, task, app: appArg, environment: envArg, design: designPath },
     {
       exists: (path) => existsSync(resolve(workRoot, path)),
+      existsInSubject: (path) => subjectRepo !== null && existsSync(resolve(subjectRepo, path)),
       readDesign: (path) => {
         const parsed = parseReport(readFileSync(resolve(workRoot, path), 'utf8'));
         return parsed.ok
@@ -179,15 +247,20 @@ const notReady = [
   ),
 ];
 
-const base = reusePath === undefined ? await headCommit(repoRoot) : await headCommit(workRoot);
+// `base` is the commit the run's worktree is checked out at, in the repository the run works
+// in — the subject's own HEAD when the work lands there.
+const base = reusePath === undefined ? await headCommit(runRepo) : await headCommit(workRoot);
 if (reusePath === undefined) {
-  // A worktree is checked out at the base commit: anything uncommitted never reaches it.
-  if (designPath !== undefined && !(await committedAt(repoRoot, base, designPath))) {
+  // A design lives in this repository even when the work happens in a subject's worktree, so
+  // whether it is committed is a question about this repository, not about the subject.
+  const designBase = await headCommit(repoRoot);
+  if (designPath !== undefined && !(await committedAt(repoRoot, designBase, designPath))) {
     notReady.push(
-      `design ${designPath} is not committed — the run works at ${base.slice(0, 7)}, and an uncommitted file never reaches it`,
+      `design ${designPath} is not committed — a run works from committed code, and an uncommitted file never reaches the worktree`,
     );
   }
-  const lockfile = await lockfileProblem(repoRoot, base);
+  // The linked modules belong to the run repository, so the lockfile to compare is its own.
+  const lockfile = await lockfileProblem(runRepo, base);
   if (lockfile !== null) notReady.push(lockfile);
 }
 if (notReady.length > 0) refuse(`"${name}" is not ready to start — missing upstream:`, notReady);
@@ -255,7 +328,7 @@ if (preflight) {
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const worktree =
   reusePath === undefined
-    ? await createRunWorktree(repoRoot, `${name}-${stamp}`, base)
+    ? await createRunWorktree(runRepo, `${name}-${stamp}`, base)
     : resolve(reusePath);
 console.error(
   `${reusePath === undefined ? 'Created' : 'Reusing'} worktree ${worktree} at ${base.slice(0, 7)}`,
@@ -417,15 +490,24 @@ const budget = Budget.fromEnv({
   ...(override('AGENT_MAX_USD') ? {} : { maxUsd: scaled.maxUsd }),
   ...(override('AGENT_TIMEOUT_MS') ? {} : { timeoutMs: scaled.timeoutMs }),
 });
+// The line is built by `describeBudget`, which is pure and tested: printed inline it needed a paid
+// run to observe, and a real defect lived in that blind spot — an operator's AGENT_TIMEOUT_MS
+// replaced this role's declared wall clock while the text still read as the role's own budget.
 console.error(
-  `Running ${name} on ${chosen.id} (${chosen.tier}) — max ${budget.limits.maxTurns} turns, ` +
-    (budget.measuringSpendOnly()
-      ? `spend MEASURED not capped (reference $${budget.limits.maxUsd.toFixed(2)})`
-      : `$${budget.limits.maxUsd.toFixed(2)}`) +
-    `, ${budget.limits.timeoutMs / 1000}s` +
-    (budget.limits.maxTurns === scaled.maxTurns
-      ? ` (role asks ${declaredTurns} × ${chosen.tier})`
-      : ` (AGENT_MAX_TURNS overrides the role's ${declaredTurns})`),
+  describeBudget({
+    role: name,
+    modelId: chosen.id,
+    tier: chosen.tier,
+    declaredTurns,
+    declaredSeconds: WALL_CLOCK_SECONDS[name] ?? DEFAULT_LIMITS.timeoutMs / 1000,
+    maxTurns: budget.limits.maxTurns,
+    maxUsd: budget.limits.maxUsd,
+    timeoutSeconds: budget.limits.timeoutMs / 1000,
+    measuringSpendOnly: budget.measuringSpendOnly(),
+    overrodeTurns: override('AGENT_MAX_TURNS'),
+    overrodeUsd: override('AGENT_MAX_USD'),
+    overrodeTimeout: override('AGENT_TIMEOUT_MS'),
+  }),
 );
 
 // ── The guarded agent loop, inside the worktree ───────────────────────────────────
@@ -468,13 +550,14 @@ let result;
 try {
   result = await runAgent({
     prompt,
-    systemPrompt: composeSystemPrompt(role),
+    systemPrompt: composeSystemPrompt(role, undefined, subjectRun),
     allowedTools: [...(role.tools ?? []), ...(browser?.tools ?? [])],
     ...(browser === null ? {} : { mcpServers: browser.mcpServers }),
     // Every role, composed the same way, so a coder that finds a gap mid-run can call
     // test-planner and the planner arrives with its skills. Only roles holding the
-    // `Agent` tool can reach these — enforced in tests/unit/roles.test.ts.
-    agents: composeRoles(roles),
+    // `Agent` tool can reach these — enforced in tests/unit/roles.test.ts. A delegated
+    // planner inherits the subject's stack too, or it would design in the wrong shape.
+    agents: composeRoles(roles, undefined, subjectRun),
     hooks: {
       // Fires once per resolved batch, before the next model request. Two measured
       // sessions stopped at 13 minutes of 45 on timestamps they invented; this is the
@@ -579,9 +662,13 @@ await keepEvidence('the session finished');
 
 const spent = budget.spent();
 console.error(
-  `\n${name}: ${spent.turns} turns, $${spent.costUsd.toFixed(4)}, ` +
-    `${Math.round(spent.elapsedMs / 1000)}s` +
-    (result.stoppedBy === null ? '' : ` — STOPPED: ${result.stoppedBy}`),
+  `\n${name}: ` +
+    describeSpend({
+      turns: spent.turns,
+      costUsd: spent.costUsd,
+      elapsedMs: spent.elapsedMs,
+      stoppedBy: result.stoppedBy,
+    }),
 );
 // The point of measuring rather than capping: a session that was cut off and one that
 // found little look the same in a report. Said out loud so the number gets recorded
@@ -692,6 +779,14 @@ const plan = planGate({
   report: reportPath,
   environment: runTarget?.environment ?? null,
   runDir,
+  // The subject's stack, when the work landed in a subject: the gate then checks the changed
+  // tests with the subject's own runner, where before it reported nothing to check at all.
+  ...(subjectConfig?.testStack === undefined ? {} : { testStack: subjectConfig.testStack }),
+  // A subject run's worktree is a worktree of the subject, so the gate's own script paths do
+  // not exist in it and every script-shaped step failed before it looked at the work. The
+  // harness's scripts come from this checkout in that case; when the worktree is this
+  // repository, the worktree's own copy is what runs.
+  ...(subjectRepo === null ? {} : { harnessRoot: repoRoot }),
 });
 
 console.error(`\nPost-run gate — ${changed.length} file(s) changed in the worktree:`);

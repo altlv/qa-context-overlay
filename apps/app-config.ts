@@ -1,6 +1,7 @@
 import type { Environment } from '../src/qe/exploration-policy.js';
+import type { TestStack } from '../src/qe/test-stack.js';
 
-export type { Environment };
+export type { Environment, TestStack };
 
 /**
  * One deployment of an app. The key it is filed under carries the safety
@@ -36,6 +37,9 @@ export const EFFECT_TAGS = {
 
 export type EffectTag = (typeof EFFECT_TAGS)[keyof typeof EFFECT_TAGS];
 
+// `TestStack` comes from `src/qe/test-stack.ts` and is re-exported above: the harness's own
+// modules never import from `apps/`, so the shape has to live on their side of the line.
+
 export interface AppConfig {
   /** Folder name under apps/, and the Playwright project name. */
   name: string;
@@ -64,6 +68,19 @@ export interface AppConfig {
   external?: boolean;
   /** Where the app itself lives, when it is not in this repo. */
   sourceRepo?: string;
+  /**
+   * Where the subject's own source lives, relative to `sourceRepo`.
+   *
+   * A role asked to test a module names it the way the subject does — `src/services/x.js`
+   * — and readiness resolves that against this, because the path does not exist in this
+   * repository and never will.
+   */
+  sourceRoot?: string;
+  /**
+   * How the subject's tests are written and run, for a run whose work lands in the
+   * subject rather than here. Absent means this repo's own stack.
+   */
+  testStack?: TestStack;
   /**
    * Hosts a run against this app may reach beyond its base URL — an auth provider, a
    * separate API. The allowlist a role run's browser and shell guard both honour.
