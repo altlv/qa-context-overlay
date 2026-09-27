@@ -331,7 +331,16 @@ export function analyzeCandidates(source: string, testSources: string[] = []): C
         kind: 'unknown',
         line: 1,
         signals: [],
-        referenced: false,
+        // Whether a test names it is knowable whatever this file's declaration looks like,
+        // and it was hardcoded false here — so every re-exported or computed export was
+        // reported "not named in any test" however many tests named it. `MATCH_AT` came
+        // back untested with an assertion on it at finding-union.test.ts:125, and all seven
+        // of common.ts's exports came back untested with `TOOLBOX` named in two test files.
+        //
+        // A false negative is the expensive direction for this command: its whole job is
+        // telling a coder role where the coverage is missing, and a role that believes it
+        // writes a test for something already tested, then reports the gap as closed.
+        referenced: testSources.some((text) => new RegExp(`\\b${name}\\b`).test(text)),
         detail: 'exported but no declaration found in this file — re-export, computed, or dynamic',
       });
       continue;

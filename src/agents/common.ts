@@ -156,6 +156,7 @@ they are free, exact, and repeatable, and your turns are none of those things.
 | npm run assertion-floor -- <file>   | The same floor for a subject's own stack — \`node:test\`, vitest, whatever its config declares. Refuses a test that asserts nothing, one whose every assertion sits inside a branch, and one asserting only on literals. Exits 2 when it can read nothing, and prints what it did not look at |
 | npm run fault-check -- <spec>      | Proves an app spec notices its server failing: reruns it with every response a 500 and refuses one that stays green |
 | npm run mutate -- --changed        | Proves the harness's own rules are tested. It never touches app specs — for those, fault-check |
+| npm run mutation-compare -- --mutations <module> --suite <cmd> | Scores a suite against a named mutation set: which mutations it kills and which survive. \`--against <cmd>\` requires the second suite to leave no survivor the first one caught, so one suite can be held to another |
 | npm run gate                       | PASS / CONDITIONAL / FAIL, with staleness detection            |
 | npm run check-report -- <path>     | Validates your own report before you hand it over              |
 | npm run triage -- <file.json>      | Classifies a failure from a results file                       |

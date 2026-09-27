@@ -118,6 +118,38 @@ test.describe('the coding gate', () => {
     expect(plan.notRun.join(' '), 'and nothing claims to have been skipped').not.toContain(
       'nothing for the coding gate to check',
     );
+    expect(plan.steps[0]?.command, 'the runner the stack declared, not this process').toBe('node');
+  });
+
+  test('should run a subject that declares another runner with that runner', () => {
+    // The step used to be built as ['--test', file] and executed as `node --test <file>`,
+    // whatever the stack said. That is invisible while the only declared stack is
+    // `node --test` — and silently wrong for the first subject declaring vitest, which
+    // would either fail a run that did nothing wrong or pass without running anything.
+    // TestStack collects runner, runAll and runOne so a runner is never assumed; the gate
+    // assumed anyway.
+    const plan = planGate({
+      ...base,
+      role: 'unit-coder',
+      family: 'coding',
+      changed: ['src/thing.spec.ts'],
+      testStack: {
+        ...subjectStack,
+        runner: 'npx vitest run',
+        runAll: 'npx vitest run',
+        runOne: 'npx vitest run ',
+        testFilePattern: '*.spec.ts',
+        assertions: "import { expect } from 'vitest';",
+      },
+    });
+
+    const step = plan.steps.find((entry) => entry.name.startsWith('changed test passes'));
+    expect(step?.command, 'the declared binary, not node').toBe('npx');
+    expect(step?.args, 'its own arguments, then the file').toEqual([
+      'vitest',
+      'run',
+      'src/thing.spec.ts',
+    ]);
   });
 
   test('should name what counts as a test when a subject run changed none', () => {

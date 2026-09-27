@@ -219,3 +219,35 @@ test.describe('classifying unit test candidates', () => {
     expect(build?.kind).toBe('unit');
   });
 });
+
+test.describe('an export whose declaration this file does not hold', () => {
+  // A re-export, an `export { … }` list, or anything computed. Whether a test names it is
+  // knowable regardless, and it was hardcoded false — so every such export came back "not
+  // named in any test" however many tests named it. Measured on the real repo: MATCH_AT
+  // reported untested with an assertion on it in finding-union.test.ts, and all seven of
+  // common.ts's exports reported untested with TOOLBOX named in two test files.
+  //
+  // A false negative is the expensive direction here. This command exists to tell a coder
+  // role where coverage is missing; a role that believes it writes a test for something
+  // already covered, then reports the gap as closed.
+  const reExport = 'const THING = 1;\nconst OTHER = 2;\nexport { THING, OTHER };\n';
+
+  test('should still say whether a test names it', () => {
+    const found = analyzeCandidates(reExport, ['expect(THING).toBe(1);']);
+    expect(found.find((c) => c.name === 'THING')?.referenced).toBe(true);
+    expect(found.find((c) => c.name === 'OTHER')?.referenced).toBe(false);
+  });
+
+  test('should match the whole word, not a name that contains it', () => {
+    const found = analyzeCandidates(reExport, ['expect(THINGAMAJIG).toBe(1);']);
+    expect(found.find((c) => c.name === 'THING')?.referenced).toBe(false);
+  });
+
+  test('should keep saying it cannot classify what it cannot see', () => {
+    // The honest half stays honest: unknown kind, and a detail that says why. Only the
+    // reference column was wrong.
+    const found = analyzeCandidates(reExport, []);
+    expect(found.find((c) => c.name === 'THING')?.kind).toBe('unknown');
+    expect(found.find((c) => c.name === 'THING')?.detail).toContain('no declaration found');
+  });
+});

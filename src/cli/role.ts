@@ -813,11 +813,16 @@ const record: GateRecord = {
 for (const problem of plan.problems) console.error(`  ✗ ${problem}`);
 for (const step of plan.steps) {
   try {
-    await exec(process.execPath, step.args, {
+    // A step names its own command only when a subject declared a runner; everything
+    // harness-side runs under this process's node, which is what `args` is written for.
+    await exec(step.command ?? process.execPath, step.args, {
       cwd: worktree,
       windowsHide: true,
       maxBuffer: 64 * 1024 * 1024,
       env: { ...process.env, ...step.env },
+      // A declared runner is usually an npm-installed binary, which on Windows is a
+      // .cmd shim that CreateProcess cannot start directly.
+      shell: step.command !== undefined && step.command !== process.execPath,
     });
     record.steps.push({ name: step.name, passed: true, output: [] });
     console.error(`  ✓ ${step.name}`);

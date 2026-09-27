@@ -19,10 +19,39 @@ import { subjectTests, type TestStack } from './test-stack.js';
 
 export interface GateStep {
   name: string;
-  /** Arguments for `node`: a script path, then its arguments. */
+  /**
+   * What to run. Absent means this process's own `node`, which is what every
+   * harness-side step wants: `args` then names a script path and its arguments.
+   *
+   * Present only when a subject declares a runner of its own. `TestStack` collects
+   * `runner`, `runAll` and `runOne` precisely so a subject's runner is never assumed,
+   * and this field is what lets the gate honour that — before it, the subject step was
+   * built as `['--test', file]` and executed as `node --test <file>` whatever the stack
+   * said. Harmless while the only declared stack was `node --test`, and silently wrong
+   * for the first subject to declare vitest or jest: the step would either fail a run
+   * that did nothing wrong, or pass without running a thing.
+   */
+  command?: string;
+  /** Arguments for `command`, or for `node` when there is none. */
   args: string[];
   /** Added to the environment the step runs in. */
   env: Record<string, string>;
+}
+
+/**
+ * A subject's `runOne` as an argv, with the file appended.
+ *
+ * Declared as a command line because that is how a person writes it in a config and how
+ * the coder role's prompt shows it — `node --test `, `npx vitest run `. Splitting on
+ * whitespace is enough for that, and a runner needing a quoted argument should be given
+ * a wrapper script rather than a quoting dialect parsed here.
+ */
+function runOneArgv(runOne: string, file: string): { command: string; args: string[] } {
+  const parts = runOne
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part !== '');
+  return { command: parts[0] ?? process.execPath, args: [...parts.slice(1), file] };
 }
 
 export interface GatePlan {
@@ -92,7 +121,14 @@ export function planGate(input: {
     const subjectFiles =
       input.testStack === undefined ? [] : subjectTests(input.testStack, changed);
     for (const file of subjectFiles) {
-      steps.push({ name: `changed test passes: ${file}`, args: ['--test', file], env: {} });
+      // The stack's own runner, not this process's node. See GateStep.command.
+      const run = runOneArgv(input.testStack?.runOne ?? '', file);
+      steps.push({
+        name: `changed test passes: ${file}`,
+        command: run.command,
+        args: run.args,
+        env: {},
+      });
     }
 
     if (subjectFiles.length > 0 && input.testStack !== undefined) {
