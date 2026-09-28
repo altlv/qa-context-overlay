@@ -39,7 +39,8 @@
     "fault-check": "tsx src/cli/fault-check.ts",
     "archive-results": "tsx src/cli/archive-results.ts",
     "sessions": "tsx src/cli/sessions.ts",
-    "findings": "tsx src/cli/findings.ts"
+    "findings": "tsx src/cli/findings.ts",
+    "subject-fault-check": "tsx src/cli/subject-fault-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.266",

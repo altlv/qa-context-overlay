@@ -82,6 +82,17 @@ export interface AppConfig {
    */
   testStack?: TestStack;
   /**
+   * The process this subject's integration tests spawn, relative to the subject.
+   *
+   * With it the gate can ask the question the mutation set cannot: would a green suite
+   * survive the application refusing to boot? A mutation asks whether a rule being wrong
+   * would be noticed; a process fault asks whether there being no application would be,
+   * which is a different and more embarrassing thing to miss.
+   *
+   * Absent means the gate says nothing about it, rather than assuming either answer.
+   */
+  entryPoint?: string;
+  /**
    * A named mutation set for one seam, and the suite already holding that seam.
    *
    * The gate's other checks say a test is shaped like a test and currently passes. Neither

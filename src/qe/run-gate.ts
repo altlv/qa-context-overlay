@@ -114,6 +114,11 @@ export function planGate(input: {
    * whether it would notice a fault.
    */
   mutations?: { set: string; baseline: string };
+  /**
+   * The process the subject's tests spawn, when it declares one. Without it the gate
+   * cannot ask whether a green suite would survive the application not starting.
+   */
+  entryPoint?: string;
 }): GatePlan {
   const changed = input.changed.map(posix);
   const script = (path: string): string =>
@@ -171,6 +176,26 @@ export function planGate(input: {
       // and the agent's file kills 8, while surviving one mutation the hand-written suite
       // catches. Twice as strong and weaker in one place — a regression no other step here
       // can see.
+      // Would the suite notice there being no application at all? The mutation set asks
+      // whether a rule being wrong is caught; this asks the cruder question underneath
+      // it, and a suite that fails the crude one was never testing the wiring.
+      if (input.entryPoint !== undefined) {
+        steps.push({
+          name: 'tests notice the process failing',
+          args: [
+            TSX,
+            script('src/cli/subject-fault-check.ts'),
+            '--entry',
+            input.entryPoint,
+            '--repo',
+            '.',
+            '--suite',
+            ...subjectFiles.flatMap((file) => runOneArgv(input.testStack!.runOne, file).all),
+          ],
+          env: {},
+        });
+      }
+
       if (input.mutations !== undefined) {
         steps.push({
           name: `mutation strength against ${input.mutations.baseline}`,

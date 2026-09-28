@@ -824,6 +824,7 @@ const plan = planGate({
   // Only when the subject declares one. Without it the gate can say a test passes and
   // asserts, and nothing about whether it would notice a fault.
   ...(subjectConfig?.mutations === undefined ? {} : { mutations: subjectConfig.mutations }),
+  ...(subjectConfig?.entryPoint === undefined ? {} : { entryPoint: subjectConfig.entryPoint }),
 });
 
 console.error(`\nPost-run gate — ${changed.length} file(s) changed in the worktree:`);

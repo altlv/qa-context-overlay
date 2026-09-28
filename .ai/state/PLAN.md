@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `6b7bea9` — the commit this file was last checked against. A file cannot name
+Head is `c42957e` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -371,9 +371,14 @@ WWW-Authenticate challenge. Twice as strong, and weaker in one place. That is th
 claim getting its first integration-level evidence, and it is also the first number here that no
 other check could have produced.
 
-What remains provably incomplete at this level is item 60: nothing proves a subject test notices
-its **process** failing, which the integration PoC calls this level's central claim rather than a
-side check. Six mutations survive both suites — `MAX_LOG_ENTRIES`, the 409 on a pending lab,
+Item 60 is now closed. `npm run subject-fault-check` breaks a subject's declared entry point
+four ways — refuses to start, throws, dies a moment after starting, exits 0 silently — and requires
+the suite to fail each time; it is a gate step wherever a subject names its entry point. Both suites
+notice all four, which is the answer hoped for rather than the one that was assumed. The silent exit
+is the one worth missing least: a clean exit reads as success, so a suite that waits with a timeout
+can pass with no application behind it.
+
+What remains incomplete at this level is the score itself. Six mutations survive both suites — `MAX_LOG_ENTRIES`, the 409 on a pending lab,
 OAuth token reattachment, dead-session refusal, port reuse — so 8 of 14 is an improvement and not
 a good score.
 

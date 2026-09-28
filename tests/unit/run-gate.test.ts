@@ -384,3 +384,47 @@ test.describe('whether the tests would notice a fault', () => {
     expect(plan.steps.map((s) => s.name).join(' ')).not.toContain('mutation strength');
   });
 });
+
+test.describe('whether the tests notice there being no application', () => {
+  const stack = {
+    runner: 'node --test',
+    runAll: 'node --test test/*.test.js',
+    runOne: 'node --test ',
+    testsDir: 'test',
+    testFilePattern: '*.test.js',
+    moduleSystem: 'commonjs',
+    assertions: "const assert = require('node:assert/strict');",
+    exemplar: 'test/specIndexer.test.js',
+  };
+
+  test('should break the declared entry point and require the suite to fail', () => {
+    // The mutation set asks whether a rule being wrong is caught. This asks the cruder
+    // question underneath it — would a green suite survive the application refusing to
+    // boot — and a suite failing that one was never testing the wiring at all.
+    const plan = planGate({
+      ...base,
+      role: 'integration-coder',
+      family: 'coding',
+      changed: ['test/labs-integration.test.js'],
+      testStack: stack,
+      entryPoint: 'src/server.js',
+    });
+
+    const step = plan.steps.find((entry) => entry.name === 'tests notice the process failing');
+    expect(step, 'a subject naming its entry point must have that question asked').toBeDefined();
+    expect(step?.args.join(' ')).toContain('--entry src/server.js');
+    expect(step?.args.join(' ')).toContain('--suite node --test test/labs-integration.test.js');
+  });
+
+  test('should ask nothing when the subject names no entry point', () => {
+    // Silence rather than a guess: the gate cannot know what process a suite spawns.
+    const plan = planGate({
+      ...base,
+      role: 'integration-coder',
+      family: 'coding',
+      changed: ['test/labs-integration.test.js'],
+      testStack: stack,
+    });
+    expect(plan.steps.map((s) => s.name).join(' ')).not.toContain('process failing');
+  });
+});

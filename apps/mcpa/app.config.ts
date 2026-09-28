@@ -54,6 +54,7 @@ const config: AppConfig = {
     assertions: "const assert = require('node:assert/strict');",
     exemplar: 'test/specIndexer.test.js',
   },
+  entryPoint: 'src/server.js',
   mutations: {
     set: 'apps/mcpa/mutations/labs-routes.ts',
     baseline: 'test/labs-routes.test.js',

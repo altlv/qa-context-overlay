@@ -24,7 +24,8 @@ decide whether the result proves anything.
 | Driver (E5a) — candidate actions under a policy  | built, reaches a live session        | `src/qe/driver.ts`               |
 | State model (E5b) — shared browser over CDP      | built, has refused a live session    | `src/qe/state-model.ts`          |
 | Role runner — preflight, guards, worktree, gate  | drives every run                     | `src/cli/role.ts`                |
-| Fault check — does a spec notice a 500           | built                                | `src/cli/fault-check.ts`         |
+| Fault check — does a spec notice a 500           | built                                |
+| Process fault — does a subject test notice       | built, and a gate step for a subject | `src/cli/fault-check.ts`         |
 | Subject test stack — a subject's own runner      | built, one subject declares one      | `src/qe/test-stack.ts`           |
 | Source map — units, callers, what tests point at | built                                | `src/quality/repomap.ts`         |
 | Assertion floor for a non-Playwright suite       | built                                | `src/quality/assertion-floor.ts` |
@@ -107,6 +108,8 @@ npm run triage -- <file>  # triage a failure JSON (needs API key)
 npm run role -- <role> "<task>" --app <app> --env <env> [--preflight]
                           # run a role in its own worktree — docs/agent-workflows.md
 npm run fault-check -- <spec>   # does a spec notice its server failing
+npm run subject-fault-check -- --entry <file> --suite <cmd>
+                          # does a subject test notice the process it spawns failing
 npm run archive-results   # keep the last 20 runs, so a trend can be read
 npm run sessions          # what agent sessions have been kept, and what each holds
 npm run findings -- <app> # what every session against one app found between them
