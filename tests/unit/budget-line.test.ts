@@ -127,3 +127,36 @@ test.describe('the spend line, after a run', () => {
     ).not.toContain('unmeasured');
   });
 });
+
+test.describe('an override that changes nothing', () => {
+  test('should stay quiet when the override matches what the role asked for', () => {
+    // Passing AGENT_TIMEOUT_MS=3600000 to a role that declares 3600s is not news. The
+    // test above pins why it matters: a banner crying override on every run is one
+    // nobody reads, and the real one then passes unseen. That happened — .env.example
+    // shipped a three-minute wall clock beating every role's declared budget, and this
+    // banner was the only thing that said so.
+    const text = describeBudget({
+      ...line(),
+      overrodeTimeout: true,
+      timeoutSeconds: 3600,
+      declaredSeconds: 3600,
+    });
+    expect(
+      text,
+      'an override landing on the declared value is noise, not information',
+    ).not.toContain('AGENT_TIMEOUT_MS overrides');
+  });
+
+  test('should still announce an override that really replaces the budget', () => {
+    const text = describeBudget({
+      ...line(),
+      overrodeTimeout: true,
+      timeoutSeconds: 280,
+      declaredSeconds: 3600,
+    });
+    expect(
+      text,
+      'a role cut from 3600s to 280s must say so, or the thin report has no explanation',
+    ).toContain('AGENT_TIMEOUT_MS overrides the role’s 3600s');
+  });
+});

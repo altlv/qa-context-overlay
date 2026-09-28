@@ -41,7 +41,15 @@ export function describeBudget(line: BudgetLine): string {
       ? `AGENT_MAX_TURNS overrides the role’s ${line.declaredTurns}`
       : `role asks ${line.declaredTurns} × ${line.tier}`,
     line.overrodeUsd ? 'AGENT_MAX_USD overrides the tier scale' : null,
-    line.overrodeTimeout ? `AGENT_TIMEOUT_MS overrides the role’s ${line.declaredSeconds}s` : null,
+    // Only when it changes something. An override that lands on the value the role
+    // already asked for is not news, and announcing it is the failure the test beside
+    // this one pins: a banner that cries override on every run is one nobody reads, and
+    // the real one then passes unseen. That mattered within a day of being written —
+    // `.env.example` shipped a three-minute wall clock that beat every role's declared
+    // budget, and this line was the only thing that said so.
+    line.overrodeTimeout && line.timeoutSeconds !== line.declaredSeconds
+      ? `AGENT_TIMEOUT_MS overrides the role’s ${line.declaredSeconds}s`
+      : null,
   ].filter((note): note is string => note !== null);
 
   return (
