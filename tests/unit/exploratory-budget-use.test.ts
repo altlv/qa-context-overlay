@@ -16,28 +16,40 @@ test.describe('what the prompt must keep telling a session', () => {
   test('should hand it a measured clock and forbid estimating one', () => {
     // Both sessions called "date" once, at tool call #1, and invented every timestamp
     // after it. One closed claiming "~37 minutes of the 45" at a real elapsed of 779s.
-    expect(prompt).toContain('SESSION CLOCK');
+    expect(
+      prompt,
+      'without a measured clock a session estimates one, and two closed at 13 minutes of 45 believing 37 had passed',
+    ).toContain('SESSION CLOCK');
     expect(prompt).toContain('never estimate it');
   });
 
   test('should treat the budget as a floor to spend, not a ceiling to avoid', () => {
     // 135 turns and 88 actions unspent, twice. The only stopping guidance the prompt
     // used to carry was "when it runs low, stop", which nothing contradicted.
-    expect(prompt).toContain('floor to spend, not a ceiling to avoid');
+    expect(
+      prompt,
+      'the only stopping guidance was "when it runs low, stop", and 135 turns went unspent twice',
+    ).toContain('floor to spend, not a ceiling to avoid');
     expect(prompt).toMatch(/enough findings/i);
   });
 
   test('should require one bulk markup harvest before interacting', () => {
     // Seven of one run's fourteen findings came from a single pass like this. The
     // other run never made one, and the prompt never asked for it.
-    expect(prompt).toContain('harvest the markup in bulk');
+    expect(
+      prompt,
+      'seven of one run’s fourteen findings came from a single such pass; the run without it made none',
+    ).toContain('harvest the markup in bulk');
     expect(prompt).toMatch(/empty src/i);
   });
 
   test('should name the URL as an input surface', () => {
     // Two findings came from nothing but editing the address bar; the dimension list
     // said "UI, API, import and export, logs, queues" and stopped there.
-    expect(prompt).toContain('the URL itself');
+    expect(
+      prompt,
+      'two findings came from nothing but the address bar, which the dimension list never named',
+    ).toContain('the URL itself');
     expect(prompt).toMatch(/query parameter/i);
   });
 
@@ -45,7 +57,10 @@ test.describe('what the prompt must keep telling a session', () => {
     // A run reported 25 invisible-but-tabbable elements from a filter ignoring
     // visibility:hidden (true count: zero), and an occlusion defect from a selector
     // matching an 800x5269 page-wide wrapper. Both retracted, both paid for in full.
-    expect(prompt).toContain('claim about your instrument');
+    expect(
+      prompt,
+      'a run reported 25 tabbable elements from a filter ignoring visibility:hidden; the true count was zero',
+    ).toContain('claim about your instrument');
     expect(prompt).toContain('visibility:hidden');
   });
 
@@ -63,14 +78,19 @@ test.describe('measuring whether the inlined skills change anything', () => {
   test('should require every finding to declare what produced it', () => {
     // 21k tokens of skill text reach every session and nothing could tell whether any
     // of it landed — using a skill costs no tool call, so no ledger of calls sees it.
-    expect(prompt).toContain('Say what found each finding');
+    expect(
+      prompt,
+      '21k tokens of skill text reach every session and nothing could tell whether any of it landed',
+    ).toContain('Say what found each finding');
     expect(prompt).toContain('"method"');
   });
 
   test('should ask for the method used, not the one that sounds best', () => {
     // The field is a measurement. A tidied answer destroys the only reading of it
     // there is, so the prompt makes "noticed it while doing something else" legitimate.
-    expect(prompt).toContain('never\n   the one that sounds best');
+    expect(prompt, 'a tidied answer destroys the only reading of skill use there is').toContain(
+      'never\n   the one that sounds best',
+    );
     expect(prompt).toMatch(/Noticed it while doing something else/i);
   });
 });
@@ -80,7 +100,10 @@ test.describe('what the session is actually for', () => {
     // The clock stopped the fabricated early close. It did not stop the voluntary
     // one: the next run still closed with 19 minutes left. Time was never the real
     // frame — a session ends when the product stops telling it things it did not know.
-    expect(prompt).toContain('uncover information, and to classify what you uncover');
+    expect(
+      prompt,
+      'the clock stopped the fabricated early close; the next run still went home with 19 minutes left',
+    ).toContain('uncover information, and to classify what you uncover');
     expect(prompt).toContain('A session ends on');
     expect(prompt).toContain('information, never on tidiness');
   });
@@ -88,14 +111,20 @@ test.describe('what the session is actually for', () => {
   test('should replace "have I got enough" with a question that can be answered', () => {
     // You cannot know what enough is: the thing being counted is the thing not yet
     // found. What a session can answer is where its last surprise pointed.
-    expect(prompt).toMatch(/when did I last learn something, and where did it point/i);
+    expect(
+      prompt,
+      '"have I got enough" cannot be answered: the thing counted is the thing not yet found',
+    ).toMatch(/when did I last learn something, and where did it point/i);
     expect(prompt).toContain('avoiding the lead');
   });
 
   test('should make classification half the work, not filing', () => {
     // An unplaced finding is an anecdote, and an anecdote cannot be acted on,
     // argued for, or counted.
-    expect(prompt).toContain('Classification is half the work');
+    expect(
+      prompt,
+      'an unplaced finding is an anecdote, and an anecdote cannot be acted on or counted',
+    ).toContain('Classification is half the work');
     expect(prompt).toMatch(/is an anecdote/i);
   });
 });
@@ -105,12 +134,18 @@ test.describe('breadth, against the pull of depth', () => {
     // True per-session economics, wrong across sessions: the cheap second defect in
     // an area is the one the next run finds anyway. Five sessions on one target
     // reached 39% of the union at best, and 31 of 57 findings were seen exactly once.
-    expect(prompt).toContain('take a territory you have not touched');
+    expect(
+      prompt,
+      'five sessions reached 39% of the union at best, each diving deep and crossing into nobody else’s territory',
+    ).toContain('take a territory you have not touched');
     expect(prompt).toContain('not the whole story');
   });
 
   test('should say the singletons cluster by territory, not by luck', () => {
-    expect(prompt).toContain('not luck');
+    expect(
+      prompt,
+      '31 of 57 findings were seen exactly once, clustered by area rather than scattered',
+    ).toContain('not luck');
     expect(prompt).toMatch(/none of them crossed/i);
   });
 });
@@ -119,12 +154,18 @@ test.describe('the unexpected as the founding expectation', () => {
   test('should frame the unexpected as the point, not as an interruption', () => {
     // The predicted behaviours are checked by somebody cheaper. What is left is what
     // nobody thought of, and it does not arrive by waiting attentively.
-    expect(prompt).toContain('It is what you are for');
+    expect(
+      prompt,
+      'whatever a scan can see it already saw; what is left is what nobody thought of',
+    ).toContain('It is what you are for');
     expect(prompt).toContain('what would have to be true for this to');
   });
 
   test('should name assumptions about normal input as the largest blind spot', () => {
-    expect(prompt).toContain('largest unexamined thing you carry');
+    expect(
+      prompt,
+      'the expected shape of a thing is invisible from the inside, which is why it goes unprobed',
+    ).toContain('largest unexamined thing you carry');
     expect(prompt).toMatch(/what is the\s+version of this I have not imagined/);
   });
 
@@ -135,21 +176,30 @@ test.describe('the unexpected as the founding expectation', () => {
     // word — and reported it clean. The target's key says three high-impact defects
     // live exactly there. One of the two is wrong, and the report cannot say which,
     // because a clean sweep was recorded as a result and not as a disagreement.
-    expect(prompt).toContain('that clean result is a claim too');
+    expect(
+      prompt,
+      'a session swept locale clean where the target’s key says three high-impact defects live',
+    ).toContain('that clean result is a claim too');
     expect(prompt).toMatch(/a sweep\s+that cannot fail is a sweep that proves nothing/);
   });
 });
 
 test.describe('reading the product before ranking the work', () => {
   test('should require working out what a catastrophe would be for this product', () => {
-    expect(prompt).toContain('what would be a catastrophe for it');
+    expect(
+      prompt,
+      'the quality criteria are the same list every time; only the ranking is this product’s',
+    ).toContain('what would be a catastrophe for it');
     expect(prompt).toContain('most\n   appalled to learn');
   });
 
   test('should say the criteria list is fixed and the ranking is not', () => {
     // A storefront dies on money being wrong; a text parser on mis-reading a
     // language. Same criteria, different order, and the order is the decision.
-    expect(prompt).toContain('the ranking is not');
+    expect(
+      prompt,
+      'a storefront dies on wrong money, a parser on mis-reading a language',
+    ).toContain('the ranking is not');
     expect(prompt).toMatch(/Different products value different things/);
   });
 
@@ -161,7 +211,10 @@ test.describe('reading the product before ranking the work', () => {
     // The same session ranked security worth probing on a tool with no backend, and
     // that apparently unpromising choice produced a real seeded defect. An earlier
     // version of this prompt cited it as budget wasted, which was simply untrue.
-    expect(prompt).toContain('Ranking badly is not the');
+    expect(
+      prompt,
+      'not ranking is the failure: then the order comes from habit, and habit sweeps a bank like a spellchecker',
+    ).toContain('Ranking badly is not the');
     expect(prompt).toMatch(/habit\s+runs the same sweep against a bank and a spellchecker/);
   });
 });
@@ -170,7 +223,10 @@ test.describe('magnification as an oracle', () => {
   test('should treat zoom as an instrument, not only as a thing that might break', () => {
     // The skill had zoom-to-50% as a state-forcer — "exposes absolutely-positioned
     // elements parked outside the viewport". The larger use is seeing shape at all.
-    expect(prompt).toContain('Magnification is an oracle');
+    expect(
+      prompt,
+      'the skill had zoom only as a state-forcer; the larger use is seeing shape at all',
+    ).toContain('Magnification is an oracle');
     expect(prompt).toContain('as an instrument, not only as a thing to check');
   });
 
@@ -178,14 +234,20 @@ test.describe('magnification as an oracle', () => {
     // Seven missed defects were an offset output box, an output too far left, mixed
     // typefaces, a font whose l and I are identical, wasted whitespace, an oversized
     // banner and an input below its own output. None of them is a number.
-    expect(prompt).toContain('the detail drops out while the pattern arrives');
+    expect(
+      prompt,
+      'seven missed defects were patterns at low magnification and none of them is a number',
+    ).toContain('the detail drops out while the pattern arrives');
     expect(prompt).toMatch(/none of them is a number/);
   });
 
   test('should generalise magnification past the browser to any evidence stream', () => {
     // A log line by line is zoomed all the way in; the same log as counts per minute
     // is zoomed out, and only one shows that errors arrive in bursts of exactly five.
-    expect(prompt).toContain('Every\nevidence stream has a magnification');
+    expect(
+      prompt,
+      'a log read line by line is zoomed all the way in, and only the other setting shows a burst',
+    ).toContain('Every\nevidence stream has a magnification');
     expect(prompt).toContain('suspect the magnification before you');
   });
 });
