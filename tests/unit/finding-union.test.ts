@@ -106,7 +106,10 @@ test.describe('what the numbers mean', () => {
   test('should name the singletons, which are the map of where the role is blind', () => {
     // Not a lucky accident to be admired — evidence about what the other runs were
     // not looking at.
-    expect(summary.singletons).toHaveLength(1);
+    expect(
+      summary.singletons,
+      'the singletons are the map of where the role is blind, and losing them is losing the point of reading runs together',
+    ).toHaveLength(1);
     expect(summary.singletons[0]?.label).toContain('currency selector');
   });
 

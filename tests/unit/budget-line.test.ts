@@ -47,7 +47,10 @@ test.describe('the budget line', () => {
     // survived a run that was stopped by a variable nobody had set deliberately.
     const text = describeBudget(line());
 
-    expect(text).not.toContain('AGENT_TIMEOUT_MS overrides');
+    expect(
+      text,
+      'a banner crying override on every run is one nobody reads, and the real one then passes unseen',
+    ).not.toContain('AGENT_TIMEOUT_MS overrides');
     expect(text).not.toContain('AGENT_MAX_USD overrides');
     expect(text).not.toContain('AGENT_MAX_TURNS overrides');
   });

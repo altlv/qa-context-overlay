@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `42561da` — the commit this file was last checked against. A file cannot name
+Head is `6b7bea9` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -345,20 +345,35 @@ part of it survives the subject being swapped.
 | Level       | Role                   | Its level skill                          | What re-checks its output when the subject is not this repository                                          |
 | ----------- | ---------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | unit        | `unit-coder`           | `unit-testing`                           | the subject's own runner, then `npm run assertion-floor`. Mutation needs the unit's set and the comparator |
-| integration | `integration-coder`    | none yet — the brief is written          | the subject's own runner, then the floor. The comparator and item 60 are both open                         |
+| integration | `integration-coder`    | `integration-testing`                    | the subject's own runner, the floor, and the comparator against a declared mutation set. Item 60 is open   |
 | api         | `api-coder`            | none — `pwtest` and `test-techniques`    | `assert-quality`, a Playwright run, `fault-check`. It also refuses to start without a committed `--design` |
 | e2e         | `e2e-coder`            | none — as api                            | the same three, over app specs; `--design` and `--app --env` as well                                       |
 | exploratory | `exploratory-tester`   | `exploratory-session` and four more      | `check-report`, and it is the one role that has run for real                                               |
 | design      | `test-planner`         | `test-design`, `risk-assessment`         | `check-report` on the design, plus the gate's own "wrote no design" problem                                |
 | review      | `testability-reviewer` | `testability-audit`, `visual-inspection` | its report only                                                                                            |
 
-**No coder role has ever run. Three of the testing family have** — `test-planner`,
-`testability-reviewer` and `exploratory-tester` — which is exactly the asymmetry to close: a role
-that writes tests and a role that judges them are both tested here, and only the judging half has
-met a live agent. The two this pair of PoCs takes, unit and integration, are also the two whose
-judgement half is provably incomplete: the floor covers any stack, the comparator does not exist,
-and nothing yet proves a subject test notices its process failing. That is why the comparator sits
-before the next run rather than after it.
+**Two coder roles have now run, and the asymmetry is closing.** `unit-coder` against
+`mcpa`, and `integration-coder` against the same subject on 2026-09-27: 132 turns, $14.98, 34
+tests written into `test/labs-integration.test.js`, 33 of them passing.
+
+The one failing test is the result worth keeping. It asserts that stopping a lab mid-write leaves
+the whole Express app dead — `src/routes/labs.js:413` writes to a killed child's stdin with no
+error handler anywhere in the file — and the subject's own suite passes 11 of 11 without covering
+it. The gate failed the run, correctly, because a test that does not pass does not pass; proving
+the cause is `failure-investigator`'s job and has not been done.
+
+And the comparator now exists and is a gate step. Scored against the 14 mutations of
+`src/routes/labs.js`: the hand-written `test/labs-routes.test.js` kills **4 of 14**, the file
+`integration-coder` wrote kills **8 of 14** — and survives one the hand-written suite catches, the
+WWW-Authenticate challenge. Twice as strong, and weaker in one place. That is the PoC's central
+claim getting its first integration-level evidence, and it is also the first number here that no
+other check could have produced.
+
+What remains provably incomplete at this level is item 60: nothing proves a subject test notices
+its **process** failing, which the integration PoC calls this level's central claim rather than a
+side check. Six mutations survive both suites — `MAX_LOG_ENTRIES`, the 409 on a pending lab,
+OAuth token reattachment, dead-session refusal, port reuse — so 8 of 14 is an improvement and not
+a good score.
 
 For an **AI-backed** subject the judgement has four layers rather than one — deterministic
 foundations on a mock provider, reproducible reality by record and replay, success rates over runs,

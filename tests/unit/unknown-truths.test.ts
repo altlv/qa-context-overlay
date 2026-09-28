@@ -41,7 +41,10 @@ test.describe('the unknowns section', () => {
       why: 'Checkout is forbidden by the charter.',
       settled_by: 'A run with payment authorisation.',
     };
-    expect(unknownSchema.safeParse(whole).success).toBe(true);
+    expect(
+      unknownSchema.safeParse(whole).success,
+      'all three parts together are what turns an admission into the next session’s charter',
+    ).toBe(true);
     // "I do not know" is not a finding. "I do not know, and here is what would tell
     // us" is the next session's charter.
     const { settled_by, ...missing } = whole;
@@ -76,7 +79,10 @@ test.describe('the unknowns section', () => {
 test.describe('what the role is told about it', () => {
   test('should separate a wall hit from a choice made', () => {
     const prompt = exploratoryTester.prompt as string;
-    expect(prompt).toContain('Name the unknown truths');
+    expect(
+      prompt,
+      'without it a wall the session hit is filed as a choice it made, or not at all',
+    ).toContain('Name the unknown truths');
     expect(prompt).toContain('an unknown truth is a wall you hit');
   });
 
@@ -85,7 +91,10 @@ test.describe('what the role is told about it', () => {
     // A model asserts it confidently or drops it — and a report that never mentions a
     // question reads exactly like a report that answered it.
     const prompt = exploratoryTester.prompt as string;
-    expect(prompt).toMatch(/worse at this than a person/i);
+    expect(
+      prompt,
+      'a report that never mentions a question reads exactly like a report that answered it',
+    ).toMatch(/worse at this than a person/i);
     expect(prompt).toContain('reads exactly like a report that answered it');
   });
 

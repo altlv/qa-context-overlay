@@ -53,7 +53,10 @@ test.describe('the session is handed its oracles, not a pointer to them', () => 
 
   test('should name where an unsupported opinion hides', () => {
     const composed = prompt();
-    expect(composed).toContain('user expectations');
+    expect(
+      composed,
+      'the skill and the prompt must not drift: an oracle taught in one and missing from the other is one no session will reach for',
+    ).toContain('user expectations');
     expect(composed).toContain('familiar problems');
   });
 });

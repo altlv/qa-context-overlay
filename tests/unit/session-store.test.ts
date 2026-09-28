@@ -142,7 +142,10 @@ test.describe('the session index', () => {
     });
 
     expect(line).toContain('academybugs/test');
-    expect(line).toContain('18 defect(s)');
+    expect(
+      line,
+      'the index line is what a person scans instead of opening every kept session',
+    ).toContain('18 defect(s)');
     expect(line).toContain('gate FAIL');
     expect(line).toContain('$7.7141');
   });
@@ -161,7 +164,10 @@ test.describe('the session index', () => {
       home: 'sessions/no-target/x',
     });
 
-    expect(line).toContain('no report');
+    expect(
+      line,
+      'zero defects and an unreadable report look identical in a list, and only one of them is a result',
+    ).toContain('no report');
     expect(line).not.toContain('0 defect(s)');
   });
 });

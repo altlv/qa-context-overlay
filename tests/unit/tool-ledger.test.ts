@@ -25,7 +25,10 @@ test.describe('reading a skill is what loading a skill looks like', () => {
   });
 
   test('should not mistake an ordinary file for a skill', () => {
-    expect(skillFrom('src/qe/report.ts')).toBeNull();
+    expect(
+      skillFrom('src/qe/report.ts'),
+      'counting an ordinary read as a skill would invent use that never happened',
+    ).toBeNull();
     expect(skillFrom('docs/skills-overview.md')).toBeNull();
   });
 });
@@ -45,7 +48,10 @@ test.describe('what a tool call was aimed at', () => {
 
   test('should flatten and truncate something enormous rather than storing it whole', () => {
     const long = describeTarget('browser_type', { text: 'x'.repeat(500) });
-    expect(long.length).toBeLessThanOrEqual(120);
+    expect(
+      long.length,
+      'a ledger that stores whole payloads becomes unreadable and stops being consulted',
+    ).toBeLessThanOrEqual(120);
     expect(long.endsWith('…')).toBe(true);
   });
 
@@ -62,7 +68,10 @@ test.describe('the ledger', () => {
     ledger.record('Read', { file_path: 'src/x.ts' }, true);
 
     const summary = ledger.summary();
-    expect(summary.totalCalls).toBe(3);
+    expect(
+      summary.totalCalls,
+      'the ledger is the only account of a session that is not the model’s own prose about itself',
+    ).toBe(3);
     expect(summary.byTool[0]).toEqual({ tool: 'browser_click', calls: 2 });
   });
 
@@ -71,7 +80,9 @@ test.describe('the ledger', () => {
     ledger.record('Bash', { command: 'curl https://elsewhere.test' }, false, 'host is refused');
 
     const [call] = ledger.entries();
-    expect(call?.allowed).toBe(false);
+    expect(call?.allowed, 'a refusal unrecorded is a bound nobody can show was enforced').toBe(
+      false,
+    );
     expect(call?.reason).toBe('host is refused');
     expect(ledger.summary().refused).toBe(1);
   });
@@ -123,7 +134,10 @@ test.describe('the ledger', () => {
     ledger.record('Write', { file_path: 'b.md' }, true);
 
     const lines = ledger.asJsonl().split('\n');
-    expect(lines).toHaveLength(2);
+    expect(
+      lines,
+      'one object per line is what lets a later run read this back without a parser of its own',
+    ).toHaveLength(2);
     expect((JSON.parse(lines[1] ?? '{}') as { seq: number }).seq).toBe(2);
   });
 
@@ -139,7 +153,10 @@ test.describe('a skill loaded through a Skill tool counts too', () => {
     const ledger = new ToolLedger(INJECTED);
     ledger.record('Skill', { skill: 'rule-modelling' }, true);
 
-    expect(ledger.summary().skillsLoaded).toEqual(['rule-modelling']);
+    expect(
+      ledger.summary().skillsLoaded,
+      'a Skill call is a load; counting only file reads would under-report use on any host providing that tool',
+    ).toEqual(['rule-modelling']);
     expect(ledger.summary().skillsUnopened).not.toContain('rule-modelling');
   });
 

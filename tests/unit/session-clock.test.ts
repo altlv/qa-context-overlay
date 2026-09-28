@@ -33,7 +33,10 @@ const contextOf = (output: unknown): string =>
 test.describe('the session clock line', () => {
   test('should lead with what remains, because the failure is stopping early', () => {
     const line = clockLine({ ...base, elapsedMs: 13 * 60 * 1000, turns: 65, costUsd: 5.4382 });
-    expect(line).toContain('32m00s of the timebox REMAINING');
+    expect(
+      line,
+      'the line must lead with what is left: the failure being corrected is stopping early, not overrunning',
+    ).toContain('32m00s of the timebox REMAINING');
     expect(line).toContain('13m00s elapsed');
     expect(line).toContain('Turns 65/250');
   });
@@ -41,19 +44,28 @@ test.describe('the session clock line', () => {
   test('should forbid closing while most of the timebox remains', () => {
     // The exact state both measured sessions were in when they announced they were done.
     const line = clockLine({ ...base, elapsedMs: 13 * 60 * 1000 });
-    expect(line).toContain('Do NOT close the session');
+    expect(
+      line,
+      'this is the exact state both measured sessions were in when they announced they were done',
+    ).toContain('Do NOT close the session');
     expect(line).toContain('floor to spend, not a ceiling to avoid');
   });
 
   test('should switch to closing only in the last fifth', () => {
     const line = clockLine({ ...base, elapsedMs: 40 * 60 * 1000 });
-    expect(line).toContain('Begin closing');
+    expect(
+      line,
+      'closing guidance arriving too early is how a session talks itself into finishing at a third of its budget',
+    ).toContain('Begin closing');
     expect(line).not.toContain('Do NOT close');
   });
 
   test('should say plainly when the timebox is spent, and never report negative time', () => {
     const line = clockLine({ ...base, elapsedMs: 60 * 60 * 1000 });
-    expect(line).toContain('The timebox is spent');
+    expect(
+      line,
+      'a negative remaining would read as budget still available, which is the opposite of the truth',
+    ).toContain('The timebox is spent');
     expect(line).toContain('0s of the timebox REMAINING');
   });
 
@@ -64,7 +76,10 @@ test.describe('the session clock line', () => {
   });
 
   test('should carry the action count only when a browser supplied one', () => {
-    expect(clockLine(base)).not.toContain('State-changing');
+    expect(
+      clockLine(base),
+      'a count invented for a run with no browser is a number the session would act on',
+    ).not.toContain('State-changing');
     expect(clockLine({ ...base, actions: 12, maxActions: 100 })).toContain(
       'State-changing actions 12/100',
     );

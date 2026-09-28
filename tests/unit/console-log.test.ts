@@ -17,7 +17,7 @@ const REAL = `[     944ms] [ERROR] Failed to load resource: net::ERR_BLOCKED_BY_
 test.describe('reading the console log', () => {
   test('should parse the captured format, timestamp, level, message and source', () => {
     const entries = parseConsoleLog(REAL);
-    expect(entries).toHaveLength(6);
+    expect(entries, 'a line this misses is a product error nobody is shown').toHaveLength(6);
     expect(entries[0]?.atMs).toBe(944);
     expect(entries[0]?.level).toBe('ERROR');
     expect(entries[0]?.url).toContain('fonts.googleapis.com');
@@ -52,7 +52,10 @@ test.describe('whose fault is this error', () => {
 test.describe('what the runner reports', () => {
   test('should separate our noise from the product signal', () => {
     const summary = summariseConsole(parseConsoleLog(REAL));
-    expect(summary.errors).toBe(4);
+    expect(
+      summary.errors,
+      'across four runs 116 of 120 console errors were our own origin guard; miscount and a session spends its attention on us',
+    ).toBe(4);
     expect(summary.fromConfinement).toBe(2);
     expect(summary.unattributed).toBe(1);
     expect(summary.fromProduct).toHaveLength(1);

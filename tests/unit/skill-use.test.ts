@@ -19,7 +19,10 @@ test.describe('the methods a skill teaches', () => {
     // Extracted rather than listed so a skill that grows a ninth technique is measured
     // on nine the next time it runs, with nobody having to remember this file.
     const taught = methodsTaught(readSkill('test-techniques')).map((method) => method.name);
-    expect(taught).toContain('Equivalence partitioning');
+    expect(
+      taught,
+      'extracted from the skill file so a ninth technique is measured without anyone remembering this module',
+    ).toContain('Equivalence partitioning');
     expect(taught).toContain('Decision tables');
     expect(taught).toContain('Pairwise');
     expect(taught.length).toBeGreaterThanOrEqual(8);
@@ -95,7 +98,10 @@ test.describe('what the runner prints', () => {
 
   test('should say plainly when a skill left no trace', () => {
     const lines = reportSkillUse(skillUse(['named'], 'nothing here', read)).join('\n');
-    expect(lines).toContain('named: 0/1 — nothing from this skill reached the report');
+    expect(
+      lines,
+      'silence about an unused skill is how 21k tokens go on being paid for unnoticed',
+    ).toContain('named: 0/1 — nothing from this skill reached the report');
     expect(lines).toContain('inlined on every run whether or not that changes');
   });
 
@@ -119,7 +125,10 @@ test.describe('telling a method name from a procedure step', () => {
     // "Write it" is step 6 of bug-report and it matched a report that never opened the
     // skill, because prose reaches for that phrase anyway — use claimed where there was
     // none. Steps are instructions to the tester, not labels for what was done.
-    expect(methodsTaught('### 6. Write it')).toEqual([]);
+    expect(
+      methodsTaught('### 6. Write it'),
+      'a step is an instruction to the tester, and prose reaches for "write it" anyway — it credited a skill never opened',
+    ).toEqual([]);
     expect(methodsTaught('### 1. Reproduce and reduce')).toEqual([]);
     expect(methodsTaught('### 5. Probe the four failure shapes')).toEqual([]);
   });
@@ -148,7 +157,10 @@ test.describe('a skill the session names outright', () => {
     // read "unmeasurable". Crediting the skill's own name recovers exactly the case
     // the heading rule cannot see.
     const [use] = skillUse(['rule-modelling'], 'rule-modelling, boundary-leakage probe', stepsOnly);
-    expect(use?.namedItself).toBe(true);
+    expect(
+      use?.namedItself,
+      'rule-modelling teaches only steps, and a session named it five times while the score read unmeasurable',
+    ).toBe(true);
     expect(reportSkillUse([use!]).join('\n')).toContain('named by the session');
   });
 

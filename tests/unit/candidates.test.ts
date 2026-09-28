@@ -234,7 +234,10 @@ test.describe('an export whose declaration this file does not hold', () => {
 
   test('should still say whether a test names it', () => {
     const found = analyzeCandidates(reExport, ['expect(THING).toBe(1);']);
-    expect(found.find((c) => c.name === 'THING')?.referenced).toBe(true);
+    expect(
+      found.find((c) => c.name === 'THING')?.referenced,
+      'a false negative sends a role to write a test that already exists, then report the gap closed',
+    ).toBe(true);
     expect(found.find((c) => c.name === 'OTHER')?.referenced).toBe(false);
   });
 
@@ -247,7 +250,10 @@ test.describe('an export whose declaration this file does not hold', () => {
     // The honest half stays honest: unknown kind, and a detail that says why. Only the
     // reference column was wrong.
     const found = analyzeCandidates(reExport, []);
-    expect(found.find((c) => c.name === 'THING')?.kind).toBe('unknown');
+    expect(
+      found.find((c) => c.name === 'THING')?.kind,
+      'the honest half must stay honest: it still cannot classify what it cannot see',
+    ).toBe('unknown');
     expect(found.find((c) => c.name === 'THING')?.detail).toContain('no declaration found');
   });
 });

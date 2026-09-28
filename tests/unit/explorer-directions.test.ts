@@ -59,7 +59,10 @@ test.describe('the four standing directions', () => {
     // excuse a direction is a badly written charter, and the session should say so
     // rather than quietly comply — we have already paid for a charter that taught
     // method and pre-loaded its own answers.
-    expect(prompt).toMatch(/hold in every session, whatever the charter says/i);
+    expect(
+      prompt,
+      'a charter that appears to excuse a direction is badly written, and the session should say so rather than quietly comply',
+    ).toMatch(/hold in every session, whatever the charter says/i);
     expect(prompt).toMatch(/cannot excuse\s+you from any of them/i);
   });
 
