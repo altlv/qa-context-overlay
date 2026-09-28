@@ -18,7 +18,7 @@ decide whether the result proves anything.
 | Test quality gate                                | built                                | `src/quality/assertions.ts`      |
 | Release gate verdict                             | built                                | `src/qe/gate.ts`                 |
 | Failure triage agent                             | built, unverified against live API   | `src/agents/triage.ts`           |
-| Agent roles — coding family and testing family   | driven: 4 roles, 5 subjects          | `src/agents/roles.ts`            |
+| Agent roles — coding family and testing family   | driven: 5 of 8, over 5 subjects      | `src/agents/roles.ts`            |
 | Self-healing selectors                           | built                                | `src/tools/heal.ts`              |
 | Test ideas from a scan, heuristics catalogue     | built, reaches a run via the driver  | `src/qe/test-ideas.ts`           |
 | Driver (E5a) — candidate actions under a policy  | built, reaches a live session        | `src/qe/driver.ts`               |

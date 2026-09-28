@@ -305,10 +305,12 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
   guard counts as proven only when it refuses something in a live run. Raised by the user on
   2026-09-24 while asking whether each agent needs its own credential; it does not, but the
   inheritance is unproven in both directions.
-- **`maxStates` refuses in unit tests and has never refused a live agent.** It is no
-  longer enforced by nothing — `src/qe/state-model.ts` counts states off the live DOM
-  and `browserGuard` refuses at the ceiling — but like every other bound here it stays
-  unproven until it is seen stopping a real session. What the state model calls a state
+- **`maxStates` has now refused a live agent.** The Polymer Shop session on 2026-09-25
+  was stopped at the ceiling — "refused browser_click: state ceiling reached (25 for test;
+  25 visited)" — and the session recorded the consequence itself, filing "the viewport
+  width at which the dialog stops occluding the Size control" as an unknown it could not
+  reach because the ceiling ended interaction first. The bound is proven; whether 25 is
+  the right number for a shadow-DOM single-page shop is a separate question, now open. What the state model calls a state
   is also a judgement nothing outside its own tests has yet argued with: two screens
   whose interactive controls match and whose content differs fold into one, by design.
 - **The state count is a floor whenever a look was missed.** The observer is fail-soft
