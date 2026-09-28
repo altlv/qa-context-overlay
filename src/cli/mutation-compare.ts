@@ -226,4 +226,15 @@ console.log(
 if (args.against !== null) console.log(`Strength delta: ${weakened.length} new survivor(s).`);
 if (unrestored > 0) console.error(`${unrestored} file(s) could not be read back after restoring.`);
 
-process.exit(survivors.length > 0 || weakened.length > 0 ? 1 : 0);
+// Two questions, two verdicts, and conflating them made this unusable as a gate step.
+//
+// With `--against` the question is the one this command exists for — did a change leave the
+// suite weaker — and `weakened` answers it. Survivors are information alongside it, not a
+// failure: no real suite kills every mutation, and measured here the subject's own
+// hand-written suite leaves 10 of 14 alive. Exiting 1 on that would make the step
+// permanently red, and a check that cannot go green is one people learn to ignore — the
+// same reasoning `external` carries in the app contract.
+//
+// Without `--against` there is no before and after, so the only claim available is
+// completeness, and a survivor is the finding.
+process.exit((args.against === null ? survivors.length > 0 : weakened.length > 0) ? 1 : 0);

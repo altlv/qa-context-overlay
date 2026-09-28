@@ -46,12 +46,19 @@ export interface GateStep {
  * whitespace is enough for that, and a runner needing a quoted argument should be given
  * a wrapper script rather than a quoting dialect parsed here.
  */
-function runOneArgv(runOne: string, file: string): { command: string; args: string[] } {
+function runOneArgv(
+  runOne: string,
+  file: string,
+): { command: string; args: string[]; all: string[] } {
   const parts = runOne
     .trim()
     .split(/\s+/)
     .filter((part) => part !== '');
-  return { command: parts[0] ?? process.execPath, args: [...parts.slice(1), file] };
+  const command = parts[0] ?? process.execPath;
+  const args = [...parts.slice(1), file];
+  // `all` is the same thing as one command line, for a flag that takes a command rather
+  // than running one — `mutation-compare --suite node --test <file>`.
+  return { command, args, all: [command, ...args] };
 }
 
 export interface GatePlan {
@@ -101,6 +108,12 @@ export function planGate(input: {
    * that must run: a run may have changed the checker it is judged by.
    */
   harnessRoot?: string;
+  /**
+   * The subject's mutation set and the suite new work is held against, when it declares
+   * one. Absent means the gate can say a test passes and asserts, and nothing about
+   * whether it would notice a fault.
+   */
+  mutations?: { set: string; baseline: string };
 }): GatePlan {
   const changed = input.changed.map(posix);
   const script = (path: string): string =>
@@ -148,6 +161,34 @@ export function planGate(input: {
         ],
         env: {},
       });
+
+      // Would it notice a fault? Nothing above answers that. The runner proves the tests
+      // pass and the floor proves they assert, and a suite asserting on values it computed
+      // for itself clears both — the floor says so about itself in as many words.
+      //
+      // Held against the subject's own suite for that seam rather than a threshold, so the
+      // bar is what already exists. Measured on mcpa: the hand-written suite kills 4 of 14
+      // and the agent's file kills 8, while surviving one mutation the hand-written suite
+      // catches. Twice as strong and weaker in one place — a regression no other step here
+      // can see.
+      if (input.mutations !== undefined) {
+        steps.push({
+          name: `mutation strength against ${input.mutations.baseline}`,
+          args: [
+            TSX,
+            script('src/cli/mutation-compare.ts'),
+            '--mutations',
+            script(input.mutations.set),
+            '--repo',
+            '.',
+            '--suite',
+            ...runOneArgv(input.testStack.runOne, input.mutations.baseline).all,
+            '--against',
+            ...subjectFiles.flatMap((file) => runOneArgv(input.testStack!.runOne, file).all),
+          ],
+          env: {},
+        });
+      }
     }
 
     if (specs.length === 0 && subjectFiles.length === 0) {

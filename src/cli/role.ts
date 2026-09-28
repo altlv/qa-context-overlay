@@ -821,6 +821,9 @@ const plan = planGate({
   // harness's scripts come from this checkout in that case; when the worktree is this
   // repository, the worktree's own copy is what runs.
   ...(subjectRepo === null ? {} : { harnessRoot: repoRoot }),
+  // Only when the subject declares one. Without it the gate can say a test passes and
+  // asserts, and nothing about whether it would notice a fault.
+  ...(subjectConfig?.mutations === undefined ? {} : { mutations: subjectConfig.mutations }),
 });
 
 console.error(`\nPost-run gate — ${changed.length} file(s) changed in the worktree:`);

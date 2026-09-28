@@ -82,6 +82,32 @@ export interface AppConfig {
    */
   testStack?: TestStack;
   /**
+   * A named mutation set for one seam, and the suite already holding that seam.
+   *
+   * The gate's other checks say a test is shaped like a test and currently passes. Neither
+   * says it would notice a fault, and the assertion floor states its own blind spot: "a
+   * value the test computed for itself is above this floor". A suite of thirty-four tests
+   * asserting on its own arithmetic clears every check the gate had.
+   *
+   * Measured on `mcpa` at `c8d7549`, against the 14 mutations of `src/routes/labs.js`: the
+   * subject's hand-written `test/labs-routes.test.js` kills 4, and the file
+   * `integration-coder` wrote kills 8. Twice as strong — and weaker on one mutation the
+   * hand-written suite catches, which is precisely the kind of regression no other check
+   * here can see.
+   *
+   * `baseline` is what new work is held against, so the bar is the suite that already
+   * exists rather than a number someone picked. The rule is `survivors(new) ⊆
+   * survivors(baseline)`: a change may not leave the seam weaker than it found it.
+   * Survivors above that are reported and do not fail — no real suite kills everything,
+   * and a step that can never go green is one people learn to ignore.
+   */
+  mutations?: {
+    /** The mutation module, relative to this repository — subjects are never modified. */
+    set: string;
+    /** The subject's own suite for that seam, relative to the subject. */
+    baseline: string;
+  };
+  /**
    * What a fresh worktree of this subject needs before its own suite can pass.
    *
    * A worktree holds what git tracks and nothing else, and a subject's tests may need

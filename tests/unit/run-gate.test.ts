@@ -330,3 +330,57 @@ test.describe('what a run changed', () => {
     );
   });
 });
+
+test.describe('whether the tests would notice a fault', () => {
+  const stack = {
+    runner: 'node --test',
+    runAll: 'node --test test/*.test.js',
+    runOne: 'node --test ',
+    testsDir: 'test',
+    testFilePattern: '*.test.js',
+    moduleSystem: 'commonjs',
+    assertions: "const assert = require('node:assert/strict');",
+    exemplar: 'test/specIndexer.test.js',
+  };
+
+  test('should hold a changed suite against the subject’s own suite for that seam', () => {
+    // The steps beside this say a test passes and that it asserts. Neither says it would
+    // notice a fault, and the assertion floor names that blind spot itself: "a value the
+    // test computed for itself is above this floor". Measured on mcpa — the hand-written
+    // suite kills 4 of 14, the agent's file kills 8 and survives one the hand-written
+    // suite catches. Twice as strong, and weaker in one place no other step can see.
+    const plan = planGate({
+      ...base,
+      role: 'integration-coder',
+      family: 'coding',
+      changed: ['test/labs-integration.test.js'],
+      testStack: stack,
+      mutations: {
+        set: 'apps/mcpa/mutations/labs-routes.ts',
+        baseline: 'test/labs-routes.test.js',
+      },
+    });
+
+    const step = plan.steps.find((entry) => entry.name.startsWith('mutation strength'));
+    expect(step, 'a subject declaring a mutation set must be scored against it').toBeDefined();
+    const args = step?.args.join(' ') ?? '';
+    // The baseline is `--suite` and the new work is `--against`, because the rule is
+    // survivors(new) ⊆ survivors(baseline) — held against what exists, not a number
+    // somebody picked.
+    expect(args).toContain('--suite node --test test/labs-routes.test.js');
+    expect(args).toContain('--against node --test test/labs-integration.test.js');
+  });
+
+  test('should say nothing about fault-finding when the subject declares no set', () => {
+    // Silence rather than a claim: without a set the gate knows a test passes and asserts,
+    // and nothing more.
+    const plan = planGate({
+      ...base,
+      role: 'integration-coder',
+      family: 'coding',
+      changed: ['test/labs-integration.test.js'],
+      testStack: stack,
+    });
+    expect(plan.steps.map((s) => s.name).join(' ')).not.toContain('mutation strength');
+  });
+});
