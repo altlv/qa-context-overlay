@@ -12,7 +12,16 @@ import {
 export const integrationCoder: AgentDefinition = {
   description:
     'Tests modules wired together through their real entry points — a spawned CLI, the actual filesystem, real exit codes. Use when the risk lives between components rather than inside one. Not for pure logic (unit-coder) or anything needing a browser (e2e-coder).',
-  maxTurns: 20,
+  // Measured, not estimated. The first live run of this role against `mcpa` used **132
+  // turns** and 2804s to write 34 tests, and it was given 400 turns and 3600s by hand. At
+  // the declared 20 it would have stopped at a sixth of the work with nothing written —
+  // the same starvation `exploratory-tester` met at 30 turns, and for the same reason: the
+  // number predates anyone running the role.
+  //
+  // 250 so that spend, not turns, is what binds. Building a seam test means spawning the
+  // real entry point, waiting on a port, reading the failure and trying again, and each
+  // of those is a turn that produces no file.
+  maxTurns: 250,
   tools: ['Read', 'Grep', 'Glob', 'Edit', 'Write', 'Bash', 'Agent'],
   skills: [...SHARED_SKILLS, 'repo-survey', 'test-techniques', 'integration-testing'],
   prompt: `You write integration tests for the seam your task names.

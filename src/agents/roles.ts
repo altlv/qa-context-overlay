@@ -102,7 +102,10 @@ export const BROWSER_ACCESS: Record<string, BrowserAccess> = {
  */
 export const WALL_CLOCK_SECONDS: Record<string, number> = {
   'unit-coder': 600,
-  'integration-coder': 900,
+  // Measured: the first live integration run took 2804s against `mcpa`, so 900 would have
+  // cut it off at under a third. A seam test spawns a real process and waits for it, and
+  // that waiting is wall clock the role cannot compress.
+  'integration-coder': 3600,
   'api-coder': 900,
   'e2e-coder': 1200,
   'testability-reviewer': 600,
