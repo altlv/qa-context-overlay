@@ -81,6 +81,18 @@ export function applyProcessFault(source: string, fault: ProcessFault): string {
 export interface FaultOutcome extends ProcessFault {
   /** True when the suite failed, which is the result being asked for. */
   noticed: boolean;
+  /**
+   * The suite never finished, rather than deciding.
+   *
+   * Carried separately because folding it into `noticed: false` reports the worse
+   * outcome as the milder one. A suite that fails has done its job; a suite that waits
+   * forever for a process that will never arrive costs a whole run and tells nobody
+   * anything — and in CI it is the difference between a red build and a stuck one.
+   *
+   * Measured: the `models` suite an agent wrote hangs on all four faults, because it
+   * waits for the app to listen and nothing bounds that wait.
+   */
+  hung?: boolean;
 }
 
 export interface FaultSummary {
@@ -106,8 +118,17 @@ export function summariseFaults(outcomes: FaultOutcome[]): FaultSummary {
  */
 export function reportFaults(summary: FaultSummary): string[] {
   const lines = [`Process faults noticed: ${summary.noticed}/${summary.total}`];
+  const hung = summary.survived.filter((fault) => fault.hung === true);
+  if (hung.length > 0) {
+    lines.push(
+      `  ${hung.length} of them HUNG rather than failing — the suite waited for a process that` +
+        ' was never going to arrive. In CI that is a stuck build rather than a red one, and it',
+      '  costs the whole run. Bound the wait before anything else here is worth fixing:',
+    );
+    for (const fault of hung) lines.push(`    ${fault.name}`);
+  }
   for (const fault of summary.survived) {
-    lines.push(`  SURVIVED — ${fault.name}`);
+    lines.push(`  ${fault.hung === true ? 'HUNG' : 'SURVIVED'} — ${fault.name}`);
     lines.push(`      ${fault.because}`);
   }
   if (summary.survived.length === 0 && summary.total > 0) {

@@ -87,3 +87,24 @@ test.describe('what the result says', () => {
     );
   });
 });
+
+test.describe('a suite that hangs instead of deciding', () => {
+  test('should report hanging apart from surviving, and lead with it', () => {
+    // Folding the two together reports the worse outcome as the milder one. A suite that
+    // fails has done its job; one that waits forever for a process that will never arrive
+    // costs the whole run — in CI, a stuck build rather than a red one. Measured: the
+    // models suite an agent wrote hangs on all four faults, because nothing bounds its
+    // wait for the app to listen.
+    const lines = reportFaults(
+      summariseFaults([{ ...fault('the process refuses to start'), hung: true }]),
+    ).join('\n');
+    expect(lines, 'a hang must not be filed under the same word as a pass').toContain('HUNG —');
+    expect(lines).toContain('stuck build rather than a red one');
+  });
+
+  test('should still call a plain survivor a survivor', () => {
+    const lines = reportFaults(summariseFaults([fault('the process exits 0')])).join('\n');
+    expect(lines).toContain('SURVIVED — the process exits 0');
+    expect(lines, 'nothing hung here, so nothing should say so').not.toContain('HUNG');
+  });
+});
