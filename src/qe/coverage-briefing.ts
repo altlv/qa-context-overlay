@@ -26,6 +26,29 @@ import type { Mutation } from './mutation-compare.js';
  * and the instrument would then be measuring itself.
  */
 
+/**
+ * The rules a scored suite left alive, read back out of the comparator's own output.
+ *
+ * Parsed rather than recomputed. The comparator mutates a real checkout and restores it,
+ * and that restore is the part with teeth — a run interrupted mid-file leaves a source
+ * broken, and a source left broken is indistinguishable from a suite that caught the
+ * mutation. Reimplementing the loop here to avoid parsing would mean owning that hazard
+ * twice, so the tested path stays the only one that touches a subject's files.
+ *
+ * `--suite` alone prints one block, which is what a briefing run asks for. Were a second
+ * given, `survived:` lines from both would be collected, which is why the caller does not
+ * pass one.
+ */
+export function parseSurvivors(output: string): string[] {
+  const found: string[] = [];
+  for (const line of output.split(/\r?\n/)) {
+    const match = /^\s*survived:\s*(.+?)\s*$/.exec(line);
+    const rule = match?.[1];
+    if (rule !== undefined && rule !== '' && !found.includes(rule)) found.push(rule);
+  }
+  return found;
+}
+
 export interface CoverageGap {
   /** The suite that already holds this seam. */
   baseline: string;

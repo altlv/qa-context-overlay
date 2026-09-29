@@ -24,6 +24,10 @@ import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
+import { briefCoverage, coverageGap, parseSurvivors } from '../qe/coverage-briefing.js';
+import { readMutations } from '../qe/mutation-compare.js';
+import { pathToFileURL } from 'node:url';
+import { TSX_CLI } from '../tool-paths.js';
 import { formatActionPlan, planActions } from '../qe/driver.js';
 import { ideasFor } from '../qe/test-ideas.js';
 import { ENVIRONMENTS, policyFor } from '../qe/exploration-policy.js';
@@ -414,6 +418,53 @@ if (prepareSteps.length > 0 && reusePath === undefined) {
   }
 }
 
+// ── A report to edit, rather than one to invent ───────────────────────────────────
+//
+// `integration-coder` filed prose twice running and failed the gate both times, against
+// an OUTPUT block that says "Its very first characters must be `---` on its own line,
+// opening the YAML frontmatter. No preamble, no greeting, no summary before it." It could
+// not be more explicit, so a third sentence was never the fix: prose in a role prompt is a
+// suggestion, and this repository has said as much since the preflight block.
+//
+// Filling a template is a different task from producing one from a specification, and the
+// second is where a good summary keeps arriving in the wrong shape.
+//
+// **The skeleton must fail until it is filled**, which is the whole design constraint. A
+// template that parsed would turn a loud gate failure into a silent pass, and that is
+// worse than the problem — so every required value is left empty, and `check-report`
+// refuses it exactly as it refuses prose. Untouched, the run fails as it does today; the
+// only thing changed is how much work it takes to get it right.
+const reportSkeleton = join(worktree, 'artifacts', 'run', 'report.md');
+if (families[name] === 'coding' && !existsSync(reportSkeleton)) {
+  await mkdir(dirname(reportSkeleton), { recursive: true });
+  await writeFile(
+    reportSkeleton,
+    [
+      '---',
+      'report: # one of: test-design | bug | testability | flake | gate | triage',
+      'target: # what you tested — a module path, a seam, a URL',
+      `date: ${new Date().toISOString().slice(0, 10)}`,
+      `author: ${name}`,
+      'confidence: # high | medium | low',
+      'evidence:',
+      '  direct: 0 # observed: a test result, a captured response, a file:line',
+      '  inferred: 0',
+      '  claimed: 0',
+      'findings: []',
+      'not_covered: [] # required, and an empty list claims complete coverage',
+      '---',
+      '',
+      '<!-- The gate reads this file, not your reply. Replace every empty value above:',
+      '     it is deliberately invalid until you do, so an untouched skeleton fails. -->',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  console.error(
+    `Report skeleton at ${runDirForHarvest}/report.md — fill it; it is invalid as it stands.`,
+  );
+}
+
 // ── The browser, when the role looks at running software and has somewhere to look ─
 
 let browser: {
@@ -554,7 +605,57 @@ const design =
   designPath === undefined
     ? ''
     : `# Design for this run\n\n_From ${designPath}. Implement its cases by id and cite the ids in your report._\n\n${readFileSync(resolve(workRoot, designPath), 'utf8')}\n\n`;
-const prompt = `${browser === null ? '' : `${browser.briefing}\n\n`}# Where you work\n\nYour working directory is a git worktree of this repository at ${base.slice(0, 7)}. Every file you read or write stays inside it.\n\n${targetLine}${design}${task}`;
+/**
+ * What the existing suite for this seam does not catch, measured before the role writes.
+ *
+ * The gate scores a coder's file against the same set afterwards, which makes that number
+ * a verdict. Taken first it is direction, and the difference was measured: choosing its
+ * own targets the role killed 8 of 14, and handed the survivors as sentences it killed 11
+ * of 14 with 23 tests instead of 34.
+ *
+ * It costs a full pass of the baseline suite — fourteen runs of it for `mcpa` — before the
+ * agent starts, and that is the honest price of the role not beginning blind. Any failure
+ * here leaves the briefing empty rather than stopping the run: a missing paragraph costs
+ * some of the role's aim, while a refusal costs the whole session.
+ */
+let coverage = '';
+if (subjectConfig?.mutations !== undefined && families[name] === 'coding') {
+  const { set, baseline } = subjectConfig.mutations;
+  console.error(
+    `Measuring what ${baseline} already catches, to say where a test is worth writing…`,
+  );
+  try {
+    const scored = await exec(
+      process.execPath,
+      [
+        TSX_CLI,
+        resolve(repoRoot, 'src/cli/mutation-compare.ts'),
+        '--mutations',
+        resolve(repoRoot, set),
+        '--repo',
+        '.',
+        '--suite',
+        ...subjectConfig.testStack!.runOne.trim().split(/\s+/).filter(Boolean),
+        baseline,
+      ],
+      { cwd: worktree, windowsHide: true, maxBuffer: 1 << 26 },
+    ).catch((error: { stdout?: string; stderr?: string }) => error);
+    const { mutations } = readMutations(
+      (await import(pathToFileURL(resolve(repoRoot, set)).href)) as unknown,
+    );
+    const survivors = parseSurvivors(`${scored.stdout ?? ''}${scored.stderr ?? ''}`);
+    coverage = briefCoverage(coverageGap(baseline, mutations, survivors));
+    console.error(
+      coverage === ''
+        ? `  ${baseline} defends every rule the set knows — no gap to point at.`
+        : `  ${survivors.length} rule(s) undefended; the role is told which.`,
+    );
+  } catch (error) {
+    console.error(`  could not measure it (${(error as Error).message}) — briefing without it.`);
+  }
+}
+
+const prompt = `${browser === null ? '' : `${browser.briefing}\n\n`}# Where you work\n\nYour working directory is a git worktree of this repository at ${base.slice(0, 7)}. Every file you read or write stays inside it.\n\n${targetLine}${design}${coverage}${task}`;
 
 const shell = shellGuard({
   environment: runTarget?.environment ?? null,

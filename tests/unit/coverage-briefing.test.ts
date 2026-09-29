@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { briefCoverage, coverageGap } from '../../src/qe/coverage-briefing.js';
+import { briefCoverage, coverageGap, parseSurvivors } from '../../src/qe/coverage-briefing.js';
 
 /**
  * The gate scores a coder's file against a mutation set after it is written, which makes
@@ -85,5 +85,36 @@ test.describe('what the role is told', () => {
     // "No known gaps" when nothing looked is a verification that cannot fail reporting
     // as checked — the failure this repository keeps meeting.
     expect(briefCoverage(null)).toBe('');
+  });
+});
+
+test.describe('reading the comparator back', () => {
+  // Parsed rather than recomputed: the comparator mutates a real checkout and restores
+  // it, and reimplementing that loop here would mean owning the restore hazard twice.
+  const output = [
+    'survivors (suite): 4/14 killed',
+    '  survived: a message must declare jsonrpc 2.0',
+    '  survived: the transcript is capped at MAX_LOG_ENTRIES',
+    '',
+    'Comparator: 4/14 killed by the suite, 10 survivor(s).',
+  ].join('\n');
+
+  test('should take every rule the suite left alive', () => {
+    expect(
+      parseSurvivors(output),
+      'a survivor missed here is a gap the role is never told about',
+    ).toEqual([
+      'a message must declare jsonrpc 2.0',
+      'the transcript is capped at MAX_LOG_ENTRIES',
+    ]);
+  });
+
+  test('should not mistake the summary lines for survivors', () => {
+    expect(parseSurvivors(output).some((rule) => rule.includes('killed'))).toBe(false);
+  });
+
+  test('should find nothing in output that scored nothing', () => {
+    // A failed measurement must brief nothing rather than invent a clean bill of health.
+    expect(parseSurvivors('The suite fails before any mutation.')).toEqual([]);
   });
 });
