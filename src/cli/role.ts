@@ -848,12 +848,17 @@ const record: GateRecord = {
   ],
 };
 
+/** The last lines a step said, however it ended. Both streams, because a measurement
+ * may come out of either and which one is the tool's choice, not ours. */
+const tailOf = (result: { stdout?: string; stderr?: string }): string[] =>
+  `${result.stdout ?? ''}${result.stderr ?? ''}`.trim().split('\n').slice(-30);
+
 for (const problem of plan.problems) console.error(`  ✗ ${problem}`);
 for (const step of plan.steps) {
   try {
     // A step names its own command only when a subject declared a runner; everything
     // harness-side runs under this process's node, which is what `args` is written for.
-    await exec(step.command ?? process.execPath, step.args, {
+    const done = await exec(step.command ?? process.execPath, step.args, {
       cwd: worktree,
       windowsHide: true,
       maxBuffer: 64 * 1024 * 1024,
@@ -862,11 +867,19 @@ for (const step of plan.steps) {
       // .cmd shim that CreateProcess cannot start directly.
       shell: step.command !== undefined && step.command !== process.execPath,
     });
-    record.steps.push({ name: step.name, passed: true, output: [] });
+    // A passing step used to record `output: []`, which threw away the only copy of
+    // whatever it measured. `mutation strength` passed on 2026-09-28 having scored the
+    // agent's suite at 11 of 14 against the baseline's 4, and the number was gone — it
+    // had to be produced again by hand, from a step that had just produced it.
+    //
+    // A check whose value is a verdict loses nothing by passing quietly. A check whose
+    // value is a **measurement** loses all of it, and those are the checks this harness
+    // has been adding: how many mutations died, how many process faults were noticed.
+    // So the tail is kept either way, and only the failing case is printed.
+    record.steps.push({ name: step.name, passed: true, output: tailOf(done) });
     console.error(`  ✓ ${step.name}`);
   } catch (error) {
-    const output = error as { stdout?: string; stderr?: string };
-    const tail = `${output.stdout ?? ''}${output.stderr ?? ''}`.trim().split('\n').slice(-30);
+    const tail = tailOf(error as { stdout?: string; stderr?: string });
     record.steps.push({ name: step.name, passed: false, output: tail });
     console.error(`  ✗ ${step.name}`);
     for (const line of tail.slice(-15)) console.error(`      ${line}`);

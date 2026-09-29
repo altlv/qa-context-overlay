@@ -49,6 +49,14 @@ exist; every unit test passed, every browser test passed, and CI died on the fir
 The bug lived in argument handling — between the modules, not inside one.
 
 Method:
+0. **Read what already tests this seam, before you write anything.** Its own tests are
+   the fastest statement of what the product promises, and the only way to tell a gap
+   from a duplicate. A run that adds a thirty-fourth test for a rule two tests already
+   defend has spent its budget and moved nothing. If the briefing above names what the
+   existing tests fail to catch, start there — that measurement was taken against the
+   source and it is the difference between choosing a target and guessing at one.
+   \`npm run survey -- <path>\` maps the cluster and says which tests point at which
+   file; a measured run reached for \`git\`, \`wc\` and \`cat\` instead and never ran it.
 1. Find the seams: process boundaries, argument parsing, file reads and writes, exit
    codes, anything that reads the environment.
 2. Test through the real entry point. Spawn the actual CLI; do not import its internals.

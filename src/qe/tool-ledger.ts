@@ -39,6 +39,25 @@ export interface ToolCall {
   reason?: string;
 }
 
+/**
+ * Who was asked, and for what — `planner: is this branch reachable`.
+ *
+ * Kept apart from the plain field lookups because it joins two of them: the role alone
+ * says nothing about the question, and the question alone says nothing about who
+ * answered it. Either half on its own is the empty record this exists to stop.
+ */
+function delegation(input: Record<string, unknown>): string | null {
+  const str = (key: string): string | null =>
+    typeof input[key] === 'string' && (input[key] as string).trim() !== ''
+      ? (input[key] as string).trim()
+      : null;
+  const role = str('subagent_type');
+  const what = str('description') ?? str('prompt');
+  if (role === null && what === null) return null;
+  if (role === null) return what;
+  return what === null ? role : `${role}: ${what}`;
+}
+
 /** Pulls the most useful identifying string out of a tool's input. */
 export function describeTarget(_tool: string, input: Record<string, unknown>): string {
   const text = (key: string): string | null => {
@@ -61,10 +80,22 @@ export function describeTarget(_tool: string, input: Record<string, unknown>): s
     text('command') ??
     text('pattern') ??
     text('selector') ??
+    // Delegation. The `Agent` tool names the role in `subagent_type` and the work in
+    // `description` or `prompt`, and none of those was read here — so the first
+    // delegation this harness ever recorded, `integration-coder` asking the planner
+    // whether a branch was reachable on 2026-09-28, went into the ledger with an empty
+    // target. One call, the only record of it, and it said nothing about who was asked
+    // or why. A ledger exists so a session's account of itself is not the only evidence.
+    delegation(input) ??
     text('text') ??
     '';
 
-  const flat = candidate.replace(/\s+/g, ' ');
+  // A subject run's shell calls all begin `cd "<absolute worktree path>" && …`, which on
+  // this machine is ninety characters before anything distinguishing. The integration run
+  // of 2026-09-28 made 69 of its 94 calls through Bash, and every one of them recorded the
+  // same prefix and then ran out of room — the most-used tool was the least legible thing
+  // in its own ledger. The path is already known from the run; what the call did is not.
+  const flat = candidate.replace(/\s+/g, ' ').replace(/^cd\s+("[^"]*"|\S+)\s*&&\s*/, '');
   return flat.length > 120 ? `${flat.slice(0, 117)}…` : flat;
 }
 

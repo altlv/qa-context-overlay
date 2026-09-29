@@ -24,8 +24,8 @@ decide whether the result proves anything.
 | Driver (E5a) — candidate actions under a policy  | built, reaches a live session        | `src/qe/driver.ts`               |
 | State model (E5b) — shared browser over CDP      | built, has refused a live session    | `src/qe/state-model.ts`          |
 | Role runner — preflight, guards, worktree, gate  | drives every run                     | `src/cli/role.ts`                |
-| Fault check — does a spec notice a 500           | built                                |
-| Process fault — does a subject test notice       | built, and a gate step for a subject | `src/cli/fault-check.ts`         |
+| Fault check — does a spec notice a 500           | built                                | `src/cli/fault-check.ts`         |
+| Process fault — does a subject test notice       | built, and a gate step for a subject | `src/qe/process-fault.ts`        |
 | Subject test stack — a subject's own runner      | built, one subject declares one      | `src/qe/test-stack.ts`           |
 | Source map — units, callers, what tests point at | built                                | `src/quality/repomap.ts`         |
 | Assertion floor for a non-Playwright suite       | built                                | `src/quality/assertion-floor.ts` |
