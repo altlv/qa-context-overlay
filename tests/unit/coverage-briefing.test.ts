@@ -30,18 +30,19 @@ const set = [
 test.describe('the gap in what already exists', () => {
   test('should count what the baseline defends, not only what it misses', () => {
     const gap = coverageGap('test/labs-routes.test.js', set, ['the transcript is capped']);
-    expect(gap.killed, 'a briefing that is only bad news reads as a complaint, not direction').toBe(
-      2,
-    );
-    expect(gap.total).toBe(3);
-    expect(gap.undefended).toEqual(['the transcript is capped']);
+    expect(
+      gap?.killed,
+      'a briefing that is only bad news reads as a complaint, not direction',
+    ).toBe(2);
+    expect(gap?.total).toBe(3);
+    expect(gap?.undefended).toEqual(['the transcript is capped']);
   });
 
   test('should drop a survivor the set no longer contains', () => {
     // A stale line would send the role at a rule that is not there, and it would find
     // nothing and conclude the fault was its own.
     const gap = coverageGap('t.js', set, ['a rule deleted last week']);
-    expect(gap.undefended, 'a survivor with no mutation behind it is not evidence').toEqual([]);
+    expect(gap?.undefended, 'a survivor with no mutation behind it is not evidence').toEqual([]);
   });
 });
 
@@ -116,5 +117,27 @@ test.describe('reading the comparator back', () => {
   test('should find nothing in output that scored nothing', () => {
     // A failed measurement must brief nothing rather than invent a clean bill of health.
     expect(parseSurvivors('The suite fails before any mutation.')).toEqual([]);
+  });
+});
+
+test.describe('a measurement that failed', () => {
+  test('should be null rather than a clean bill of health', () => {
+    // The first live wiring passed a module namespace where an array was wanted. The set
+    // read as empty, the staleness rule then dropped every survivor, and the run printed
+    // "defends every rule the set knows" about a suite leaving ten of fourteen alive.
+    expect(
+      coverageGap('test/labs-routes.test.js', [], ['a pending lab is refused with 409']),
+      'a failed measurement must not be indistinguishable from one that came back clean',
+    ).toBeNull();
+  });
+
+  test('should still report a genuine clean result as clean', () => {
+    const gap = coverageGap('t.js', set, []);
+    expect(
+      gap,
+      'measured and clean is a real answer, and must not be confused with unmeasured',
+    ).not.toBeNull();
+    expect(gap?.undefended).toEqual([]);
+    expect(gap?.killed).toBe(set.length);
   });
 });

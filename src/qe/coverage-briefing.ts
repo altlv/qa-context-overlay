@@ -59,12 +59,24 @@ export interface CoverageGap {
   total: number;
 }
 
-/** The gap a survivor list describes, given the whole set it was scored against. */
+/**
+ * The gap a survivor list describes, given the whole set it was scored against.
+ *
+ * **Null when there is no set**, which is not a formality. The first live wiring passed a
+ * module namespace where an array was wanted, so the set read as empty; every survivor
+ * was then dropped by the staleness rule below, and the run printed "defends every rule
+ * the set knows — no gap to point at" about a suite that leaves ten of fourteen alive.
+ *
+ * A measurement that fails must not be indistinguishable from a measurement that came
+ * back clean. Returning null forces the caller to tell those apart, where an empty gap
+ * let it report the flattering one.
+ */
 export function coverageGap(
   baseline: string,
   mutations: readonly Mutation[],
   survivors: readonly string[],
-): CoverageGap {
+): CoverageGap | null {
+  if (mutations.length === 0) return null;
   // Matched on `breaks`, which is the only field a survivor line carries back and also
   // the only one phrased for a person. An entry the set no longer contains is dropped
   // rather than passed through: a stale survivor would send the role at a rule that is

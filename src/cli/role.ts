@@ -640,15 +640,23 @@ if (subjectConfig?.mutations !== undefined && families[name] === 'coding') {
       ],
       { cwd: worktree, windowsHide: true, maxBuffer: 1 << 26 },
     ).catch((error: { stdout?: string; stderr?: string }) => error);
-    const { mutations } = readMutations(
-      (await import(pathToFileURL(resolve(repoRoot, set)).href)) as unknown,
-    );
+    // The module exports its list under a name; a namespace object is not an array, and
+    // passing one read as an empty set, dropped every survivor as stale, and reported a
+    // suite leaving ten of fourteen alive as defending everything.
+    const loaded = (await import(pathToFileURL(resolve(repoRoot, set)).href)) as {
+      MUTATIONS?: unknown;
+      default?: unknown;
+    };
+    const { mutations } = readMutations(loaded.MUTATIONS ?? loaded.default);
     const survivors = parseSurvivors(`${scored.stdout ?? ''}${scored.stderr ?? ''}`);
-    coverage = briefCoverage(coverageGap(baseline, mutations, survivors));
+    const gap = coverageGap(baseline, mutations, survivors);
+    coverage = briefCoverage(gap);
     console.error(
-      coverage === ''
-        ? `  ${baseline} defends every rule the set knows — no gap to point at.`
-        : `  ${survivors.length} rule(s) undefended; the role is told which.`,
+      gap === null
+        ? `  could not read ${set} — no briefing, and no claim that there is nothing to say.`
+        : gap.undefended.length === 0
+          ? `  ${baseline} defends all ${gap.total} rules the set knows — no gap to point at.`
+          : `  ${gap.undefended.length} of ${gap.total} rule(s) undefended; the role is told which.`,
     );
   } catch (error) {
     console.error(`  could not measure it (${(error as Error).message}) — briefing without it.`);
