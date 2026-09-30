@@ -428,3 +428,55 @@ test.describe('whether the tests notice there being no application', () => {
     expect(plan.steps.map((s) => s.name).join(' ')).not.toContain('process failing');
   });
 });
+
+test.describe('a run that changed more than one test file', () => {
+  const vitest = {
+    runner: 'npx vitest run',
+    runAll: 'npx vitest run',
+    runOne: 'npx vitest run ',
+    testsDir: 'test',
+    testFilePattern: 'test/**/*.test.mjs',
+    moduleSystem: 'esm',
+    assertions: "import { describe, it, expect } from 'vitest';",
+    exemplar: 'test/unit/rate-limit.test.mjs',
+  };
+
+  // Every case above changes exactly one test file, and that is why a real bug shipped
+  // past all of them. The steps that pass a suite as a command used to map the runner over
+  // each file and flatten, repeating it: five changed tests became
+  // `npx vitest run a npx vitest run b npx vitest run c …`, which the fault check refused
+  // as a suite failing before any fault. The arity was the bug and one file hid it.
+  const changed = ['test/integration/a.test.mjs', 'test/integration/b.test.mjs'];
+
+  const plan = planGate({
+    ...base,
+    role: 'integration-coder',
+    family: 'coding',
+    changed,
+    testStack: vitest,
+    entryPoint: 'server/index.js',
+    mutations: { set: 'apps/x/mutations/y.ts', baseline: 'test/unit/rate-limit.test.mjs' },
+  });
+
+  test('should name the runner once and then every file', () => {
+    const step = plan.steps.find((entry) => entry.name === 'tests notice the process failing');
+    const suiteAt = step?.args.indexOf('--suite') ?? -1;
+    expect(suiteAt, 'the step must pass a suite at all').toBeGreaterThan(-1);
+    expect(
+      step?.args.slice(suiteAt + 1),
+      'one runner, then the files — repeating the runner makes a command no shell can honour',
+    ).toEqual(['npx', 'vitest', 'run', ...changed]);
+  });
+
+  test('should do the same where a suite is compared against another', () => {
+    const step = plan.steps.find((entry) => entry.name.startsWith('mutation strength'));
+    const againstAt = step?.args.indexOf('--against') ?? -1;
+    expect(step?.args.slice(againstAt + 1)).toEqual(['npx', 'vitest', 'run', ...changed]);
+  });
+
+  test('should still run each changed file on its own for the pass check', () => {
+    // That step runs one file per step deliberately, so a failure names the file.
+    const named = plan.steps.filter((entry) => entry.name.startsWith('changed test passes'));
+    expect(named, 'one step per file is what makes a red step point somewhere').toHaveLength(2);
+  });
+});

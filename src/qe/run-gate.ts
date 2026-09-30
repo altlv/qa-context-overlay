@@ -48,16 +48,22 @@ export interface GateStep {
  */
 function runOneArgv(
   runOne: string,
-  file: string,
+  ...files: string[]
 ): { command: string; args: string[]; all: string[] } {
   const parts = runOne
     .trim()
     .split(/\s+/)
     .filter((part) => part !== '');
   const command = parts[0] ?? process.execPath;
-  const args = [...parts.slice(1), file];
+  const args = [...parts.slice(1), ...files];
   // `all` is the same thing as one command line, for a flag that takes a command rather
   // than running one — `mutation-compare --suite node --test <file>`.
+  //
+  // Variadic on purpose, and it was not. Callers used to map this over each changed file
+  // and flatten, which repeats the whole runner once per file: five changed tests became
+  // `npx vitest run a npx vitest run b npx vitest run c …`, and the step refused it as a
+  // suite that fails before any fault. It worked for two live runs because each changed
+  // exactly one test file — the arity was the bug, and one file hid it.
   return { command, args, all: [command, ...args] };
 }
 
@@ -190,7 +196,7 @@ export function planGate(input: {
             '--repo',
             '.',
             '--suite',
-            ...subjectFiles.flatMap((file) => runOneArgv(input.testStack!.runOne, file).all),
+            ...runOneArgv(input.testStack.runOne, ...subjectFiles).all,
           ],
           env: {},
         });
@@ -209,7 +215,7 @@ export function planGate(input: {
             '--suite',
             ...runOneArgv(input.testStack.runOne, input.mutations.baseline).all,
             '--against',
-            ...subjectFiles.flatMap((file) => runOneArgv(input.testStack!.runOne, file).all),
+            ...runOneArgv(input.testStack.runOne, ...subjectFiles).all,
           ],
           env: {},
         });

@@ -82,14 +82,22 @@ type SuiteResult = 'passed' | 'failed' | 'hung';
  */
 async function runSuite(limitMs: number): Promise<SuiteResult> {
   try {
-    // No shell. Node concatenates rather than escapes arguments when one is used, which
-    // it now warns about by name, and a suite command is argv we already hold correctly.
     await exec(suite[0] ?? '', suite.slice(1), {
       cwd: root,
       windowsHide: true,
       maxBuffer: 1 << 26,
       timeout: limitMs,
       killSignal: 'SIGKILL',
+      // A shell for anything but this process's own node, and the deprecation warning is
+      // the lesser evil. I removed it to silence that warning and broke every subject
+      // whose runner is an npm binary: on Windows `npx` is a .cmd shim, and
+      // `execFile('npx')` without a shell fails with ENOENT. Measured both ways rather
+      // than reasoned about — shell=false ENOENT, shell=true fine.
+      //
+      // The cost of the warning is that arguments are concatenated rather than escaped.
+      // What is concatenated here is a runner the subject declared in its own config and
+      // the paths of test files in its own tree, so there is no untrusted string in it.
+      shell: (suite[0] ?? '') !== process.execPath,
     });
     return 'passed';
   } catch (error) {
