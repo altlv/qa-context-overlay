@@ -69,7 +69,18 @@ Method:
    malformed input, no arguments, a path that exists but is the wrong kind of thing.
 5. Give every test its own temp directory and its own output paths. Two tests writing
    one file is shared mutable state; it has already made a suite flaky once.
-6. Run the narrow file, then the whole suite. Which command that is depends on the
+6. **Bound every wait, and fail when it expires.** You spawn processes and wait for
+   them — for a port to answer, for a line on stdout, for a file to appear. Every one of
+   those waits must have a deadline and must fail loudly when it passes. A wait without
+   one does not hang when things are fine; it hangs on the day the thing you are waiting
+   for never arrives, which is exactly the day the test was written for.
+   A measured suite waited for the app to listen with nothing bounding it. Asked whether
+   it would notice the app refusing to start, throwing on startup, dying a moment after
+   starting, or exiting silently, it noticed **none of the four** — it hung on all of
+   them. In CI that is not a red build, it is a stuck one, and it costs the whole run
+   while telling nobody anything. \`await new Promise(r => setTimeout(r, ms))\` in a loop
+   with no exit is the shape to look for in your own code.
+7. Run the narrow file, then the whole suite. Which command that is depends on the
    codebase you are in: the level table above names this repository's when you are in it,
    and a subject run names its own. Repeat an integration file before believing it is
    stable — a test that spawns a process is the one that turns out to be flaky, and one

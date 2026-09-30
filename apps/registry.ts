@@ -2,6 +2,7 @@ import type { AppConfig } from './app-config.js';
 import countdownTimer from './countdown-timer/app.config.js';
 import academybugs from './academybugs/app.config.js';
 import bugeater from './bugeater/app.config.js';
+import courseraRag from './coursera-rag/app.config.js';
 import eprimer from './eprimer/app.config.js';
 import fakerestapi from './fakerestapi/app.config.js';
 import juiceShop from './juice-shop/app.config.js';
@@ -22,6 +23,7 @@ export const apps: AppConfig[] = [
   countdownTimer,
   academybugs,
   bugeater,
+  courseraRag,
   eprimer,
   fakerestapi,
   juiceShop,
