@@ -24,6 +24,7 @@ import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
+import { describePatience, runWithPatience } from '../qe/patience.js';
 import { briefCoverage, coverageGap, parseSurvivors } from '../qe/coverage-briefing.js';
 import { readMutations } from '../qe/mutation-compare.js';
 import { pathToFileURL } from 'node:url';
@@ -957,41 +958,40 @@ const record: GateRecord = {
   ],
 };
 
-/** The last lines a step said, however it ended. Both streams, because a measurement
- * may come out of either and which one is the tool's choice, not ours. */
-const tailOf = (result: { stdout?: string; stderr?: string }): string[] =>
-  `${result.stdout ?? ''}${result.stderr ?? ''}`.trim().split('\n').slice(-30);
-
+// Steps run in sequence and nothing bounded them, so one that hung blocked every step
+// behind it indefinitely — `mutation strength` and `report` were never reached on
+// 2026-09-29, not because they were skipped but because nothing after a stuck step can
+// run. The agent's wall clock stops before the gate starts, so the gate had no limit of
+// any kind.
+//
+// A duration limit was the first fix and the wrong measure: it asks how long a step took
+// when the question is whether anything is still happening. `runWithPatience` watches for
+// silence instead, so a long step that is narrating its progress runs as long as it needs
+// and a quiet one is named as waiting rather than killed as slow.
 for (const problem of plan.problems) console.error(`  ✗ ${problem}`);
 for (const step of plan.steps) {
-  try {
-    // A step names its own command only when a subject declared a runner; everything
-    // harness-side runs under this process's node, which is what `args` is written for.
-    const done = await exec(step.command ?? process.execPath, step.args, {
-      cwd: worktree,
-      windowsHide: true,
-      maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env, ...step.env },
-      // A declared runner is usually an npm-installed binary, which on Windows is a
-      // .cmd shim that CreateProcess cannot start directly.
-      shell: step.command !== undefined && step.command !== process.execPath,
-    });
-    // A passing step used to record `output: []`, which threw away the only copy of
-    // whatever it measured. `mutation strength` passed on 2026-09-28 having scored the
-    // agent's suite at 11 of 14 against the baseline's 4, and the number was gone — it
-    // had to be produced again by hand, from a step that had just produced it.
-    //
-    // A check whose value is a verdict loses nothing by passing quietly. A check whose
-    // value is a **measurement** loses all of it, and those are the checks this harness
-    // has been adding: how many mutations died, how many process faults were noticed.
-    // So the tail is kept either way, and only the failing case is printed.
-    record.steps.push({ name: step.name, passed: true, output: tailOf(done) });
-    console.error(`  ✓ ${step.name}`);
-  } catch (error) {
-    const tail = tailOf(error as { stdout?: string; stderr?: string });
-    record.steps.push({ name: step.name, passed: false, output: tail });
-    console.error(`  ✗ ${step.name}`);
-    for (const line of tail.slice(-15)) console.error(`      ${line}`);
+  // A step names its own command only when a subject declared a runner; everything
+  // harness-side runs under this process's node, which is what `args` is written for.
+  const run = await runWithPatience(step.command ?? process.execPath, step.args, {
+    cwd: worktree,
+    env: { ...process.env, ...step.env },
+    // A declared runner is usually an npm-installed binary, which on Windows is a .cmd
+    // shim that CreateProcess cannot start directly.
+    shell: step.command !== undefined && step.command !== process.execPath,
+  });
+  // A passing step used to record nothing, which threw away the only copy of whatever it
+  // measured. `mutation strength` passed having scored a suite at 11 of 14 against a
+  // baseline's 4, and the number was gone — it had to be produced again by hand, from a
+  // step that had just produced it. A check whose value is a verdict loses nothing by
+  // passing quietly; a check whose value is a measurement loses all of it.
+  record.steps.push({
+    name: step.name,
+    passed: run.outcome === 'passed',
+    output: run.output.slice(-30),
+  });
+  console.error(`  ${describePatience(step.name, run)}`);
+  if (run.outcome !== 'passed') {
+    for (const line of run.output.slice(-15)) console.error(`      ${line}`);
   }
 }
 for (const skipped of plan.notRun) console.error(`  · not run: ${skipped}`);
