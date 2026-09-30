@@ -115,3 +115,39 @@ test.describe('secrets and nested runs', () => {
     ).toBe(false);
   });
 });
+
+test.describe('a URL the command mentions rather than contacts', () => {
+  // Two live runs paid for this. A session was refused for `[a-z` — the character class
+  // of a pattern about URLs, matched by a pattern about URLs — and again for
+  // `example.test`, a domain reserved precisely so it can be named safely. An earlier
+  // session filed the same shape against our tooling: a file write refused because the
+  // file's content named a blocked host.
+  const guard = shellGuard({ environment: 'test', hosts: ['academybugs.com'] });
+
+  test('should not read a regular expression as a destination', () => {
+    expect(
+      guard.check(String.raw`grep -oE "https?://[a-z0-9.-]+" server/rag.js`).allowed,
+      'a hostname cannot contain a bracket, so this was never a host',
+    ).toBe(true);
+  });
+
+  test('should keep refusing a reserved test domain, because that was decided already', () => {
+    // The first version of the fix exempted .test, .example and .invalid on the grounds
+    // that they cannot resolve. The test above refused that change by using evil.test as
+    // its example of a forbidden host — a decision this repository had already made, and
+    // a guard is not loosened to make a run convenient. A role wanting an unreachable
+    // host has loopback.
+    expect(guard.check('curl http://example.test/api').allowed).toBe(false);
+  });
+
+  test('should still refuse a host that could actually be reached', () => {
+    // The narrowing must not become a way through: anything resolvable stays refused.
+    const decision = guard.check('curl https://api.openai.com/v1/models');
+    expect(decision.allowed, 'a real host is the whole point of this guard').toBe(false);
+    expect(decision.reason).toContain('api.openai.com');
+  });
+
+  test('should still allow the host its app declared', () => {
+    expect(guard.check('curl https://academybugs.com/find-bugs/').allowed).toBe(true);
+  });
+});

@@ -36,6 +36,29 @@ const ENV_ASSIGNMENT = /\b(TEST_ENV|EXPLORE_ENV)\s*=\s*["']?([\w-]+)/g;
 const URL_HOST = /\bhttps?:\/\/([^\s/'"`:)\]]+)/gi;
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
 
+/** Characters no hostname contains, and every regular expression about one does. */
+const NOT_HOSTNAME = /[[\]\\(){}|*+?^$]/;
+
+/**
+ * Whether this capture is something other than a destination.
+ *
+ * The guard cannot tell a URL a command will contact from one it merely contains, and a
+ * live run paid for it: a session was refused for `[a-z` — the character class of a
+ * pattern *about* URLs, matched by a pattern about URLs. An earlier session filed the same
+ * shape against our tooling, a file write refused because the file's content named a
+ * blocked host.
+ *
+ * Only that case is excluded, and only because a hostname cannot contain a bracket. The
+ * first version of this also exempted the RFC-reserved suffixes — `.test`, `.example`,
+ * `.invalid` — on the grounds that they cannot resolve. A test beside this one refused
+ * that change by using `evil.test` as its example of a forbidden host, which is a decision
+ * this repository had already made deliberately, and a guard should not be loosened to
+ * make a run convenient. A role that wants an unreachable host has loopback.
+ */
+function notAHost(host: string): boolean {
+  return NOT_HOSTNAME.test(host);
+}
+
 const allow: GuardDecision = { allowed: true, reason: 'within scope' };
 
 export function shellGuard(scope: ShellScope): { check(command: string): GuardDecision } {
@@ -79,7 +102,7 @@ export function shellGuard(scope: ShellScope): { check(command: string): GuardDe
       }
       for (const [, rawHost] of command.matchAll(URL_HOST)) {
         const host = (rawHost ?? '').toLowerCase();
-        if (LOOPBACK.has(host) || hosts.has(host)) continue;
+        if (LOOPBACK.has(host) || hosts.has(host) || notAHost(host)) continue;
         return {
           allowed: false,
           reason: `${host} is refused: this run may reach ${[...hosts].join(', ') || 'no external host'} and loopback only. A host the app legitimately needs belongs in its app config's extraHosts, reviewed in a commit — report the need.`,
