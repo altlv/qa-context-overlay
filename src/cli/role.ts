@@ -242,6 +242,12 @@ const notReady = [
     {
       exists: (path) => existsSync(resolve(workRoot, path)),
       existsInSubject: (path) => subjectRepo !== null && existsSync(resolve(subjectRepo, path)),
+      // The subject already says where its source lives; the readiness rule used to
+      // accept only this repository's roots and so could never be satisfied by a subject
+      // keeping its code anywhere but `src`.
+      ...(subjectConfig?.sourceRoot === undefined
+        ? {}
+        : { subjectSourceRoot: subjectConfig.sourceRoot }),
       readDesign: (path) => {
         const parsed = parseReport(readFileSync(resolve(workRoot, path), 'utf8'));
         return parsed.ok

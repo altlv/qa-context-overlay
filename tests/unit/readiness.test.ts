@@ -199,3 +199,63 @@ test.describe('a task that names a module outside this repository', () => {
     ).toContain('nothing named to test');
   });
 });
+
+test.describe('a subject that keeps its source somewhere else', () => {
+  // The rule accepted `src/` and `apps/` and nothing else, which held only because the
+  // first external subject happened to use `src`. The second keeps its code in `server/`,
+  // so no path a task could name was ever acceptable and the run was refused however
+  // precisely it named its target — an assumption that survived while a subject agreed
+  // with it, the same shape as the gate once hardcoding `node --test`.
+  const task = 'Write integration tests for `server/rag.js`.';
+
+  test('should accept a path under the root the subject declares', () => {
+    expect(
+      readinessProblems(
+        { role: 'integration-coder', task, app: 'coursera-rag', environment: 'local' },
+        {
+          exists: () => false,
+          existsInSubject: (path) => path === 'server/rag.js',
+          subjectSourceRoot: 'server',
+          readDesign: () => ({ ok: false, problems: ['no design'] }),
+        },
+      ),
+      'a subject that says where its source lives must be believed',
+    ).toEqual([]);
+  });
+
+  test('should still refuse a path that exists nowhere', () => {
+    // Widening the accepted prefixes must not let a run start against a module nobody
+    // has: the path is filtered by existence before the prefix is ever considered.
+    const problems = readinessProblems(
+      { role: 'integration-coder', task, app: 'coursera-rag', environment: 'local' },
+      {
+        exists: () => false,
+        existsInSubject: () => false,
+        subjectSourceRoot: 'server',
+        readDesign: () => ({ ok: false, problems: ['no design'] }),
+      },
+    );
+    expect(problems.join(' ')).toContain('nothing named to test');
+  });
+
+  test('should name the roots it would accept, so a refusal is actionable', () => {
+    const problems = readinessProblems(
+      {
+        role: 'integration-coder',
+        task: 'Write tests.',
+        app: 'coursera-rag',
+        environment: 'local',
+      },
+      {
+        exists: () => false,
+        existsInSubject: () => false,
+        subjectSourceRoot: 'server',
+        readDesign: () => ({ ok: false, problems: ['no design'] }),
+      },
+    );
+    expect(
+      problems.join(' '),
+      'a refusal that does not say what would satisfy it costs a whole run to decode',
+    ).toContain('server/');
+  });
+});

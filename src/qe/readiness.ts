@@ -39,6 +39,20 @@ export interface ReadinessContext {
    * function of its inputs.
    */
   existsInSubject?(path: string): boolean;
+  /**
+   * Where the subject keeps its source, when it is not this repository.
+   *
+   * The rule below used to accept `src/` and `apps/` and nothing else, which held only
+   * because the first external subject happened to keep its source in `src`. The second
+   * keeps it in `server/`, so no path a task could name was ever acceptable and the run
+   * was refused however precisely it named its target — a harness assumption that
+   * survived only while a subject agreed with it, which is the same shape as the gate
+   * once hardcoding `node --test`.
+   *
+   * The subject already declares this as `sourceRoot`; nothing needed inventing, only
+   * asking.
+   */
+  subjectSourceRoot?: string;
 }
 
 /**
@@ -54,11 +68,31 @@ const NEEDS_A_TARGET = new Set([
 const IMPLEMENTS_A_DESIGN = new Set(['e2e-coder', 'api-coder']);
 const TESTS_NAMED_CODE = new Set(['unit-coder', 'integration-coder']);
 
-const REPO_PATH =
-  /(?:^|[\s`'"(])((?:\.\/)?(?:src|apps|tests|artifacts|reports|test-results)[\\/][^\s`'"),;]+)/g;
+const KNOWN_ROOTS = ['src', 'apps', 'tests', 'artifacts', 'reports', 'test-results'];
 
-/** Repository paths a task mentions, in the order it mentions them. */
-export function pathsNamedIn(task: string): string[] {
+function repoPathPattern(extraRoot?: string): RegExp {
+  const roots = [...KNOWN_ROOTS];
+  const extra = extraRoot?.replace(/[\\/]+$/, '').trim();
+  // Escaped because it comes from a subject's config, which is not this repository's to
+  // trust as a pattern fragment.
+  if (extra !== undefined && extra !== '' && !roots.includes(extra)) {
+    roots.push(extra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  }
+  return new RegExp(`(?:^|[\\s\`'"(])((?:\\./)?(?:${roots.join('|')})[\\\\/][^\\s\`'"),;]+)`, 'g');
+}
+
+/**
+ * Repository paths a task mentions, in the order it mentions them.
+ *
+ * `extraRoot` is the subject's own source root. Without it this pattern could not see a
+ * path outside this repository's layout at all — which is why widening the *acceptance*
+ * rule was not enough on its own. A subject keeping its code in `server/` had its target
+ * dropped here, before any rule ran, so the run was refused for naming nothing while the
+ * task named it precisely. Two places hardcoded the same assumption, and fixing the one
+ * that produced the error message left the other silently doing the damage.
+ */
+export function pathsNamedIn(task: string, extraRoot?: string): string[] {
+  const REPO_PATH = repoPathPattern(extraRoot);
   return [...task.matchAll(REPO_PATH)].map((match) =>
     (match[1] ?? '').replace(/^\.\//, '').replace(/[.:]+$/, ''),
   );
@@ -83,7 +117,7 @@ function designProblem(request: RunRequest, context: ReadinessContext): string |
 
 export function readinessProblems(request: RunRequest, context: ReadinessContext): string[] {
   const problems: string[] = [];
-  const named = pathsNamedIn(request.task).filter(
+  const named = pathsNamedIn(request.task, context.subjectSourceRoot).filter(
     (path) => context.exists(path) || (context.existsInSubject?.(path) ?? false),
   );
 
@@ -105,10 +139,20 @@ export function readinessProblems(request: RunRequest, context: ReadinessContext
     if (request.design !== undefined) {
       const problem = designProblem(request, context);
       if (problem !== null) problems.push(problem);
-    } else if (!named.some((path) => path.startsWith('src/') || path.startsWith('apps/'))) {
-      problems.push(
-        `nothing named to test: ${request.role} needs the module path in the task (src/...) or a --design`,
-      );
+    } else {
+      // This repository's own roots, plus whatever the subject says is its own. A path is
+      // still required to exist — `named` is already filtered by that — so widening the
+      // accepted prefixes does not let a run start against a module nobody has.
+      const roots = ['src/', 'apps/'];
+      const declared = context.subjectSourceRoot?.replace(/\/+$/, '');
+      if (declared !== undefined && declared !== '') roots.push(`${declared}/`);
+      if (!named.some((path) => roots.some((root) => path.startsWith(root)))) {
+        problems.push(
+          `nothing named to test: ${request.role} needs a module path in the task (${roots.join(
+            ', ',
+          )}…) or a --design`,
+        );
+      }
     }
   }
 
