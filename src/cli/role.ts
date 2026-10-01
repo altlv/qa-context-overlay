@@ -51,6 +51,7 @@ import {
   worktreeChanges,
 } from '../qe/run-worktree.js';
 import { shellGuard } from '../qe/shell-guard.js';
+import { needsShell } from '../qe/subject-runner.js';
 import { guardHook, observerHook } from '../qe/tool-hook.js';
 import { reportSkillUse, searchable, skillUse } from '../qe/skill-use.js';
 import { skillFile } from '../agents/compose.js';
@@ -982,8 +983,8 @@ for (const step of plan.steps) {
     cwd: worktree,
     env: { ...process.env, ...step.env },
     // A declared runner is usually an npm-installed binary, which on Windows is a .cmd
-    // shim that CreateProcess cannot start directly.
-    shell: step.command !== undefined && step.command !== process.execPath,
+    // shim that CreateProcess cannot start directly. See `needsShell`.
+    shell: step.command !== undefined && needsShell(step.command),
   });
   // A passing step used to record nothing, which threw away the only copy of whatever it
   // measured. `mutation strength` passed having scored a suite at 11 of 14 against a

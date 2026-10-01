@@ -155,6 +155,23 @@ export function planGate(input: {
       });
     }
 
+    // Each file has now passed on its own, which is not the same as the suite passing.
+    // Tests that share a port, a fixture directory, a module-level singleton or a stubbed
+    // clock pass one at a time and collide when the runner loads them into one process —
+    // and one at a time is the only way the gate had ever run them. A subject's own
+    // developer runs the suite, so a suite that only works file by file is broken for
+    // everyone but us. One step for all of them, because the question is about the set;
+    // the per-file steps above stay, because they are what makes a red step name a file.
+    if (subjectFiles.length > 1 && input.testStack !== undefined) {
+      const together = runOneArgv(input.testStack.runOne, ...subjectFiles);
+      steps.push({
+        name: `changed tests pass together (${subjectFiles.length} files)`,
+        command: together.command,
+        args: together.args,
+        env: {},
+      });
+    }
+
     if (subjectFiles.length > 0 && input.testStack !== undefined) {
       // The runner proves the tests pass; this proves they assert something. `assert-quality`
       // reads Playwright specs, so before it, a `node:test` file could wrap every assertion in

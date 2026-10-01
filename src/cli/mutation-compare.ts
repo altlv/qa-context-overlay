@@ -14,6 +14,7 @@ import {
   type MutationOutcome,
   type SuiteOutcome,
 } from '../qe/mutation-compare.js';
+import { needsShell } from '../qe/subject-runner.js';
 
 /**
  * Run a named mutation set against a named suite and say what each mutation proves.
@@ -102,6 +103,9 @@ function runSuite(command: readonly string[]): { outcome: SuiteOutcome; output: 
     cwd: repo,
     encoding: 'utf8',
     windowsHide: true,
+    // The subject's declared runner, not this process's node. Without this, every vitest
+    // subject reported `unstartable` — see `needsShell`.
+    shell: needsShell(executable as string),
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
   const errorCode = (result.error as { code?: string } | undefined)?.code;

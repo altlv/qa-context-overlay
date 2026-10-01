@@ -53,6 +53,31 @@ const config: AppConfig = {
     assertions: "import { describe, it, expect } from 'vitest';",
     exemplar: 'test/unit/rate-limit.test.mjs',
   },
+  /**
+   * The rate limiter, because it is the only seam here that is pure, has its clock injected
+   * and needs no API key — so a mutation run costs nothing and cannot be confounded by a
+   * live model. Its own suite is the bar; see the set for why each rule is in it.
+   */
+  mutations: {
+    set: 'apps/coursera-rag/mutations/rate-limit.ts',
+    baseline: 'test/unit/rate-limit.test.mjs',
+  },
+  /**
+   * The runner itself. `vitest` is a devDependency and `vitest.config.mjs` imports
+   * `vitest/config`, so in a bare worktree the suite does not fail — it cannot start, and
+   * `npx` then fetches a vitest that resolves nothing.
+   *
+   * This is why the mutation and process-fault steps had never run successfully against
+   * this subject, and the diagnosis was slower than it should have been because both
+   * report the same thing an honestly red suite reports. Reproduced by hand in the
+   * subject's own checkout on 2026-09-30: `npx vitest run test/unit/rate-limit.test.mjs`
+   * → ERR_MODULE_NOT_FOUND for `vitest`, with no `node_modules` present. The first live
+   * run was green only because the agent happened to install before writing.
+   *
+   * It costs an Angular-sized install per worktree, and that is the price of a worktree
+   * holding only what git tracks. A run judged without it scores every mutation as caught.
+   */
+  prepare: [{ in: '.', run: 'npm install --no-audit --no-fund' }],
 };
 
 export default config;

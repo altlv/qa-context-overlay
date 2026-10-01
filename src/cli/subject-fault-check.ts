@@ -10,6 +10,7 @@ import {
   summariseFaults,
   type FaultOutcome,
 } from '../qe/process-fault.js';
+import { needsShell } from '../qe/subject-runner.js';
 
 const exec = promisify(execFile);
 
@@ -88,16 +89,9 @@ async function runSuite(limitMs: number): Promise<SuiteResult> {
       maxBuffer: 1 << 26,
       timeout: limitMs,
       killSignal: 'SIGKILL',
-      // A shell for anything but this process's own node, and the deprecation warning is
-      // the lesser evil. I removed it to silence that warning and broke every subject
-      // whose runner is an npm binary: on Windows `npx` is a .cmd shim, and
-      // `execFile('npx')` without a shell fails with ENOENT. Measured both ways rather
-      // than reasoned about — shell=false ENOENT, shell=true fine.
-      //
-      // The cost of the warning is that arguments are concatenated rather than escaped.
-      // What is concatenated here is a runner the subject declared in its own config and
-      // the paths of test files in its own tree, so there is no untrusted string in it.
-      shell: (suite[0] ?? '') !== process.execPath,
+      // A shell for anything but this process's own node — the reasoning, and what it
+      // cost to learn, is in `needsShell`. The deprecation warning is the lesser evil.
+      shell: needsShell(suite[0] ?? ''),
     });
     return 'passed';
   } catch (error) {

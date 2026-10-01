@@ -479,4 +479,37 @@ test.describe('a run that changed more than one test file', () => {
     const named = plan.steps.filter((entry) => entry.name.startsWith('changed test passes'));
     expect(named, 'one step per file is what makes a red step point somewhere').toHaveLength(2);
   });
+
+  test('should also run them as one suite', () => {
+    // Passing one at a time is not passing. Tests sharing a port, a fixture directory or a
+    // module-level singleton pass alone and collide when the runner loads them together —
+    // which is how the subject's own developer runs them, and the only way the gate never
+    // did.
+    const step = plan.steps.find((entry) => entry.name.startsWith('changed tests pass together'));
+    expect(step, 'the set must be asked about as a set').toBeDefined();
+    expect(step?.command).toBe('npx');
+    expect(step?.args).toEqual(['vitest', 'run', ...changed]);
+  });
+});
+
+test('a run that changed one test file should not run it twice', () => {
+  // With a single file the together-step is the per-file step, and a second identical run
+  // buys a slower gate and no information.
+  const plan = planGate({
+    ...base,
+    role: 'integration-coder',
+    family: 'coding',
+    changed: ['test/integration/a.test.mjs'],
+    testStack: {
+      runner: 'npx vitest run',
+      runAll: 'npx vitest run',
+      runOne: 'npx vitest run ',
+      testsDir: 'test',
+      testFilePattern: 'test/**/*.test.mjs',
+      moduleSystem: 'esm',
+      assertions: "import { describe, it, expect } from 'vitest';",
+      exemplar: 'test/unit/rate-limit.test.mjs',
+    },
+  });
+  expect(plan.steps.filter((entry) => entry.name.includes('together'))).toHaveLength(0);
 });
