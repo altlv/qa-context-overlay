@@ -46,6 +46,32 @@ The gate also runs the changed tests **as a suite**, not only one file at a time
 that share a port, a fixture directory or a module-level singleton pass alone and collide
 together — and together is how the subject's own developer runs them.
 
+**Part of every mutation set is now withheld from the role being measured.** The pre-run
+coverage briefing is worth giving — 8 of 14 choosing its own targets against 11 of 14 told
+the survivors, with 23 tests instead of 34 — and it also means the gate scores a suite
+against the set it was briefed from, which marks a role on the answer we handed it. Five
+of fourteen entries in each set are `holdout`: scored like any other, never briefed, never
+mentioned. The split is declared in the set rather than drawn per run, interleaved across
+the seam's families of rule rather than taken as a block, and filtered before the totals
+are computed so the size of the set does not leak through them. A set that is entirely
+holdout is refused.
+
+`holdoutPower` exists because a split can be shaped correctly and measure nothing: a
+holdout the baseline already kills would never have surfaced as a survivor, so withholding
+it changed no run. The role runner prints how many are live before each scored run. **For
+both subjects that number is unknown** — neither split has been scored yet, and the 4, 8
+and 11 above were all taken against whole sets and do not compare with anything measured
+after the split.
+
+`docs/mutation-evals.md` is the reasoning: seven things that decide whether a score means
+anything, and nine other instruments with what each buys that mutations cannot. Two of
+those are worth naming here as gaps. **Replaying real fixed bugs from a subject's git
+history** is the highest-value thing we do not have — the fault distribution is real
+instead of invented, and both coder subjects have the history. **Repeat-run variance for
+coders** is the second: the explorer side measures it (best single session reaches 39% of
+what five sessions found) and the coder side measures nothing of the kind, so every coder
+number is a sample of one.
+
 Roles drive a real browser through Playwright MCP, bounded by the exploration policy at
 three layers, the third not yet seen firing in a live run; the toolbox reaches every role; the session briefing is a tested module
 rather than inline prompt text; `npm run precommit` guards documentation drift before
@@ -280,19 +306,27 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
 - **No spec has been written from `npm run ideas`.** Its output has been read by a
   person, not used by an agent. That it saves agent turns is the reason it exists and
   is still a claim — item 30 measures it through the driver, with it and without.
-- **No skill has ever been invoked by name.** Demonstrated at cost on 2026-09-11:
-  `oracle-check` already held the exact oracle that found nearly every bug in a manual
-  session, and went unread because nothing made anyone read it.
-- **No agent run has gone through the new runner.** Readiness, skill injection, the
-  guard hook, the post-run gate and per-role wall clocks are unit-tested and mutated,
-  and not one has met a live agent. The first run must show a refusal in preflight, a
-  refused `Bash` command, and a gate verdict on real output.
-- **No agent has worked in a run worktree.** Creating one, confining the file tools to
-  it and gating inside it are tested apart; `--preflight` stops before the worktree, so
-  no test runs the whole path. Also open: `Bash` can `cd` out of a worktree — the shell
-  guard refuses git writes, secrets and foreign hosts, not paths — and nothing removes
-  finished worktrees, by design, so they accumulate beside the repository until a person
-  removes them.
+- **Whether a skill is used cannot be observed, and reporting it as "none" was a harness
+  fault presented as a finding.** `composeSystemPrompt` inlines the full text of every
+  skill a role declares and tells the role not to spend a turn opening it, so "skills
+  opened: NONE" was the only answer the metric could ever return. Three runs were reported
+  as having ignored their skills on that basis. `src/qe/skill-use.ts` replaces it with
+  something that can distinguish: whether the report names a skill's methods. That is
+  weaker evidence than a tool call and it is evidence; the original claim was none. Still
+  open underneath it: nothing shows a skill changed what a role did, which is the thing the
+  2026-09-11 demonstration — `oracle-check` holding the oracle that found nearly every bug
+  in a manual session, unread — was about.
+- ~~**No agent run has gone through the new runner.**~~ **Proven 2026-09-20**, item 10, and
+  every run since. What is still unproven is narrower and was the point of the bullet: no
+  live run has yet shown **a preflight refusal**, and the `Bash` guard's refusals have been
+  seen only for the hostname pattern it misread. A gate verdict on real output is routine.
+- ~~**No agent has worked in a run worktree.**~~ Every run since 2026-09-20 has, and the
+  coder runs work in a worktree **of the subject**, which found three separate harness
+  faults that a worktree of this repository could not have: `src/cli` scripts absent,
+  `node_modules` absent, and the subject's own `prepare` never declared. Still open, and
+  unchanged: `Bash` can `cd` out of a worktree — the shell guard refuses git writes,
+  secrets and foreign hosts, not paths — and nothing removes finished worktrees, by
+  design, so they accumulate beside the repository until a person removes them.
 - **The countdown-timer failures have a signature now, and the load theory is dead.**
   History: 3 of 6 failed once on 2026-09-14, then 0 in 90 runs. On 2026-09-19 the rate
   jumped — 4 of 5 runs while the machine was busy, and **3 of 5 with the machine idle**.
@@ -327,14 +361,17 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
 - **The fault check tries one fault.** Every server response becomes a 500. A spec that
   notices a 500 but not a wrong value passes it, and an API spec that builds absolute
   URLs bypasses the fault and is reported untouched.
-- **Delegation has never fired.** A coder can call `test-planner`; none has. So the one credential
-  and the one guard set a run holds are inherited by a subagent **by construction, not by
-  observation**: the design is a single `query()` carrying an `agents` map, one budget and one
-  `PreToolUse` hook, and whether the SDK applies that hook to a subagent's own tool calls is
-  unexercised — the same class of assumption as `canUseTool`, which was replaced precisely because a
-  guard counts as proven only when it refuses something in a live run. Raised by the user on
-  2026-09-24 while asking whether each agent needs its own credential; it does not, but the
-  inheritance is unproven in both directions.
+- ~~**Delegation has never fired.**~~ **It fired once, on 2026-09-28**: `integration-coder`
+  asked `test-planner` whether a branch it had been told to cover was reachable, and it was
+  not — the first `Agent` call this repository has recorded, and it was used to refuse an
+  instruction rather than to do more work, which is the better of the two things it could
+  have been used for. One call is not inheritance proven. The design is a single `query()`
+  carrying an `agents` map, one budget and one `PreToolUse` hook; **nothing in that run
+  required the subagent to attempt a guarded action**, so whether the SDK applies the hook
+  to a subagent's own tool calls is still unexercised — the same class of assumption as
+  `canUseTool`, which was replaced precisely because a guard counts as proven only when it
+  refuses something live. Raised by the user on 2026-09-24 while asking whether each agent
+  needs its own credential; it does not, and the guard half remains unobserved.
 - **`maxStates` has now refused a live agent.** The Polymer Shop session on 2026-09-25
   was stopped at the ceiling — "refused browser_click: state ceiling reached (25 for test;
   25 visited)" — and the session recorded the consequence itself, filing "the viewport
@@ -351,12 +388,24 @@ by policy, 0 tokens spent`. What is **still** unproven is whether the plan chang
   opaque `ref` plus a description the model writes, so "Delete account" is refused and
   "the third button" is not. A guard against accident, not against an adversary —
   there is a test asserting exactly that limit.
-- **No interactive session has run.** Every browser run so far was read-only under a
-  `prod` policy, so `INTERACT`, `FILL` and the action ceiling are unexercised against
-  a live page.
+- ~~**No interactive session has run.**~~ `INTERACT` has been exercised repeatedly — the
+  Polymer Shop session was refused a `browser_click` at the state ceiling, which only
+  happens to a session that is clicking. The ten `exploratory-tester` sessions interacted
+  freely under `test`. What is **still** unexercised is `FILL` against a live page: no
+  session has submitted a form, which is also why item 7 (`storageState`) matters — the
+  authenticated half of every app is dark, and filling a login box is the one thing an
+  agent will never do.
 - **Self-healing has never faced a change someone else made.**
 - Framework detection is largely unverified; three tiers confirmed against live sites.
-- Six of eight roles have never run. No role has written a browser spec.
+- **Three of eight roles have never run**: `api-coder`, `e2e-coder` and
+  `failure-investigator`. The five that have are `test-planner` (2026-09-13),
+  `testability-reviewer` (2026-09-13), `exploratory-tester` (ten sessions over five
+  subjects), `unit-coder` and `integration-coder` (four sessions over two subjects). This
+  bullet read "six of eight have never run" for long enough to be quoted, while
+  `CLAUDE.md` said five of eight had — the two were never both true. **No role has written
+  a browser spec**, which is the part that was always the real gap: every coder run so far
+  wrote tests for source it read, and `e2e-coder` is the one that would need the browser,
+  the design and the scan together.
 - **The unit tier has a skill and a map, and no agent has used either.** `unit-testing` and
   `repo-survey` are declared by their roles, and `npm run candidates` / `npm run survey` are
   enforced by tests — but a person ran them, not a role. What that proves is that the tools
@@ -380,7 +429,7 @@ part of it survives the subject being swapped.
 | integration | `integration-coder`    | `integration-testing`                    | the subject's own runner, the floor, and the comparator against a declared mutation set. Item 60 is open   |
 | api         | `api-coder`            | none — `pwtest` and `test-techniques`    | `assert-quality`, a Playwright run, `fault-check`. It also refuses to start without a committed `--design` |
 | e2e         | `e2e-coder`            | none — as api                            | the same three, over app specs; `--design` and `--app --env` as well                                       |
-| exploratory | `exploratory-tester`   | `exploratory-session` and four more      | `check-report`, and it is the one role that has run for real                                               |
+| exploratory | `exploratory-tester`   | `exploratory-session` and four more      | `check-report`, and it is the role with the most live runs behind it — ten, over five subjects             |
 | design      | `test-planner`         | `test-design`, `risk-assessment`         | `check-report` on the design, plus the gate's own "wrote no design" problem                                |
 | review      | `testability-reviewer` | `testability-audit`, `visual-inspection` | its report only                                                                                            |
 
@@ -475,6 +524,7 @@ still lands.
 | 10  | **DONE 2026-09-20 — the first live runs through the new runner, and what injected skills cost.** Two sessions of `exploratory-tester` against eprimer/test at `4b0d190`, same charter, sonnet then opus. Shown: a refused `Bash` call (opus independently reached for `fonts.googleapis.com` and the per-call guard refused it by name), a worktree created and gated in both runs, a gate verdict in both, and the injected context measured at 60,660 chars ≈ 16.4k tokens across 8 skills. Sonnet completed unstopped at $2.18 over 69 turns; opus was cut off by spend at $5.38 over 70 turns | —                    | Cost $7.57, not the $0.20 estimated — that estimate assumed the 30-turn budget, which is the first thing these runs falsified. Write-up in `artifacts/compare/comparison.md`. Four harness defects exposed: `isAuthFailure` blind to a signed-out CLI (fixed), `maxTurns: 30` starving the role (fixed), the gate validating `--out` rather than the report the role actually writes (item 48), and the spend cap overshooting by 35% because it is checked after a turn completes (item 49) |
 | 3   | **E5 — the driver.** **E5a and E5b done** (2026-09-19). E5a: `src/qe/driver.ts` joins `ideasFor` to the policy, so a `--scan` run hands a session its candidate actions with every refusal named. E5b: one browser, two clients — the run launches Chromium with a debugging port, gives Playwright MCP the endpoint, and reads the live DOM over its own connection after any call that can move the page, which is what closes item 23. **E5c — choosing the next action from the diff — is open**                                                                                              | 10 for the live half | The driver narrows and still does not choose, and that boundary was deliberate: `heuristics.ts` files which case deserves the budget under judgement. E5c is where that is revisited, and the diff is now available to revisit it with — `appeared`, `disappeared` and `changed` per action. Everything here refuses in unit tests and nothing has refused a live agent, which is item 10                                                                                                    |
 | 4   | **The map is a single state.** Transient surfaces — mini-cart, dropdown, modal, toast, drawer — appear in no inventory and no crawl                                                                                                                                                                                                                                                                                                                                                                                                                                                               | —                    | **Unblocked by E5b.** They are still absent from the pre-run scan, which is taken once on a page that has not been touched, but a surface that opens is now _detected_: the state model reads the live DOM after each action and reports the controls that arrived without the URL moving. What remains is making the session go and open them, which is E5c, and carrying what it found back into a scan artefact, which is items 20 and 21                                                 |
+| 77  | **`failure-investigator`'s first run, on a cause this repository already owes.** `integration-coder` found a real crash in `mcpa` — `src/routes/labs.js:413` writes to a killed child's stdin with no error handler, taking the whole Express app down — and the cause was **inferred from source by me, never reproduced**. The one role built to prove a cause has never run, and an unproven cause has been sitting in the file for days                                                                                                                                                       | —                    | Both halves are overdue and they fit each other exactly: the role needs a first run and this needs proving. It is also the cheapest honest test of the role, because the answer is checkable — either the write kills the process or my reading was wrong, and finding out my reading was wrong is the more useful outcome                                                                                                                                                                   |
 | 6   | **E7 — a real agent session against the scored benchmark**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | 3                    | The empirical test of all of it, and the only thing that turns "better" from opinion into a number. No longer blocked on a key — OAuth works                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Independent — any time, in any order
@@ -627,6 +677,10 @@ Three separate problems, and conflating them is the trap:
 | 72 | **"The human baseline is never edited" has no mechanism.** The unit run added 120 lines to the subject's own `test/searchIndex.test.js` rather than writing a new file | — | The file guard confines writes to the worktree, and inside the worktree the baseline is just another file. The gate is the component holding the pre-change revision, so the check belongs there: a problem when the diff modifies a pre-existing test file, unless the run is an improve/remove run declaring §9's grounds. Until then the comparison is the agent's edits against the unmodified baseline — an honest 12 → 14 of 20, but not the two-file comparison E1 describes |
 | 73 | **The assertion floor attributes inherited holes to the run.** Its two findings on the unit run are the human file's own `conditional-only` tests, pushed down 120 lines by the agent's insertions | — | The gate holds the base revision, so it can say which holes a run inherited and which it wrote — and that distinction is what makes §9's strength delta usable rather than noise. A run that fixes an inherited hole should be credited for it, which is the "improve" capability the floor currently cannot see. The rollout for the remaining roles — what each inherits, the tools they still need, and the schedule — is `.ai/state/POC-CODER-ROLLOUT.md`, named to the exempt pattern on purpose: a plan names paths that do not exist yet, and `npm run precommit` checks every tracked `.md` except `PLAN.md` and `POC-*.md`. That exemption is also why the first version passed at commit time and failed the moment it became tracked — the check reads tracked files only, so it cannot see the document a commit is about to add |
 
+| 75 | **Replay real fixed bugs from a subject's git history.** Find a commit that fixed a defect, revert the fix in a worktree, and ask whether the suite — the subject's own, then the agent's — notices. `docs/mutation-evals.md` names this the highest-value gap | — | Every mutation in both sets was invented by me from the source, so the fault distribution is mine rather than the product's, and `coursera-rag`'s set leans one way by its own admission: all fourteen loosen the limiter. A real fix is a fault that really happened, in the shape it really took. Both coder subjects have the history, and no new instrument is needed — a reverted fix is a mutation whose author was the product. The work is selection: a fix that also changed tests cannot be used, and one that changed several files is not one fault |
+| 78 | **The README leads with the pillar that has the least evidence.** "Context" there means a map of the page, handed over rather than bought. Nothing has shown that map changes a session — item 30 is still unpaid, and both eprimer models did their real work from controls they found themselves. What _has_ moved numbers is a different kind of context: the session clock and a thin charter (13 minutes → 41, 9 defects → 17) and the coverage briefing (8 of 14 mutations → 11, with 23 tests instead of 34) | 30 answers it; this is what to do either way | Process context and coverage context are earning the claim that page context was written to make. Either pay 30 and find out, or reorder the README to lead with what works — but not leave the strongest sentence on the page attached to the weakest evidence behind it. Found by auditing the repo against its own README on 2026-10-02, in the same pass that found five _Not proven_ bullets contradicted by this file |
+| 79 | **Nothing measures whether a person is helped.** Every number here compares an agent to another agent, or an agent's suite to a hand-written one (4 of 14 against 8, then 11 — a real comparison, and of **artifacts**) | 76 gives the variance this would need | "Meaningful aid for QA activities" is the purpose in the README's first line and it is the one claim with no instrument at all. The activity has never been measured: whether a tester working with this finds more, or faster, or with better evidence, than the same tester without it. It may not be cheaply measurable — that is a reason to say so plainly rather than to let the artifact comparisons stand in for it |
+| 76 | **Repeat-run variance for coders.** Same seam, same task, three runs; compare mutation scores and take the union of killed mutations against the best single run | 75 is independent of this; neither blocks the other | The explorer side measures this and the number was the most useful one we have — the best single session reaches **39%** of what five sessions found between them, 31 of 57 findings seen exactly once. The coder side measures nothing of the kind, so every coder number on this page is a sample of one, including the 4/8/11 progression. A capability whose spread is unmeasured cannot be said to have improved. It also gives killed-mutations-per-dollar, which is the axis that should decide model choice and which we have never computed despite logging cost and turns for every run |
 | 74 | **Performance: the coder capability this plan forgot, and the measurement instrument underneath it.** Raised by the user on 2026-09-25 — an agent for performance test _creation and maintenance_ | the item-43 ruling, which it shares | Performance is a quality attribute that crosses all four levels, so a role named for it crosses the axis the coders split on — the same objection as `agentic-coder`. The genuinely different part is the instrument: a measurement is statistical, so it needs thresholds and a baseline per metric. Item 8 (the scan-side `performance.getEntriesByType` pass) has never been built, there is no comparator for measurements — the analogue of `mutation-compare` — and no gate rule that reads one. `.ai/state/POC-CODER-ROLLOUT.md` §2b gives the sequence, and the ruling to make together with item 43 |
 
 ## Waiting on the user

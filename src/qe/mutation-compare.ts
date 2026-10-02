@@ -20,6 +20,31 @@ export interface Mutation {
   replace: string;
   /** What rule this breaks, in words. A mutation that cannot name one is not worth running. */
   breaks: string;
+  /**
+   * Kept back from the pre-run briefing, and scored like every other.
+   *
+   * `coverage-briefing.ts` hands a role the rules the existing suite leaves undefended,
+   * because taken before the work that measurement is direction rather than a verdict —
+   * and it is worth having: 8 of 14 choosing its own targets, 11 of 14 told the survivors,
+   * with 23 tests instead of 34.
+   *
+   * It also means **the gate then scores the suite against the set it was briefed from.**
+   * A role told "a refused caller is told how long until a token exists" and scored on
+   * whether it covered that rule is being marked on the answer it was given. The number
+   * still measures something real — the role had to write a working test — but it stops
+   * measuring what we wanted, which is whether a role can find the gap in a seam.
+   *
+   * So part of every set is never briefed. The briefed half says what the harness is worth
+   * telling a role; the holdout says what the role does where nothing told it. Both are
+   * scored and reported apart, and the subset rule the gate enforces uses all of them,
+   * because a suite may not leave a seam weaker whether or not we mentioned the rule.
+   *
+   * **Declared here, never chosen per run.** A split drawn at random, or drawn from which
+   * mutations the baseline happens to survive, makes a number that cannot be compared with
+   * last week's. And it is interleaved across the seam's rules on purpose: holding out one
+   * *kind* of rule would measure that kind's difficulty rather than the effect of briefing.
+   */
+  holdout?: boolean;
 }
 
 export type SuiteOutcome = 'passed' | 'failed' | 'unstartable';
@@ -82,9 +107,43 @@ export function newSurvivors(before: readonly string[], after: readonly string[]
   return after.filter((name) => !known.has(name));
 }
 
+/**
+ * The score, split by what the role was told.
+ *
+ * Reported apart rather than averaged, because the two numbers answer different questions
+ * and an average answers neither. A suite scoring well on the briefed half and badly on
+ * the holdout was following instructions; one scoring alike on both found the seam. The
+ * difference is the only thing here that distinguishes those, and it is invisible in a
+ * single fraction.
+ *
+ * Null for a half the set does not contain, so "no holdout declared" and "holdout scored
+ * zero" cannot print the same way.
+ */
+export function splitScore(outcomes: readonly MutationOutcome[]): {
+  briefed: { killed: number; total: number } | null;
+  holdout: { killed: number; total: number } | null;
+} {
+  const half = (entries: readonly MutationOutcome[]): { killed: number; total: number } | null =>
+    entries.length === 0
+      ? null
+      : { killed: entries.filter((entry) => entry.killed).length, total: entries.length };
+  return {
+    briefed: half(outcomes.filter((outcome) => outcome.holdout !== true)),
+    holdout: half(outcomes.filter((outcome) => outcome.holdout === true)),
+  };
+}
+
 export function formatCompare(label: string, outcomes: readonly MutationOutcome[]): string {
   const { killed, total, survivors } = summarise(outcomes);
-  const lines = [`${label}: ${killed}/${total} killed`];
+  const split = splitScore(outcomes);
+  // Only where a set declares both halves. One number followed by the same number broken
+  // into one part would be noise, and this line is read by a person under time pressure.
+  const detail =
+    split.briefed !== null && split.holdout !== null
+      ? ` (briefed ${split.briefed.killed}/${split.briefed.total},` +
+        ` holdout ${split.holdout.killed}/${split.holdout.total})`
+      : '';
+  const lines = [`${label}: ${killed}/${total} killed${detail}`];
   for (const survivor of survivors) lines.push(`  survived: ${survivor}`);
   return lines.join('\n');
 }
@@ -162,7 +221,18 @@ export function readMutations(value: unknown): { mutations: Mutation[]; problems
       find: record.find as string,
       replace: record.replace as string,
       breaks: record.breaks as string,
+      ...(record.holdout === true ? { holdout: true } : {}),
     });
   });
+  // A set that is entirely holdout leaves the briefing with nothing, and the briefing
+  // reports nothing and a failed measurement the same way on purpose — see `coverageGap`.
+  // Refused here so the two cannot be confused later, rather than at the point where one
+  // is indistinguishable from the other.
+  if (mutations.length > 0 && mutations.every((mutation) => mutation.holdout === true)) {
+    problems.push(
+      'every mutation is holdout, so there is nothing to brief a role from. A holdout is ' +
+        'part of a set, not the whole of one.',
+    );
+  }
   return { mutations, problems };
 }

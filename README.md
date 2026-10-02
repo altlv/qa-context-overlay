@@ -300,7 +300,10 @@ one role, and a test fails if that stops being true. See
 [`.claude/skills/README.md`](.claude/skills/README.md) for routing and for what is
 deliberately absent.
 
-`docs/conventions.md` for code rules, `CLAUDE.md` for how agents work here.
+`docs/conventions.md` for code rules, `CLAUDE.md` for how agents work here, and
+[`docs/mutation-evals.md`](docs/mutation-evals.md) before believing a mutation score — what
+the number cannot see, why part of every set is withheld from the role being measured, and
+what else is worth measuring instead.
 
 Much of this is adapted from a Goose-based QA harness: the guardrails, the verdict
 schema, the selector ladder and the anti-pattern list.

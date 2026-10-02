@@ -24,6 +24,14 @@ import type { Mutation } from './mutation-compare.js';
  * started" — and that is a sentence a lead would say after reading coverage. Naming the
  * mutation instead would teach the role to satisfy the instrument rather than the seam,
  * and the instrument would then be measuring itself.
+ *
+ * **And part of the set is never said out loud.** Everything above describes a briefing
+ * that is worth giving and that we go on giving; it also means the gate scores a suite
+ * against the set the role was briefed from, which is marking the answer we handed over.
+ * `holdout` entries are filtered out here and scored like any other, so one number says
+ * what a role does when told and the other says what it does when not. The role is never
+ * shown the split, the count, or that a split exists — being told a holdout exists is
+ * enough to change what a capable agent writes.
  */
 
 /**
@@ -77,18 +85,49 @@ export function coverageGap(
   survivors: readonly string[],
 ): CoverageGap | null {
   if (mutations.length === 0) return null;
+  // The holdout half is dropped before anything else, so no count, no total and no rule
+  // name reaching the role can be derived from it. Filtering later — at the point the
+  // sentences are rendered — would still have leaked the size of the set through `total`,
+  // and a role that knows the set has fourteen rules and hears nine knows to look for five.
+  const briefed = mutations.filter((mutation) => mutation.holdout !== true);
+  if (briefed.length === 0) return null;
   // Matched on `breaks`, which is the only field a survivor line carries back and also
   // the only one phrased for a person. An entry the set no longer contains is dropped
   // rather than passed through: a stale survivor would send the role at a rule that is
-  // not there any more, and it would find nothing and believe the fault was its own.
-  const known = new Set(mutations.map((mutation) => mutation.breaks));
+  // not there any more, and it would find nothing and believe the fault was its own. A
+  // holdout survivor is dropped by exactly the same rule, which is why it must not be in
+  // `briefed` — not by a second rule that could be removed without this one noticing.
+  const known = new Set(briefed.map((mutation) => mutation.breaks));
   const undefended = survivors.filter((survivor) => known.has(survivor));
   return {
     baseline,
     undefended,
-    killed: mutations.length - undefended.length,
-    total: mutations.length,
+    killed: briefed.length - undefended.length,
+    total: briefed.length,
   };
+}
+
+/**
+ * How much of the holdout is doing any work, for a person tuning the split.
+ *
+ * A holdout the baseline suite already kills carries no information: it would never have
+ * appeared as a survivor, so briefing could not have mentioned it, so holding it back
+ * changed nothing. Only holdouts the baseline leaves **alive** distinguish a role that
+ * found the gap from a role that was told where it was.
+ *
+ * So a set can be split correctly and still measure nothing, and the split looks fine from
+ * the outside — five of fourteen held back, all five already covered. This is the number
+ * that says so. Not a check and not a gate: which rules go in the holdout is a judgement
+ * about the seam, and it is made by a person who can see this.
+ */
+export function holdoutPower(
+  mutations: readonly Mutation[],
+  baselineSurvivors: readonly string[],
+): { live: number; total: number } | null {
+  const holdout = mutations.filter((mutation) => mutation.holdout === true);
+  if (holdout.length === 0) return null;
+  const alive = new Set(baselineSurvivors);
+  return { live: holdout.filter((entry) => alive.has(entry.breaks)).length, total: holdout.length };
 }
 
 /**

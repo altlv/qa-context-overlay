@@ -25,7 +25,12 @@ import { activePage, describeTransition, pageObserver } from '../qe/observer.js'
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
 import { describePatience, runWithPatience } from '../qe/patience.js';
-import { briefCoverage, coverageGap, parseSurvivors } from '../qe/coverage-briefing.js';
+import {
+  briefCoverage,
+  coverageGap,
+  holdoutPower,
+  parseSurvivors,
+} from '../qe/coverage-briefing.js';
 import { readMutations } from '../qe/mutation-compare.js';
 import { pathToFileURL } from 'node:url';
 import { TSX_CLI } from '../tool-paths.js';
@@ -663,9 +668,22 @@ if (subjectConfig?.mutations !== undefined && families[name] === 'coding') {
       gap === null
         ? `  could not read ${set} — no briefing, and no claim that there is nothing to say.`
         : gap.undefended.length === 0
-          ? `  ${baseline} defends all ${gap.total} rules the set knows — no gap to point at.`
+          ? `  ${baseline} defends all ${gap.total} briefable rules — no gap to point at.`
           : `  ${gap.undefended.length} of ${gap.total} rule(s) undefended; the role is told which.`,
     );
+    // Printed for the person watching, never written into the prompt. A holdout the
+    // baseline already kills could not have been briefed either way, so it tells the two
+    // runs apart in no way at all — and a split can look right while every one of its
+    // entries is in that state. This is the line that would say so.
+    const power = holdoutPower(mutations, survivors);
+    if (power !== null) {
+      console.error(
+        power.live === 0
+          ? `  holdout: ${power.total} rule(s), none of which ${baseline} leaves alive — the split is` +
+              ` measuring nothing. Move the split onto rules the existing suite misses.`
+          : `  holdout: ${power.live} of ${power.total} rule(s) live, kept out of the briefing and scored.`,
+      );
+    }
   } catch (error) {
     console.error(`  could not measure it (${(error as Error).message}) — briefing without it.`);
   }

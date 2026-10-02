@@ -15,13 +15,21 @@
  * a parameter) and reachable with no API key, so a mutation run costs nothing and cannot be
  * confounded by a live model. It is also security-relevant: every mutation below makes the
  * limiter more permissive than configured, which is the direction a limiter fails in.
+ *
+ * **What this set cannot see, stated because the number will be believed.** All fourteen
+ * loosen the limiter. A suite could score fourteen of fourteen and still miss a rule that
+ * makes it *stricter* than configured — refusing a caller inside its allowance, say. The
+ * set has a direction and the fraction does not show it.
+ *
+ * **The holdout.** Five entries are marked `holdout` and never reach the role's briefing;
+ * all fourteen are scored. The split is one rule from each family the seam has — identity,
+ * threshold, reported allowance, state-on-refusal, sweep — rather than a run of adjacent
+ * ones, so it measures the effect of briefing rather than one family's difficulty. Whether
+ * these five are rules the subject's own suite already covers is unknown until the first
+ * score: a holdout the baseline kills tells the two runs apart in no way, and
+ * `holdoutPower` prints that so the split can be moved.
  */
-export interface Mutation {
-  file: string;
-  find: string;
-  replace: string;
-  breaks: string;
-}
+import type { Mutation } from '../../../src/qe/mutation-compare.js';
 
 const FILE = 'server/rate-limit.js';
 
@@ -37,6 +45,7 @@ export const MUTATIONS: Mutation[] = [
     find: "      const key = rawKey ?? '@anonymous';",
     replace: '      const key = rawKey ?? String(Math.random());',
     breaks: 'callers with no address share one bucket rather than each getting a fresh allowance',
+    holdout: true,
   },
   {
     file: FILE,
@@ -55,6 +64,7 @@ export const MUTATIONS: Mutation[] = [
     find: '      if (refilled < 1) {',
     replace: '      if (refilled < 0) {',
     breaks: 'a request needs a whole token, not a fraction of one',
+    holdout: true,
   },
   {
     file: FILE,
@@ -68,6 +78,7 @@ export const MUTATIONS: Mutation[] = [
     replace: '        buckets.set(key, { tokens: refilled, updated: bucket.updated });',
     breaks:
       'a refused call still advances the bucket clock, so refusal does not silently credit the elapsed time twice',
+    holdout: true,
   },
   {
     file: FILE,
@@ -80,6 +91,7 @@ export const MUTATIONS: Mutation[] = [
     find: '      return { allowed: true, remaining: Math.floor(refilled - 1), retryAfterMs: 0 };',
     replace: '      return { allowed: true, remaining: burst, retryAfterMs: 0 };',
     breaks: 'the remaining count reported is the allowance that is actually left',
+    holdout: true,
   },
   {
     file: FILE,
@@ -92,6 +104,7 @@ export const MUTATIONS: Mutation[] = [
     find: '      if (current - bucket.updated > fullRefillMs) buckets.delete(key);',
     replace: '      if (false) buckets.delete(key);',
     breaks: 'a bucket idle long enough to be full is dropped, so the map does not grow forever',
+    holdout: true,
   },
   {
     file: FILE,

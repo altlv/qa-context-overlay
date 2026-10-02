@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { briefCoverage, coverageGap, parseSurvivors } from '../../src/qe/coverage-briefing.js';
+import {
+  briefCoverage,
+  coverageGap,
+  holdoutPower,
+  parseSurvivors,
+} from '../../src/qe/coverage-briefing.js';
 
 /**
  * The gate scores a coder's file against a mutation set after it is written, which makes
@@ -139,5 +144,64 @@ test.describe('a measurement that failed', () => {
     ).not.toBeNull();
     expect(gap?.undefended).toEqual([]);
     expect(gap?.killed).toBe(set.length);
+  });
+});
+
+test.describe('the half of the set a role is never told about', () => {
+  /**
+   * The briefing is worth giving — 8 of 14 unaided, 11 told the survivors. It also means the
+   * gate scores a suite against the set it was briefed from, which marks a role on the answer
+   * it was handed. So part of every set is held back and scored anyway.
+   */
+  const split = [
+    { file: 'a.js', find: 'a', replace: 'b', breaks: 'briefed rule one' },
+    { file: 'a.js', find: 'c', replace: 'd', breaks: 'held back rule', holdout: true },
+    { file: 'a.js', find: 'e', replace: 'f', breaks: 'briefed rule two' },
+  ];
+
+  test('should leave a holdout rule out of the briefing even when it survived', () => {
+    const gap = coverageGap('test/x.test.js', split, ['briefed rule one', 'held back rule']);
+    expect(gap?.undefended, 'the held-back rule is the one the role must find unaided').toEqual([
+      'briefed rule one',
+    ]);
+  });
+
+  test('should not leak the size of the set through the totals', () => {
+    // Filtering at render time would still have published `total`, and a role told the set
+    // holds three rules while hearing about two knows to go looking for one.
+    const gap = coverageGap('test/x.test.js', split, ['briefed rule one']);
+    expect(gap?.total, 'two briefable rules, not three').toBe(2);
+    expect(gap?.killed).toBe(1);
+  });
+
+  test('should say nothing at all when every undefended rule is held back', () => {
+    const gap = coverageGap('test/x.test.js', split, ['held back rule']);
+    expect(gap?.undefended).toEqual([]);
+    expect(briefCoverage(gap), 'an empty briefing, not a mention of something withheld').toBe('');
+  });
+
+  test('should refuse to brief from a set that is entirely holdout', () => {
+    // Null rather than an empty gap, because the caller prints those differently on purpose:
+    // nothing measured must never read as nothing to say.
+    const all = split.map((entry) => ({ ...entry, holdout: true }));
+    expect(coverageGap('test/x.test.js', all, ['held back rule'])).toBeNull();
+  });
+
+  test('should report a holdout the baseline already kills as measuring nothing', () => {
+    // The failure mode a correct-looking split has: five held back, all five already
+    // covered, so no run differs from any other and the split looks fine from outside.
+    expect(
+      holdoutPower(split, ['briefed rule one']),
+      'a holdout the baseline kills could not have been briefed either way, so it tells no two runs apart',
+    ).toEqual({ live: 0, total: 1 });
+    expect(
+      holdoutPower(split, ['held back rule']),
+      'a holdout the baseline leaves alive is the only kind that measures anything',
+    ).toEqual({ live: 1, total: 1 });
+  });
+
+  test('should report nothing about a holdout where a set declares none', () => {
+    const plain = split.map(({ holdout: _holdout, ...rest }) => rest);
+    expect(holdoutPower(plain, ['briefed rule one'])).toBeNull();
   });
 });

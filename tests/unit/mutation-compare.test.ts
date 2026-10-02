@@ -5,7 +5,9 @@ import {
   applyMutation,
   newSurvivors,
   parseCompareArgs,
+  formatCompare,
   readMutations,
+  splitScore,
   summarise,
   type Mutation,
 } from '../../src/qe/mutation-compare.js';
@@ -154,5 +156,67 @@ test.describe('reading a mutation set', () => {
 
   test('should refuse a set that is not an array', () => {
     expect(readMutations({ file: 'a.js' }).problems[0]).toContain('not an array');
+  });
+});
+
+test.describe('the score, split by what the role was told', () => {
+  const outcome = (breaks: string, killed: boolean, holdout?: boolean) => ({
+    ...mutation({ breaks, ...(holdout === true ? { holdout: true } : {}) }),
+    killed,
+  });
+
+  test('should report the two halves apart rather than averaged', () => {
+    // An average answers neither question. A suite strong on the briefed half and weak on
+    // the holdout followed instructions; one alike on both found the seam, and only the
+    // difference tells those apart.
+    const split = splitScore([
+      outcome('told one', true),
+      outcome('told two', true),
+      outcome('held one', false, true),
+      outcome('held two', true, true),
+    ]);
+    expect(split.briefed, 'what the suite did with the rules it was handed').toEqual({
+      killed: 2,
+      total: 2,
+    });
+    expect(split.holdout, 'and what it did where nothing told it — the number we wanted').toEqual({
+      killed: 1,
+      total: 2,
+    });
+  });
+
+  test('should show the split in the line a person reads', () => {
+    const line = formatCompare('new suite', [
+      outcome('told one', true),
+      outcome('held one', false, true),
+    ]);
+    expect(line.split('\n')[0]).toBe('new suite: 1/2 killed (briefed 1/1, holdout 0/1)');
+  });
+
+  test('should say nothing about halves where a set declares no holdout', () => {
+    const outcomes = [outcome('told one', true), outcome('told two', false)];
+    expect(splitScore(outcomes).holdout, 'null, not a zero that reads as a bad score').toBeNull();
+    expect(formatCompare('suite', outcomes).split('\n')[0]).toBe('suite: 1/2 killed');
+  });
+
+  test('should refuse a set that is nothing but holdout', () => {
+    // It leaves the briefing with nothing to say, and nothing-to-say and
+    // nothing-was-measured are deliberately printed differently further down.
+    const { problems } = readMutations([
+      { file: 'a.js', find: 'a', replace: 'b', breaks: 'one', holdout: true },
+    ]);
+    expect(problems.join(' ')).toContain('nothing to brief');
+  });
+
+  test('should carry the flag through a set read from JSON', () => {
+    const { mutations, problems } = readMutations([
+      { file: 'a.js', find: 'a', replace: 'b', breaks: 'one', holdout: true },
+      { file: 'a.js', find: 'c', replace: 'd', breaks: 'two' },
+    ]);
+    expect(problems, 'a mixed set is the normal case and must read cleanly').toEqual([]);
+    expect(
+      mutations.map((entry) => entry.holdout === true),
+      'dropping the flag on the way in would brief the role from the whole set silently',
+    ).toEqual([true, false]);
   });
 });

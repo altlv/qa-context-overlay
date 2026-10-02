@@ -2,6 +2,7 @@
 
 Conventions for this repo. Read `docs/conventions.md` before writing or changing a
 test, and the skills in `.claude/skills/` before deciding _what_ to test.
+`docs/mutation-evals.md` before writing a mutation set or quoting a score from one.
 
 ## What this repo is
 

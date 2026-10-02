@@ -10,15 +10,24 @@
  * suite files** — so it grades the subject's own tests and cannot grade a file an agent writes.
  * This set is what `npm run mutation-compare` points at, and the subject's own
  * `test/labs-routes.test.js` is the first thing it is pointed at, to establish the bar.
+ *
+ * **The holdout.** Five entries are marked `holdout`: they are scored like every other and
+ * are never shown to a role in its pre-run briefing, because a role briefed from this set
+ * and then scored against it is being marked on the answer it was handed. The split takes
+ * one rule from each family the seam has — message validation, resource limit, lab policy,
+ * session lifecycle, OAuth — rather than a run of adjacent entries, so what it measures is
+ * the effect of briefing and not one family's difficulty.
+ *
+ * Measured before the split existed: this subject's own suite kills 4 of 14, the role
+ * choosing its own targets 8, and the role handed the survivors 11. **Those three numbers
+ * are not comparable with anything scored after this split**, and the 11 is the one the
+ * split exists because of. Which of the five the baseline already covers is unknown until
+ * the next run prints it — a holdout the baseline kills distinguishes nothing, and
+ * `holdoutPower` says how many are in that state.
  */
-export interface LabMutation {
-  file: string;
-  find: string;
-  replace: string;
-  breaks: string;
-}
+import type { Mutation } from '../../../src/qe/mutation-compare.js';
 
-export const MUTATIONS: LabMutation[] = [
+export const MUTATIONS: Mutation[] = [
   {
     file: 'src/routes/labs.js',
     find: "  if (message.jsonrpc !== '2.0') return false;",
@@ -36,18 +45,21 @@ export const MUTATIONS: LabMutation[] = [
     find: '  return message.id !== undefined && message.id !== null;',
     replace: '  return true;',
     breaks: 'a response must carry an id',
+    holdout: true,
   },
   {
     file: 'src/routes/labs.js',
     find: '  if (session.log.length > MAX_LOG_ENTRIES) session.log.shift();',
     replace: '  if (false) session.log.shift();',
     breaks: 'the transcript is capped at MAX_LOG_ENTRIES',
+    holdout: true,
   },
   {
     file: 'src/routes/labs.js',
     find: "  if (lab.pending) return res.status(409).json({ error: lab.name + ' is pending: ' + lab.pending });",
     replace: '  if (false) return res.status(409).json({ error: lab.name });',
     breaks: 'a lab marked pending is refused with 409 rather than started',
+    holdout: true,
   },
   {
     file: 'src/routes/labs.js',
@@ -78,12 +90,14 @@ export const MUTATIONS: LabMutation[] = [
     find: '    if (!session.child || session.child.exitCode !== null) {',
     replace: '    if (false) {',
     breaks: 'sending to a stdio session whose process died is refused',
+    holdout: true,
   },
   {
     file: 'src/routes/labs.js',
     find: "  const challenge = response.headers.get('www-authenticate');",
     replace: '  const challenge = null;',
     breaks: 'a WWW-Authenticate challenge is captured for the OAuth steps',
+    holdout: true,
   },
   {
     file: 'src/routes/labs.js',
