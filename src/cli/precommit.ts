@@ -124,8 +124,19 @@ try {
   parent = undefined;
 }
 
+// Staged and unstaged both: either way the file is part of the commit being prepared, whose
+// parent will be HEAD — so a stamp of HEAD's parent is stale by one. Without this the check
+// approved `3b8cea1` and CI then refused it.
+const planChangedInWorkingTree = git('status', '--porcelain', '--', '.ai/state/PLAN.md') !== '';
+
 const recorded = /Head is `([0-9a-f]+)`/.exec(readFileSync('.ai/state/PLAN.md', 'utf8'))?.[1];
-const planStatus = planFreshness({ recorded, head, parent, planChangedInHead });
+const planStatus = planFreshness({
+  recorded,
+  head,
+  parent,
+  planChangedInHead,
+  planChangedInWorkingTree,
+});
 if (!planStatus.fresh) {
   fail('PLAN.md is not current', planStatus.reason);
 }

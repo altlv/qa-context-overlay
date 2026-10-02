@@ -28,6 +28,43 @@ export interface TestStack {
   assertions: string;
   /** One test file to read as the house style, relative to the subject's repository root. */
   exemplar: string;
+  /**
+   * How this runner records a test that **correctly fails because the subject is broken**.
+   *
+   * Without this there is nowhere to put the most valuable thing a coder run produces. On
+   * 2026-09-27 `integration-coder` wrote 34 tests against `mcpa` and 33 passed; the one that
+   * failed had found a real crash — a write past the 64 KiB pipe buffer stays queued, the
+   * stop destroys the pipe under it, and the unhandled stream error ends the process serving
+   * quiz, exam and chat. The agent even located the boundary from the route's own ceiling
+   * being one byte short of the buffer.
+   *
+   * **The gate failed that run**, correctly by its own rule, because a test that does not
+   * pass does not pass. So the run that found the defect and the run that wrote a broken
+   * test are the same colour, and the strongest possible outcome is punished. The alternative
+   * the role is left with is to delete the test or assert the broken behaviour as correct,
+   * both of which non-negotiable 4 forbids.
+   *
+   * The marker is the runner's own — `test.fail(true, reason)` in Playwright,
+   * `it.fails(…)` in vitest, `{ todo: 'reason' }` in `node:test` — and so it is **declared,
+   * never assumed**, which is the lesson of every other field here. The test is written as
+   * it *should* pass, and the runner flags it loudly if the subject is ever fixed.
+   *
+   * Absent means this stack has no such idiom, and a role must leave the suite red and say
+   * why in its report rather than inventing one.
+   */
+  knownDefect?: string;
+  /**
+   * The same marker as a regular expression source, so the gate can count them.
+   *
+   * Two fields that must agree are a drift risk, and the answer is not to trust them: a unit
+   * test beside every registered subject asserts that this pattern matches that subject's own
+   * declared `knownDefect` idiom. If one is edited without the other, that test fails.
+   *
+   * Counted rather than forbidden. A green suite holding three of these is not a green suite,
+   * and the gate says the number out loud for exactly the reason the mutation briefing reports
+   * a failed measurement differently from a clean one.
+   */
+  knownDefectPattern?: string;
 }
 
 /** `\` to `/`, so a path git spells the Windows way compares to a pattern written the other. */

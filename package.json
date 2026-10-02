@@ -27,6 +27,7 @@
     "gate": "tsx src/cli/gate.ts",
     "check-report": "tsx src/cli/check-report.ts",
     "mutate": "tsx src/cli/mutate.ts",
+    "known-defect-check": "tsx src/cli/known-defect-check.ts",
     "mutation-compare": "tsx src/cli/mutation-compare.ts",
     "role": "tsx src/cli/role.ts",
     "targets": "tsx src/cli/targets.ts",

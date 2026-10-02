@@ -12,25 +12,26 @@ browser through Playwright MCP, with three things laid over the app under test:
 its environment permits, enforced as tools it does not hold, and the **QA** checks that
 decide whether the result proves anything.
 
-| Capability                                       | Status                              | Entry point                      |
-| ------------------------------------------------ | ----------------------------------- | -------------------------------- |
-| Network capture                                  | built                               | `src/capture/network.ts`         |
-| Page scanner + testability audit                 | built                               | `src/tools/page-scanner.ts`      |
-| Test quality gate                                | built                               | `src/quality/assertions.ts`      |
-| Release gate verdict                             | built                               | `src/qe/gate.ts`                 |
-| Failure triage agent                             | built, unverified against live API  | `src/agents/triage.ts`           |
-| Agent roles — coding family and testing family   | driven: 5 of 8, over 5 subjects     | `src/agents/roles.ts`            |
-| Self-healing selectors                           | built                               | `src/tools/heal.ts`              |
-| Test ideas from a scan, heuristics catalogue     | built, reaches a run via the driver | `src/qe/test-ideas.ts`           |
-| Driver (E5a) — candidate actions under a policy  | built, reaches a live session       | `src/qe/driver.ts`               |
-| State model (E5b) — shared browser over CDP      | built, has refused a live session   | `src/qe/state-model.ts`          |
-| Role runner — preflight, guards, worktree, gate  | drives every run                    | `src/cli/role.ts`                |
-| Fault check — does a spec notice a 500           | built                               | `src/cli/fault-check.ts`         |
-| Process fault — does a subject test notice       | built, a gate step for two subjects | `src/qe/process-fault.ts`        |
-| Subject test stack — a subject's own runner      | built, two subjects declare one     | `src/qe/test-stack.ts`           |
-| Source map — units, callers, what tests point at | built                               | `src/quality/repomap.ts`         |
-| Assertion floor for a non-Playwright suite       | built                               | `src/quality/assertion-floor.ts` |
-| Mutation comparator — a suite against a set      | built, a gate step for two subjects | `src/qe/mutation-compare.ts`     |
+| Capability                                        | Status                               | Entry point                      |
+| ------------------------------------------------- | ------------------------------------ | -------------------------------- |
+| Network capture                                   | built                                | `src/capture/network.ts`         |
+| Page scanner + testability audit                  | built                                | `src/tools/page-scanner.ts`      |
+| Test quality gate                                 | built                                | `src/quality/assertions.ts`      |
+| Release gate verdict                              | built                                | `src/qe/gate.ts`                 |
+| Failure triage agent                              | built, unverified against live API   | `src/agents/triage.ts`           |
+| Agent roles — coding family and testing family    | driven: 5 of 8, over 5 subjects      | `src/agents/roles.ts`            |
+| Self-healing selectors                            | built                                | `src/tools/heal.ts`              |
+| Test ideas from a scan, heuristics catalogue      | built, reaches a run via the driver  | `src/qe/test-ideas.ts`           |
+| Driver (E5a) — candidate actions under a policy   | built, reaches a live session        | `src/qe/driver.ts`               |
+| State model (E5b) — shared browser over CDP       | built, has refused a live session    | `src/qe/state-model.ts`          |
+| Role runner — preflight, guards, worktree, gate   | drives every run                     | `src/cli/role.ts`                |
+| Fault check — does a spec notice a 500            | built                                | `src/cli/fault-check.ts`         |
+| Process fault — does a subject test notice        | built, a gate step for two subjects  | `src/qe/process-fault.ts`        |
+| Subject test stack — a subject's own runner       | built, two subjects declare one      | `src/qe/test-stack.ts`           |
+| Source map — units, callers, what tests point at  | built                                | `src/quality/repomap.ts`         |
+| Assertion floor for a non-Playwright suite        | built                                | `src/quality/assertion-floor.ts` |
+| Mutation comparator — a suite against a set       | built, a gate step for two subjects  | `src/qe/mutation-compare.ts`     |
+| Known defects — a test that fails for the product | built, a gate step for every subject | `src/qe/known-defect.ts`         |
 
 Do not add placeholder modules for the planned items. Build one end to end when it
 is wanted.
@@ -109,6 +110,8 @@ npm run triage -- <file>  # triage a failure JSON (needs API key)
 npm run role -- <role> "<task>" --app <app> --env <env> [--preflight]
                           # run a role in its own worktree — docs/agent-workflows.md
 npm run fault-check -- <spec>   # does a spec notice its server failing
+npm run known-defect-check -- --pattern <regexp> <test-file>...
+                          # how many tests stand in for a defect, and whether each names it
 npm run subject-fault-check -- --entry <file> --suite <cmd>
                           # does a subject test notice the process it spawns failing
 npm run archive-results   # keep the last 20 runs, so a trend can be read

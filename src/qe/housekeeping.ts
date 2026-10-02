@@ -131,6 +131,20 @@ export interface PlanStamp {
   /** HEAD's parent; absent on a repository's first commit. */
   parent: string | undefined;
   planChangedInHead: boolean;
+  /**
+   * Whether `PLAN.md` is edited in the working tree, and so part of the commit being prepared.
+   *
+   * Without this the check **passes the very commit it then refuses.** CI proved it on
+   * `3b8cea1`: HEAD was `e9bc107`, which had updated `PLAN.md`, so `planChangedInHead` was true
+   * and the parent-stamp branch below called a stamp of `ba8acf3` fresh — while `PLAN.md` sat
+   * modified on disk, naming the commit before the one it was about to be committed on top of.
+   * The commit went out green locally and failed in CI, where the same rule read the committed
+   * tree instead of the prepared one.
+   *
+   * It bites whenever two consecutive commits touch the plan, which is the normal rhythm of
+   * this file, so the gap had been open for as long as the rule has.
+   */
+  planChangedInWorkingTree: boolean;
 }
 
 /**
@@ -145,9 +159,16 @@ export interface PlanStamp {
  * So there are two fresh states: updated against HEAD and not yet committed, or updated
  * in HEAD itself and stamped with its parent. A code-only commit after a plan commit is
  * neither, and that is the drift worth refusing.
+ *
+ * **The parent-stamp state is only fresh while the plan is unedited.** Once `PLAN.md` is
+ * modified in the working tree it belongs to the commit being prepared, whose parent will be
+ * the current HEAD — so it must name HEAD, and a stamp of HEAD's parent is stale by one. Before
+ * that distinction existed, this function approved a tree and then refused the commit made from
+ * it, which is the worst thing a pre-commit check can do: it moves a failure from the desk,
+ * where it costs a minute, to CI, where it costs a red build and a second commit.
  */
 export function planFreshness(stamp: PlanStamp): { fresh: boolean; reason: string } {
-  const { recorded, head, parent, planChangedInHead } = stamp;
+  const { recorded, head, parent, planChangedInHead, planChangedInWorkingTree } = stamp;
   if (recorded === undefined) {
     return { fresh: false, reason: 'PLAN.md names no head — expected: Head is `<sha>`' };
   }
@@ -155,8 +176,17 @@ export function planFreshness(stamp: PlanStamp): { fresh: boolean; reason: strin
     return { fresh: true, reason: `updated against HEAD ${head}` };
   }
   const sameAsParent = parent !== undefined && sameCommit(recorded, parent);
-  if (sameAsParent && planChangedInHead) {
+  if (sameAsParent && planChangedInHead && !planChangedInWorkingTree) {
     return { fresh: true, reason: `updated in HEAD ${head}, stamped with its parent` };
+  }
+  if (sameAsParent && planChangedInHead && planChangedInWorkingTree) {
+    return {
+      fresh: false,
+      reason:
+        `it names ${recorded}, which is HEAD's parent, and it is edited again in the working ` +
+        `tree. The commit you are about to make has ${head} as its parent, so the stamp is ` +
+        `stale by one — name ${head} as the head.`,
+    };
   }
   return {
     fresh: false,

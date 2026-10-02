@@ -97,6 +97,7 @@ test.describe('whether the plan is current', () => {
       head: 'bbbbbbb',
       parent: 'aaaaaaa',
       planChangedInHead: true,
+      planChangedInWorkingTree: false,
       ...over,
     });
 
@@ -131,6 +132,38 @@ test.describe('whether the plan is current', () => {
       stamp({ recorded: 'ccccccc' }).fresh,
       'editing the plan without re-checking it against the current tree is not freshness',
     ).toBe(false);
+  });
+
+  test('should refuse a parent stamp once the plan is edited again', () => {
+    /**
+     * The state that approved a commit and then failed it. CI caught it on `3b8cea1`: HEAD had
+     * updated the plan, so `planChangedInHead` was true and the parent-stamp branch called the
+     * tree fresh — while `PLAN.md` sat modified on disk, naming the commit before the one it was
+     * about to be committed on top of. Green locally, red in CI, where the same rule read the
+     * committed tree rather than the prepared one.
+     *
+     * It fires whenever two consecutive commits touch the plan, which is this file's normal
+     * rhythm, so the gap was open for as long as the rule was.
+     */
+    const result = stamp({ planChangedInWorkingTree: true });
+    expect(
+      result.fresh,
+      'the commit being prepared has HEAD as its parent, so a stamp of HEAD’s parent is stale by one',
+    ).toBe(false);
+    expect(result.reason, 'and the refusal must name the head to use').toContain('bbbbbbb');
+    expect(
+      result.reason,
+      'said as the one-off-by-one it is, not as the generic drift message',
+    ).toContain('stale by one');
+  });
+
+  test('should still accept a plan edited to name HEAD itself', () => {
+    // The ordinary pre-commit state, and the one the fix above must not break: the plan is
+    // dirty *and* already names HEAD, which is exactly what a correct update looks like.
+    expect(
+      stamp({ recorded: 'bbbbbbb', planChangedInWorkingTree: true }).fresh,
+      'refusing this would make the plan impossible to update at all',
+    ).toBe(true);
   });
 
   test('should refuse a plan that names no head at all', () => {

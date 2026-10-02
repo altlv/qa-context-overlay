@@ -53,6 +53,11 @@ const config: AppConfig = {
     moduleSystem: 'commonjs',
     assertions: "const assert = require('node:assert/strict');",
     exemplar: 'test/specIndexer.test.js',
+    // `node:test` has no xfail, so `todo` is the nearest honest thing: the test runs, its
+    // failure is not counted against the suite, and the reason travels with it. This is the
+    // slot the crash L6.4 found had nowhere to go — see `src/qe/known-defect.ts`.
+    knownDefect: "it('…', { todo: 'KNOWN: <what is broken>' }, async () => {});",
+    knownDefectPattern: '\\btodo:\\s*[\'"`]',
   },
   entryPoint: 'src/server.js',
   mutations: {

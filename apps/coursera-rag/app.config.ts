@@ -52,6 +52,10 @@ const config: AppConfig = {
     moduleSystem: 'esm',
     assertions: "import { describe, it, expect } from 'vitest';",
     exemplar: 'test/unit/rate-limit.test.mjs',
+    // vitest's own marker. The test is written as it should pass; vitest reports it as an
+    // expected failure and fails loudly if the subject is ever fixed.
+    knownDefect: "it.fails('…', () => { /* KNOWN: <what is broken> */ });",
+    knownDefectPattern: '\\b(?:it|test)\\.fails\\s*\\(',
   },
   /**
    * The rate limiter, because it is the only seam here that is pure, has its clock injected

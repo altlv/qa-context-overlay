@@ -190,6 +190,24 @@ export function planGate(input: {
         env: {},
       });
 
+      // How many of these tests are standing in for a defect rather than proving behaviour.
+      // Always, not only when the stack declares an idiom: a stack that declares none must
+      // still be looked at, because the step would otherwise be absent exactly where a role
+      // has no legitimate slot and the most pressure to invent one. The CLI reports the
+      // count and fails only an unnamed marker.
+      steps.push({
+        name: 'known defects are named, not switched off',
+        args: [
+          TSX,
+          script('src/cli/known-defect-check.ts'),
+          ...(input.testStack.knownDefectPattern === undefined
+            ? []
+            : ['--pattern', input.testStack.knownDefectPattern]),
+          ...subjectFiles,
+        ],
+        env: {},
+      });
+
       // Would it notice a fault? Nothing above answers that. The runner proves the tests
       // pass and the floor proves they assert, and a suite asserting on values it computed
       // for itself clears both — the floor says so about itself in as many words.

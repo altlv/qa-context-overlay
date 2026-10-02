@@ -102,6 +102,7 @@ test.describe('the coding gate', () => {
     expect(names(plan), 'the subject runner replaces the spec-shaped steps').toEqual([
       'changed test passes: test/searchIndex.unit.test.js',
       'assertion floor',
+      'known defects are named, not switched off',
       'report',
     ]);
     expect(plan.steps[0]?.args, 'node --test over the changed file, in the worktree').toEqual([

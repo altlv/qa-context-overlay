@@ -50,6 +50,34 @@ export function levelOfRole(role: string): SubjectLevel | null {
   return match === null ? null : (match[1] as SubjectLevel);
 }
 
+/**
+ * What to do with a test that fails because the subject is broken.
+ *
+ * The role needs telling, because the alternative it will otherwise reach for is one of the two
+ * this repository forbids. Measured on `mcpa`: 34 tests, 33 passing, and the one that failed had
+ * found a real crash — then the gate failed the run for it, because a test that does not pass
+ * does not pass. With no slot for the finding, deleting the test and asserting the broken
+ * behaviour as correct are the only moves left.
+ *
+ * The reason travels in a `KNOWN:` comment because the gate counts the markers and refuses one
+ * that names nothing — the slot is the obvious way to turn a red suite green, and saying so here
+ * is cheaper than letting a role discover the refusal at the gate.
+ */
+function knownDefectLine(stack: TestStack): string {
+  if (stack.knownDefect === undefined) {
+    return `- If a test fails because the product is genuinely wrong, **leave it failing** and say so
+  plainly in your report, with the reproduction. This runner has no way to record an expected
+  failure, so do not invent one — and never delete the test or assert the broken behaviour as
+  though it were correct.`;
+  }
+  return `- If a test fails because the product is genuinely wrong, that is the most valuable thing
+  you can produce — do not delete it and do not assert the broken behaviour as correct. Write the
+  test as it **should** pass and mark it the way this suite does:
+  \`${stack.knownDefect}\`
+  The \`KNOWN:\` comment is required and must name what is broken; the gate counts these and
+  refuses one that names nothing. Report the defect as well as marking it.`;
+}
+
 export function subjectConventions(subject: SubjectRun): string {
   const { stack } = subject;
   return `
@@ -67,6 +95,7 @@ from this harness: ${stack.runner} runs the tests here.
   are adding to, and matching it matters more than any preference of your own.
 - Never edit the subject's own checkout. Your worktree is the only place your work belongs,
   and a change outside it is refused rather than reported.
+${knownDefectLine(stack)}
 `.trim();
 }
 
