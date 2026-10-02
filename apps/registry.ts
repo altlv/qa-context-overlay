@@ -3,6 +3,7 @@ import countdownTimer from './countdown-timer/app.config.js';
 import academybugs from './academybugs/app.config.js';
 import bugeater from './bugeater/app.config.js';
 import courseraRag from './coursera-rag/app.config.js';
+import demoqa from './demoqa/app.config.js';
 import eprimer from './eprimer/app.config.js';
 import fakerestapi from './fakerestapi/app.config.js';
 import juiceShop from './juice-shop/app.config.js';
@@ -24,6 +25,7 @@ export const apps: AppConfig[] = [
   academybugs,
   bugeater,
   courseraRag,
+  demoqa,
   eprimer,
   fakerestapi,
   juiceShop,

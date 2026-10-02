@@ -635,10 +635,15 @@ export function auditTestability(
       // Not a defect and not an automation problem: the map declaring a blind spot.
       audience: ['recon'],
       element: `<iframe src="${src}">`,
+      // Narrowed on 2026-10-02, when the scan started reading frames. It used to say "this scan
+      // does not cross into frames", which became false the moment `readFrames` was wired in —
+      // and the report then declared the content unexamined on the same page it listed it. A
+      // blind spot claimed after it has been closed is the mirror of one claimed closed before
+      // it was: both make the report untrustworthy, and this half was mine to fix.
       problem:
-        'This scan does not cross into frames, so anything inside it is unexamined. A clean result above says nothing about this content.',
+        'The inventory above stops at this frame: no selector was harvested inside it, and nothing was interacted with. What the browser reports as operable in there is listed separately under INSIDE THE FRAMES.',
       suggestion:
-        'Scan the frame URL directly, or use frameLocator() in tests and treat this area as uncovered until then.',
+        'Reach it with frameLocator() — the frames section gives one per control. A selector inside a frame has no healable path yet, so treat those locators as text-dependent.',
     });
   }
 
@@ -799,7 +804,7 @@ export function formatScan(
 
   if (scan.frames.length > 0) {
     lines.push(
-      `Frames: ${scan.frames.length} NOT scanned - content inside is unexamined:`,
+      `Frames: ${scan.frames.length} - not in the inventory above; read separately below:`,
       ...scan.frames.map((src) => `  ${src}`),
       '',
     );

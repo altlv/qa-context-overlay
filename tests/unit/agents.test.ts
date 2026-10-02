@@ -245,17 +245,25 @@ test.describe('testability grading', () => {
     ).toEqual([]);
   });
 
-  test('should declare an unscanned frame rather than reporting a clean page', () => {
+  test('should declare that the inventory stopped at a frame rather than reporting a clean page', () => {
     const [issue] = auditTestability([], ['/embedded/checkout']);
 
     expect(
       issue?.kind,
-      'the scan cannot cross into frames, and silence about that is a wrong answer stated confidently',
+      'silence about a boundary the inventory did not cross is a wrong answer stated confidently',
     ).toBe('unscanned-frame');
+    // The wording narrowed on 2026-10-02, when `readFrames` started reading these documents. It
+    // used to say the content was "unexamined", and that became false on the same report that
+    // began listing what was inside — a blind spot claimed after it was closed is the mirror of
+    // one claimed closed before it was, and both make the report untrustworthy. What is still
+    // true, and what this now asserts, is narrower: the *inventory* stops here.
     expect(
       issue?.problem,
-      'the finding must say the clean result above does not cover the frame content',
-    ).toContain('unexamined');
+      'the finding must still refuse to imply the inventory covers the frame',
+    ).toContain('stops at this frame');
+    expect(issue?.problem, 'and must point at where the frame content actually is').toContain(
+      'INSIDE THE FRAMES',
+    );
   });
 
   test('should name a concrete fix in every finding', () => {

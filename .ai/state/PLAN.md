@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `08322bc` — the commit this file was last checked against. A file cannot name
+Head is `12360e2` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -681,6 +681,34 @@ Three distinctions it keeps, each of which is the kind this repository keeps pay
 academybugs — has a child frame at all, so this is proven on a fixture and no registered subject
 has yet exercised it. A subject with a hosted payment field would be worth registering for this
 reason alone; `juice-shop` is the nearest candidate already on the list.
+
+### demoqa, registered at `test` — the frame source's first live subject
+
+Registered 2026-10-02 for the reason it had been **parked** for. `apps/README.md` held it under
+"demoqa browser-windows … the `unscanned-frame` finding, and whether the scan should follow a
+frame rather than only declare it". The scan now follows one, and no registered subject had a
+frame to follow — every subject probed had none, which is why the frame source was recorded as
+fixture-proven only.
+
+**Live recovery, `/select-menu`: 16 controls** the browser reports and the selector sweep did not
+find — every `option` of the native selects, plus a `listbox`. The first live confirmation that
+the accessibility source earns its place on a real page rather than an adversarial fixture. It
+also surfaced the site's own typo, `getByRole('option', { name: "Voilet" })`, which nothing in
+the harness could see the day before.
+
+`/nestedframes` exercises the case `page.frames()` flattens: a frame inside a frame, read as two
+documents, the inner one addressable only by position and labelled as such. Both hold text rather
+than controls, so the control count is zero and correctly so — and the site's third-party ad
+frames are read and reported like any other, because filtering them would need a list of
+plausible ad hosts, which is the shape this whole layer has been correcting.
+
+**A contradiction this introduced, and fixed.** The scan had always said of a frame "This scan
+does not cross into frames, so anything inside it is unexamined", and that became false the
+moment `readFrames` was wired in — the report declared the content unexamined on the same page
+that listed what was in it. Narrowed to what is still true: the _inventory_ stops at the frame,
+no selector is harvested inside it, and nothing is interacted with. **A blind spot claimed after
+it has been closed is the mirror of one claimed closed before it was**; both make a report
+untrustworthy, and this half was mine.
 
 ### What is structurally missing
 

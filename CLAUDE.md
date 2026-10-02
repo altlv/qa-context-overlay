@@ -25,7 +25,7 @@ decide whether the result proves anything.
 | Driver (E5a) — candidate actions under a policy   | built, reaches a live session        | `src/qe/driver.ts`               |
 | State model (E5b) — shared browser over CDP       | built, has refused a live session    | `src/qe/state-model.ts`          |
 | Accessibility tree as a second element source     | built, in every scan                 | `src/tools/aria.ts`              |
-| Inside the frames — a third element source        | built, unexercised live              | `src/tools/frames.ts`            |
+| Inside the frames — a third element source        | built, live on demoqa                | `src/tools/frames.ts`            |
 | Role runner — preflight, guards, worktree, gate   | drives every run                     | `src/cli/role.ts`                |
 | Fault check — does a spec notice a 500            | built                                | `src/cli/fault-check.ts`         |
 | Process fault — does a subject test notice        | built, a gate step for two subjects  | `src/qe/process-fault.ts`        |
