@@ -80,6 +80,7 @@ const scan = (interactive: ScannedElement[]): PageScan => ({
   interactive,
   endpoints: [],
   testability: [],
+  insideFrames: [],
   aria: { widgetsMissedBySelectors: [], announcing: [], unreadable: 0 },
 });
 

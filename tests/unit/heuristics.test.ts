@@ -85,6 +85,7 @@ function everything(): { scan: PageScan; dictionary: EndpointShape[] } {
     interactive,
     endpoints: [],
     testability: [],
+    insideFrames: [],
     aria: { widgetsMissedBySelectors: [], announcing: [], unreadable: 0 },
   } satisfies PageScan;
   const endpoint = (method: string, template: string): EndpointShape => ({

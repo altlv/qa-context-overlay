@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { ariaLocator, readAria, selectorBlindSpots } from './aria.js';
+import { readFrames, reportFrames, type FrameReading } from './frames.js';
 import { accessibleNameFrom, type NameParts } from './accessible-name.js';
 
 /**
@@ -156,6 +157,13 @@ export interface PageScan {
    * has already earned that: polymer-shop quotes its cart nodes, because their name contains a
    * colon, and the first parser dropped both.
    */
+  /**
+   * What is inside the child frames — a third source, because neither of the other two crosses
+   * the boundary. A hosted card field is an iframe by design, so this is where a payment
+   * surface lives. See `src/tools/frames.ts`; empty means the page has no child frames,
+   * while an entry carrying `failure` means one could not be read and is unaccounted for.
+   */
+  insideFrames: FrameReading[];
   aria: {
     widgetsMissedBySelectors: { role: string; name: string | null; locator: string }[];
     announcing: { role: string; text: string | null }[];
@@ -471,6 +479,15 @@ export async function scanPage(
   // The second source. Wrapped because a page that will not produce a snapshot must not fail
   // the whole scan — but the failure is reported as unreadable lines rather than as an empty
   // reading, so a scan can never claim the tree agreed with the sweep when it was never read.
+  // The third source. Its own try for the same reason as the second: a frame that will not
+  // settle must cost its own reading and not the scan.
+  let insideFrames: FrameReading[] = [];
+  try {
+    insideFrames = await readFrames(page);
+  } catch {
+    insideFrames = [];
+  }
+
   let ariaReading: PageScan['aria'] = {
     widgetsMissedBySelectors: [],
     announcing: [],
@@ -520,6 +537,7 @@ export async function scanPage(
     frames: collected.frames,
     shadowHosts: collected.shadowHosts,
     interactive,
+    insideFrames,
     aria: ariaReading,
     endpoints: [],
     testability: auditTestability(interactive, collected.frames, collected.shadowHosts),
@@ -948,6 +966,11 @@ export function formatScan(
       }
     }
   }
+
+  // The third source, printed last because it is a different document: a reader has to know the
+  // inventory above stopped at the boundary before being shown what is past it.
+  const frameLines = reportFrames(scan.insideFrames ?? []);
+  if (frameLines.length > 0) lines.push('', ...frameLines);
 
   return lines.join('\n').trimEnd();
 }

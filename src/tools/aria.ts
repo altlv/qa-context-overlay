@@ -185,13 +185,26 @@ export interface AriaReading {
 }
 
 /**
+ * Anything that can hand back an aria snapshot for a selector — a `Page` or a `Frame`.
+ *
+ * Structural rather than a union of Playwright's types, so `readAria` works on a frame without
+ * this module importing frame handling. A document inside an iframe is a document, and the only
+ * reason it needed saying is that nothing here used to cross that boundary at all.
+ */
+export interface AriaSource {
+  locator(selector: string): { ariaSnapshot: () => Promise<string> };
+}
+
+/**
  * What the browser says is on the page.
  *
  * `root` defaults to `body` rather than `:root`, because the `html` element contributes a
  * document node and nothing a session acts on.
  */
-export async function readAria(page: Page, root = 'body'): Promise<AriaReading> {
-  const locator = page.locator(root) as unknown as { ariaSnapshot: () => Promise<string> };
+export async function readAria(source: AriaSource | Page, root = 'body'): Promise<AriaReading> {
+  const locator = (source as AriaSource).locator(root) as unknown as {
+    ariaSnapshot: () => Promise<string>;
+  };
   const { nodes, unparsed } = parseAriaSnapshot(await locator.ariaSnapshot());
   return {
     nodes,

@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `fbbf505` — the commit this file was last checked against. A file cannot name
+Head is `08322bc` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -648,11 +648,46 @@ payment surface is wholly invisible; closed shadow roots; `<summary>`, which the
 `group`; a focusable `div` with no role, which it calls `text`. And every locator this produces
 is `text-dependent` by construction, which the report says on each line it prints.
 
+### Inside the frames — a third source, built 2026-10-02
+
+`src/tools/frames.ts`. Neither of the other two sources crosses an iframe boundary, asserted
+rather than assumed: a test pins that the selector sweep sees only the host page and the
+accessibility tree reports a frame as a bare leaf, so if a future Playwright starts piercing
+frames this module becomes redundant loudly.
+
+It is the most expensive blind spot that was left, because of **what lives in a frame by design
+rather than by accident**. A hosted card field from Stripe, Adyen or Braintree is an iframe
+precisely so the merchant page cannot read the number — so the payment surface of any storefront
+using one was wholly unperceived. The same holds for embedded editors, map widgets, consent
+managers and iframe-composed micro-frontends.
+
+Proven end to end on a framed checkout fixture: the card frame's two textboxes, its confirm
+button and its `role=alert` "Card declined" message all come back with usable locators —
+`frameLocator('#card').getByRole('textbox', { name: "Card number" })` — and a consent frame with
+no id falls back to `frameLocator('iframe[src="./consent.html"]')`.
+
+Three distinctions it keeps, each of which is the kind this repository keeps paying for:
+
+- **A frame that could not be read is reported as unread, never as empty.** A hosted payment
+  field is both the slowest thing on a page to settle and the least affordable to miss, so a
+  timeout reporting zero controls would be the most expensive possible wrong answer.
+- **A positional frame locator is labelled as positional.** A frame with no id, name or src gets
+  `iframe >> nth=0`, which breaks the moment another frame is added before it, and is handed over
+  labelled rather than withheld.
+- **Each frame is read under its own timeout and its own try**, so one frame that will not settle
+  costs its own reading and not the scan.
+
+**Unexercised live.** None of the three subjects probed on 2026-10-02 — eprimer, polymer-shop,
+academybugs — has a child frame at all, so this is proven on a fixture and no registered subject
+has yet exercised it. A subject with a hosted payment field would be worth registering for this
+reason alone; `juice-shop` is the nearest candidate already on the list.
+
 ### What is structurally missing
 
 - **Content is not perceived at all.** The one confirmed blindness, above.
 - **One moment.** The scan is taken once, on a page nobody has touched. Nothing is observed
   arriving, changing or leaving.
+- **Still no iframe interaction** — the frames are read, and nothing acts inside one yet.
 - **No geometry.** Occlusion, stacking, overflow and off-screen are invisible — and the single best
   finding `testability-reviewer` ever produced was an occlusion, a consent banner over a product
   image, which is a spatial fact no DOM query returns.

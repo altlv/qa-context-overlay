@@ -65,6 +65,7 @@ function scanOf(interactive: ScannedElement[]): PageScan {
     testability: [],
     // A hand-built fixture, so nothing was read from a browser: the second source is empty
     // here by construction rather than by measurement.
+    insideFrames: [],
     aria: { widgetsMissedBySelectors: [], announcing: [], unreadable: 0 },
   } satisfies PageScan;
 }
