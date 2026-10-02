@@ -80,6 +80,7 @@ const scan = (interactive: ScannedElement[]): PageScan => ({
   interactive,
   endpoints: [],
   testability: [],
+  aria: { widgetsMissedBySelectors: [], announcing: [], unreadable: 0 },
 });
 
 const endpoint = (method: string, template: string, over: Partial<EndpointShape> = {}) => ({

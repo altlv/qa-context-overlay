@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { ariaLocator, readAria, selectorBlindSpots } from './aria.js';
 import { accessibleNameFrom, type NameParts } from './accessible-name.js';
 
 /**
@@ -140,6 +141,26 @@ export interface PageScan {
   /** Custom elements holding an open shadow root. Also not scanned. */
   shadowHosts: string[];
   interactive: ScannedElement[];
+  /**
+   * What the **browser's** accessibility tree reports that the selector sweep above did not
+   * find, and what the page is currently announcing.
+   *
+   * A second source rather than a replacement: the sweep is what produces a healable selector
+   * path, and the tree is what knows a role without being told a tag. Measured on 2026-10-02 —
+   * the tree recovers `role=option`, `role=combobox` and 13 further controls on a CMS
+   * storefront, one link on a Web Components storefront, and nothing at all on a plain static
+   * page, where the two sources agree exactly. Full reasoning in `src/tools/aria.ts`.
+   *
+   * `unreadable` is non-zero when the snapshot held lines the parser could not understand, in
+   * which case **this reading understates the page** and must not be read as a clean bill. It
+   * has already earned that: polymer-shop quotes its cart nodes, because their name contains a
+   * colon, and the first parser dropped both.
+   */
+  aria: {
+    widgetsMissedBySelectors: { role: string; name: string | null; locator: string }[];
+    announcing: { role: string; text: string | null }[];
+    unreadable: number;
+  };
   endpoints: { method: string; path: string; status: number | null }[];
   testability: TestabilityIssue[];
 }
@@ -447,6 +468,41 @@ export async function scanPage(
 
   const interactive = markUniqueness(partial.map(({ element }) => element));
 
+  // The second source. Wrapped because a page that will not produce a snapshot must not fail
+  // the whole scan — but the failure is reported as unreadable lines rather than as an empty
+  // reading, so a scan can never claim the tree agreed with the sweep when it was never read.
+  let ariaReading: PageScan['aria'] = {
+    widgetsMissedBySelectors: [],
+    announcing: [],
+    unreadable: 0,
+  };
+  try {
+    const reading = await readAria(page, scope ?? 'body');
+    const missed = selectorBlindSpots(
+      // `el.role` is the raw attribute, which is null for a plain `<a>` or `<button>`, while the
+      // accessibility tree always reports a computed role. Joining on the raw value made every
+      // ordinary link look like a blind spot: 79 reported against a measured 13 on the same page.
+      // `defaultRole` is the mapping the scan already uses for its own suggested locators, so
+      // this reuses it rather than inventing a second one.
+      interactive.map((el) => ({
+        role: el.role ?? defaultRole(el.tag, el.type),
+        name: el.accessibleName,
+      })),
+      reading.widgets,
+    );
+    ariaReading = {
+      widgetsMissedBySelectors: missed.map((node) => ({
+        role: node.role,
+        name: node.name,
+        locator: ariaLocator(node),
+      })),
+      announcing: reading.announcements.map((node) => ({ role: node.role, text: node.text })),
+      unreadable: reading.unparsed,
+    };
+  } catch {
+    ariaReading = { widgetsMissedBySelectors: [], announcing: [], unreadable: -1 };
+  }
+
   return {
     url: page.url(),
     title: collected.title,
@@ -464,6 +520,7 @@ export async function scanPage(
     frames: collected.frames,
     shadowHosts: collected.shadowHosts,
     interactive,
+    aria: ariaReading,
     endpoints: [],
     testability: auditTestability(interactive, collected.frames, collected.shadowHosts),
   };
@@ -840,6 +897,56 @@ export function formatScan(
     render(automation);
   } else {
     lines.push('  None - every control is uniquely addressable.');
+  }
+
+  // The second source, and only when it has something to say. Printed here rather than beside
+  // the inventory because what it reports is a disagreement between two ways of looking, which
+  // is a fact about the instrument as much as about the page — and a reader deciding how far to
+  // trust the inventory above needs it.
+  const aria = scan.aria;
+  if (
+    aria !== undefined &&
+    (aria.widgetsMissedBySelectors.length > 0 ||
+      aria.announcing.length > 0 ||
+      aria.unreadable !== 0)
+  ) {
+    lines.push('', '--- WHAT THE ACCESSIBILITY TREE ADDS - a second way of looking ---', '');
+    if (aria.unreadable === -1) {
+      lines.push(
+        '  The tree could not be read at all, so the inventory above is one source only.',
+        '  Treat its completeness as unknown rather than as agreed.',
+      );
+    } else if (aria.unreadable > 0) {
+      lines.push(
+        `  ${aria.unreadable} line(s) of the tree could not be parsed, so THIS SECTION UNDERSTATES`,
+        '  the page. Fix the parser before trusting the counts below.',
+      );
+    }
+    if (aria.widgetsMissedBySelectors.length > 0) {
+      lines.push(
+        `  ${aria.widgetsMissedBySelectors.length} control(s) the browser reports and the selector sweep did not find.`,
+        '  Each is operable and absent from the inventory above:',
+      );
+      for (const widget of aria.widgetsMissedBySelectors.slice(0, 20)) {
+        lines.push(`    ${widget.locator}`);
+      }
+      if (aria.widgetsMissedBySelectors.length > 20) {
+        lines.push(`    ... and ${aria.widgetsMissedBySelectors.length - 20} more`);
+      }
+      lines.push(
+        '  These are text-dependent locators: they break when the copy or locale changes.',
+      );
+    }
+    if (aria.announcing.length > 0) {
+      lines.push(
+        '',
+        `  ${aria.announcing.length} region(s) the page uses to announce things. The state model is built`,
+        '  from controls only, so what these say is not a change a session can perceive:',
+      );
+      for (const region of aria.announcing.slice(0, 10)) {
+        lines.push(`    ${region.role}${region.text === null ? '' : `: ${region.text}`}`);
+      }
+    }
   }
 
   return lines.join('\n').trimEnd();
