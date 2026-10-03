@@ -136,6 +136,81 @@ export class StateModel {
     return this.seen.size >= maxStates;
   }
 
+  /**
+   * Every move recorded, as `from` → `to` with what was done to get there.
+   *
+   * Kept because `observe` already computes both ends and used to **throw them away**. A set of
+   * visited states answers "how many" and nothing else — it cannot say how to return to a state,
+   * which moves from a state have never been tried, whether a path loops, or what the shortest
+   * route to a failure is. So the harness had the perception half of a crawler and none of the
+   * planning half, while the one number it did keep was wired to a ceiling: used to stop, never
+   * to steer, which is the opposite of a frontier.
+   *
+   * Edges are cheap — two strings and a label per action — and nothing downstream has to use them
+   * for them to be worth keeping, because a path that was not recorded cannot be recovered later.
+   */
+  private readonly edges: { from: string; action: string; to: string }[] = [];
+
+  /** What the session did to cause the next observation, set before `observe`. */
+  private pending: string | null = null;
+
+  /**
+   * Name the action about to be taken, so the edge it produces can be labelled.
+   *
+   * Optional on purpose: an unlabelled move still records an edge, with the action as `unknown`.
+   * Requiring the label would mean a caller that forgot it loses the edge entirely, and a graph
+   * with a hole in it is worse than one with a vague label in it.
+   */
+  about(action: string): void {
+    this.pending = action;
+  }
+
+  /** The graph so far, for a caller that wants to plan over it rather than only count. */
+  graph(): { states: string[]; edges: readonly { from: string; action: string; to: string }[] } {
+    return { states: [...this.seen], edges: this.edges };
+  }
+
+  /**
+   * Moves that have been made from a state, so a caller can tell a state it has exhausted from
+   * one it has barely touched.
+   *
+   * The complement — moves *not* yet tried — cannot be computed here, because only the driver
+   * knows which actions a state affords. This is the half the model owns; `src/qe/driver.ts`
+   * holds the other, and E5c is where they meet.
+   */
+  triedFrom(state: string): string[] {
+    return this.edges.filter((edge) => edge.from === state).map((edge) => edge.action);
+  }
+
+  /**
+   * The shortest recorded route from the first state seen to this one, or null when none was
+   * recorded.
+   *
+   * Breadth-first over the edges, so the answer is the fewest moves rather than the order they
+   * happened in. This is the thing a reproduction needs and nothing could produce before: a
+   * session that found a defect twenty actions deep could say what it saw and not how to get
+   * back. The route is only as good as the labels — an `unknown` action is in the path and not
+   * replayable, which is visible rather than silent.
+   */
+  routeTo(state: string): string[] | null {
+    const start = this.edges[0]?.from;
+    if (start === undefined) return null;
+    if (state === start) return [];
+    const queue: { at: string; path: string[] }[] = [{ at: start, path: [] }];
+    const visited = new Set([start]);
+    while (queue.length > 0) {
+      const step = queue.shift()!;
+      for (const edge of this.edges) {
+        if (edge.from !== step.at || visited.has(edge.to)) continue;
+        const path = [...step.path, edge.action];
+        if (edge.to === state) return path;
+        visited.add(edge.to);
+        queue.push({ at: edge.to, path });
+      }
+    }
+    return null;
+  }
+
   /** Record one look at the page and say what changed since the last one. */
   observe(observation: Observation): Transition {
     const to = stateKey(observation);
@@ -157,6 +232,14 @@ export class StateModel {
         disagreed,
       });
     }
+
+    // The edge, kept whether or not the state is new: a move that returns to a state already
+    // seen is exactly the move a route needs, and dropping it would record only the spanning
+    // tree of first visits rather than the graph.
+    if (from !== null) {
+      this.edges.push({ from, action: this.pending ?? 'unknown', to });
+    }
+    this.pending = null;
 
     this.last = observation;
     return {

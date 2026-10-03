@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { auditKnownDefects } from '../../src/qe/known-defect.js';
-import { controlSignature, normaliseName, stateKey } from '../../src/qe/state-model.js';
+import {
+  controlSignature,
+  normaliseName,
+  stateKey,
+  type Observation,
+} from '../../src/qe/state-model.js';
+import type { Fingerprint } from '../../src/tools/identity.js';
 import { coverageGap, holdoutPower } from '../../src/qe/coverage-briefing.js';
 import { newSurvivors, summarise } from '../../src/qe/mutation-compare.js';
 import { selectorBlindSpots, parseAriaSnapshot } from '../../src/tools/aria.js';
@@ -179,5 +185,110 @@ test.describe('the page-reading instruments must be able to find and to miss', (
       ).problems,
       'and must be able to pass, or it is a step people route around',
     ).toHaveLength(0);
+  });
+});
+
+test.describe('the budget must be able to stop a run before it overspends', () => {
+  test('should forecast from the worst turn seen, and admit it cannot bound the first', async () => {
+    const { Budget } = await import('../../src/agents/budget.js');
+    const budget = new Budget({ maxUsd: 4, maxTurns: 100, timeoutMs: 600_000 });
+
+    expect(
+      budget.wouldExceed(),
+      'with no turn observed there is nothing to forecast from, and pretending otherwise would stop every run at zero',
+    ).toBeNull();
+
+    budget.record({ turns: 1, costUsd: 1.5 });
+    expect(budget.exceeded(), '$1.50 of $4 is not over').toBeNull();
+    expect(budget.wouldExceed(), 'and another $1.50 still fits, so the run continues').toBeNull();
+
+    budget.record({ turns: 2, costUsd: 3.0 });
+    expect(budget.exceeded(), '$3 of $4 is still not over the line').toBeNull();
+    expect(
+      budget.wouldExceed(),
+      'but another turn like the last would reach $4.50 — this is the check that was missing, and the measured overshoot was 35%',
+    ).toContain('would be passed');
+  });
+});
+
+test.describe('the state model must be able to answer how, not only how many', () => {
+  /**
+   * A **complete** fingerprint, and typed rather than cast.
+   *
+   * The first version of this fixture named five fields and cast the rest away with `as never`.
+   * `matchAll` reads `nearbyText`, which was therefore `undefined` and threw inside `normalise`.
+   * That is the same enabling mistake as the `Candidate`-for-`Fingerprint` bug this whole file
+   * was written about — a cast that silences a shape mismatch, in a test whose job is to catch
+   * shape mismatches. Removing the cast is what makes the compiler do the work instead.
+   */
+  const control = (name: string): Fingerprint => ({
+    tag: 'button',
+    role: 'button',
+    name,
+    testId: null,
+    fieldName: null,
+    id: null,
+    type: null,
+    href: null,
+    ancestors: ['body'],
+    siblingIndex: 0,
+    nearbyText: null,
+    constraints: null,
+  });
+
+  const at = (name: string): Observation => ({ url: 'http://x/', fingerprints: [control(name)] });
+
+  test('should record an edge per move and recover a route', async () => {
+    const { StateModel } = await import('../../src/qe/state-model.js');
+    const model = new StateModel();
+
+    model.observe(at('Home'));
+    model.about('click Menu');
+    model.observe(at('Menu open'));
+    model.about('click Cart');
+    const last = model.observe(at('Cart'));
+
+    expect(model.graph().edges, 'two moves, two edges').toHaveLength(2);
+    expect(
+      model.routeTo(last.to),
+      'the thing a reproduction needs, and which a visited set could never produce',
+    ).toEqual(['click Menu', 'click Cart']);
+    expect(model.triedFrom(model.graph().edges[0]!.from)).toEqual(['click Menu']);
+  });
+
+  test('should keep an edge that returns to a state already seen', async () => {
+    // Dropping it would record the spanning tree of first visits rather than the graph, and a
+    // route back is exactly the move a reproduction needs.
+    const { StateModel } = await import('../../src/qe/state-model.js');
+    const model = new StateModel();
+    model.observe(at('Home'));
+    model.about('open');
+    model.observe(at('Menu'));
+    model.about('close');
+    model.observe(at('Home'));
+
+    expect(model.count(), 'two distinct states').toBe(2);
+    expect(
+      model.graph().edges.map((e) => e.action),
+      'and both moves between them',
+    ).toEqual(['open', 'close']);
+  });
+
+  test('should label an unlabelled move rather than losing the edge', async () => {
+    const { StateModel } = await import('../../src/qe/state-model.js');
+    const model = new StateModel();
+    model.observe(at('Home'));
+    model.observe(at('Elsewhere'));
+    expect(
+      model.graph().edges[0]?.action,
+      'a graph with a hole is worse than one with a vague label',
+    ).toBe('unknown');
+  });
+
+  test('should return null for a state it has no recorded route to', async () => {
+    const { StateModel } = await import('../../src/qe/state-model.js');
+    const model = new StateModel();
+    model.observe(at('Home'));
+    expect(model.routeTo('http://x/\nnever|seen|||'), 'no route is not an empty route').toBeNull();
   });
 });

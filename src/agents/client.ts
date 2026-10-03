@@ -145,7 +145,10 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
         if (said.trim() !== '') text = said;
       }
 
-      const limit = budget.exceeded();
+      // Both forms, in this order. `exceeded` is the line already crossed; `wouldExceed` is
+      // the line one more turn would cross, which is the only one that can stop a run before
+      // it overspends rather than after — measured at 35% over on 2026-09-20.
+      const limit = budget.exceeded() ?? budget.wouldExceed();
       if (limit !== null && stoppedBy === null) {
         stoppedBy = budget.abort(limit);
         break;

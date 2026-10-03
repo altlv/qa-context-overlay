@@ -44,6 +44,7 @@ export class Budget {
   private readonly startedAt = Date.now();
   private turns = 0;
   private costUsd = 0;
+  private worstTurnUsd = 0;
   readonly controller = new AbortController();
 
   constructor(readonly limits: BudgetLimits = DEFAULT_LIMITS) {}
@@ -67,7 +68,45 @@ export class Budget {
 
   record(update: { turns?: number; costUsd?: number }): void {
     if (update.turns !== undefined) this.turns = update.turns;
-    if (update.costUsd !== undefined) this.costUsd = update.costUsd;
+    if (update.costUsd !== undefined) {
+      // The most expensive single turn seen so far, which is what makes the forecast below a
+      // measurement rather than a guess. Taken from the jump in cumulative cost, because that
+      // is the only per-turn figure the SDK gives: `total_cost_usd` is a running total.
+      const step = update.costUsd - this.costUsd;
+      if (step > this.worstTurnUsd) this.worstTurnUsd = step;
+      this.costUsd = update.costUsd;
+    }
+  }
+
+  /**
+   * Whether one more turn could carry the run past its spend limit.
+   *
+   * `exceeded()` is consulted **after** a turn completes, so the limit is a trailing stop and not
+   * a ceiling. Measured on 2026-09-20: opus spent **$5.3834 against `AGENT_MAX_USD=4`** — 35%
+   * over — because one expensive turn carried the run past the line and the check only noticed
+   * afterwards. The overshoot scales with per-turn cost, so the pricier the tier the further it
+   * runs, which is exactly where it is least affordable, and nothing in the output said the
+   * number was approximate.
+   *
+   * So the forecast is the honest form of the same limit: stop when the worst turn observed so
+   * far would not fit in what is left. It is deliberately pessimistic — a run is more likely to
+   * stop a turn early than a turn late, and stopping early costs a partial session while stopping
+   * late costs money nobody authorised.
+   *
+   * **It cannot bound the first turn.** With no turn yet observed there is nothing to forecast
+   * from, so a single turn more expensive than the entire budget still overshoots, and no
+   * after-the-fact check could prevent that either. Said here rather than left to be discovered.
+   */
+  wouldExceed(): string | null {
+    if (this.limits.enforceSpend === false) return null;
+    if (this.worstTurnUsd <= 0) return null;
+    const left = this.limits.maxUsd - this.costUsd;
+    if (this.worstTurnUsd <= left) return null;
+    return (
+      `spend limit would be passed by another turn ($${this.costUsd.toFixed(2)} spent of ` +
+      `$${this.limits.maxUsd.toFixed(2)}, and the most expensive turn so far cost ` +
+      `$${this.worstTurnUsd.toFixed(2)})`
+    );
   }
 
   /** Reason the run must stop, or null to continue. */
