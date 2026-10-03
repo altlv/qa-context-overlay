@@ -174,3 +174,62 @@ test.describe('what the comparator’s exit code claims', () => {
     expect(code).toBe(0);
   });
 });
+
+test.describe('a suite that passes only sometimes', () => {
+  test.describe.configure({ timeout: 180_000 });
+  let repo = '';
+
+  /**
+   * The third refusal. A red baseline is refused because it scores every mutation as caught, and
+   * an unstartable one for the same reason — but a suite that passes *sometimes* was accepted,
+   * and it is the worst of the three. A flaky test kills a mutation by chance, so the score
+   * becomes noise with a mean while every number still prints with a straight face. The release
+   * gate reports flakes it sees in a run; nothing on this path read that at all, which is where
+   * it matters most, because every value claim this repository makes comes through here.
+   *
+   * The fixture flakes on a counter in a file rather than on timing, so the test is decided by
+   * arithmetic and not by the machine it runs on: run one passes, run two fails.
+   */
+  const FLAKY = `const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const { classify } = require('../src/classify.js');
+const counter = require('node:path').join(__dirname, 'runs.txt');
+test('passes the first time and not the second', () => {
+  const runs = (fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0) + 1;
+  fs.writeFileSync(counter, String(runs), 'utf8');
+  assert.equal(runs % 2, 1, 'this test fails on every even run, on purpose');
+});
+test('and does assert something real as well', () => assert.equal(classify(5), 'positive'));
+`;
+
+  test.beforeAll(async () => {
+    repo = await mkdtemp(join(tmpdir(), 'mutation-unstable-'));
+    await mkdir(join(repo, 'src'), { recursive: true });
+    await mkdir(join(repo, 'test'), { recursive: true });
+    await writeFile(join(repo, 'src', 'classify.js'), SOURCE, 'utf8');
+    await writeFile(join(repo, 'test', 'flaky.test.js'), FLAKY, 'utf8');
+    await writeFile(join(repo, 'mutations.json'), JSON.stringify(MUTATIONS), 'utf8');
+  });
+
+  test.afterAll(async () => {
+    if (repo !== '') await rm(repo, { recursive: true, force: true });
+  });
+
+  test('should be refused rather than scored', async () => {
+    const code = await compare(repo, [
+      '--mutations',
+      'mutations.json',
+      '--repo',
+      '.',
+      '--suite',
+      'node',
+      '--test',
+      'test/flaky.test.js',
+    ]);
+    expect(
+      code,
+      'refused with 2, the code the comparator already uses for "I will not report a number"',
+    ).toBe(2);
+  });
+});

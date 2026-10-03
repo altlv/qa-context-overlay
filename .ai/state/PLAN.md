@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `12360e2` — the commit this file was last checked against. A file cannot name
+Head is `aa801b5` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -709,6 +709,65 @@ that listed what was in it. Narrowed to what is still true: the _inventory_ stop
 no selector is harvested inside it, and nothing is interacted with. **A blind spot claimed after
 it has been closed is the mirror of one claimed closed before it was**; both make a report
 untrustworthy, and this half was mine.
+
+### Three reliability fixes — 2026-10-03
+
+Chosen over four other candidates because each closes something **currently false** rather than
+merely absent, and each is independently verifiable.
+
+**1. The comparator refuses an unstable suite.** It already refused a red baseline and an
+unstartable one, both because they score every mutation as caught. A suite that passes
+_sometimes_ was accepted, and it is the worst of the three: a flaky test kills a mutation by
+chance, so the score is noise with a mean while every number still prints with a straight face.
+The release gate reports flakes it sees in a run — "a test that needs a retry is not yet
+evidence" — and **nothing on the mutation path read that at all**, which is where it does the
+most damage, because every value claim here comes through there. One extra run of the suite in
+total, not one per mutation. Stated in the code and worth repeating: two green runs do not
+certify a stable suite — a test that flakes one time in twenty passes both. This catches an
+unstable suite cheaply; measuring a flake _rate_ is still nothing anybody does.
+
+**2. The state signature normalises the volatile part of a name.** `"Shopping cart: 0 items"` →
+`"1 items"` used to forge a state, and `maxStates` had already refused a live session on
+polymer-shop at its ceiling of 25 — so a counter could spend the whole allowance on one screen
+and the session would stop for a reason nobody could see.
+
+Measured both directions, because dropping the name outright was the obvious fix and is worse —
+too few states hides screens, where too many merely exhausts a budget:
+
+|                                  | before   | after        |
+| -------------------------------- | -------- | ------------ |
+| cart 0 → 1 → 2 forges a state    | yes      | **no**       |
+| polymer-shop signatures per page | 12, 8, 4 | **12, 8, 4** |
+| its three pages still distinct   | yes      | **yes**      |
+
+Digits go and nothing else, so discrimination is unchanged. **The locale case is not fixed** and
+is not pretended to be: translating a label still produces a new state, which is arguable either
+way since the screen genuinely changed.
+
+**3. `tests/unit/instrument-liveness.test.ts` — can each instrument produce the opposite
+answer?** Every other test asks whether a measurement is right; these ask whether the thing
+measuring can disagree with itself at all. An instrument that can only return one verdict
+returns it confidently and nothing downstream can tell it from a finding.
+
+Written because **five** mistakes of exactly that shape happened in one session, and only one
+was caught by a mechanism rather than by going back to re-check: the `Candidate` wrapper that
+collapses every signature to four pipes; a light-DOM query standing in for the shadow-piercing
+sweep; a substring match standing in for a selector match; a write to a destroyed stream
+standing in for a draining one; and a `sed` range that could not contain what it was used to
+prove absent. It is `gate-poison.ts`'s idea — prove each step can fail — generalised from the
+gate to the measurements the gate rests on.
+
+**It caught a weakness in itself on the first poisoning.** `controlSignature` was broken to
+return `||||`, the exact historical bug, and one of the two state-key tests still **passed** —
+because it compared two different URLs and `stateKey` begins with the URL. A liveness test that
+cannot fail for its own case is precisely what the file exists to prevent. Rewritten to compare
+two screens at **one** URL, which is also the real case: a modal opening, a menu expanding. Both
+tests now fail under the poison and all twelve pass without it.
+
+Not done, and the reasons they were ranked lower: a flake **rate** across runs needs the archive
+to fill first (2 runs on disk, 20 kept); the spend cap is still a trailing stop with a measured
+35% overshoot; and `Transition` still computes `from`/`to` and discards them, so there is still
+no graph and **no coverage claim about an app is defensible**.
 
 ### What is structurally missing
 

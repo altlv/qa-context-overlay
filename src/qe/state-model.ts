@@ -49,12 +49,38 @@ export interface Observation {
   fingerprints: Fingerprint[];
 }
 
+/**
+ * The volatile part of a control's name, removed before it identifies anything.
+ *
+ * A name is visible text, and visible text carries numbers that change without the screen
+ * changing. Measured on 2026-10-02: polymer-shop names its cart button
+ * `"Shopping cart: 0 items"`, so adding one item produced a **new state** — and `maxStates` had
+ * already refused a live session on that subject at its ceiling of 25. A counter can therefore
+ * spend the whole state allowance on one screen, and the session stops for a reason nobody can
+ * see. A locale switch does the same to every control at once.
+ *
+ * **Normalised rather than dropped.** Removing the name entirely was the obvious fix and is
+ * worse: the name is what distinguishes one button from another, and polymer-shop's 16 controls
+ * produce 12 distinct signatures *because* of it. Without names, structurally different pages
+ * collapse towards each other, which trades a state count that is too high for one that is too
+ * low — and too low is the dangerous direction, because it hides screens instead of exhausting a
+ * budget.
+ *
+ * So digits go, and nothing else: `"Shopping cart: 0 items"` and `"Shopping cart: 12 items"` both
+ * become `"shopping cart: N items"`, while `"Add to cart"` and `"Remove"` stay apart. Case and
+ * run-length whitespace are folded for the same reason the matcher folds them — two sources and
+ * two renders disagree about trivia.
+ */
+export function normaliseName(name: string): string {
+  return name.toLowerCase().replace(/\d+/g, 'N').replace(/\s+/g, ' ').trim();
+}
+
 /** One control's identity, reduced to the signals that survive ordinary use. */
 export function controlSignature(fingerprint: Fingerprint): string {
   return [
     fingerprint.tag,
     fingerprint.role ?? '',
-    fingerprint.name ?? '',
+    normaliseName(fingerprint.name ?? ''),
     fingerprint.type ?? '',
     fingerprint.fieldName ?? '',
   ].join('|');

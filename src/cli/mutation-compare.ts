@@ -165,6 +165,36 @@ function score(command: readonly string[], label: string): MutationOutcome[] | n
     return null;
   }
 
+  /**
+   * The third refusal, and the one that was missing: an **unstable** suite.
+   *
+   * A red baseline is refused because it scores every mutation as caught, and an unstartable one
+   * for the same reason. A suite that passes *sometimes* was accepted, and it is the worst of the
+   * three: a flaky test kills a mutation by chance, so the score is noise with a mean and nothing
+   * in the output says so. The release gate reports flakes it sees in a run — "a test that needs
+   * a retry is not yet evidence" — and nothing on this path read that at all, which is where the
+   * damage is done, because every value claim this repository makes comes through here.
+   *
+   * One extra run of the suite in total, not one per mutation, so the cost is a few percent on a
+   * scoring pass that already runs the suite once per mutation.
+   *
+   * **What this cannot do**, said plainly so the pass is not read as a stability guarantee: two
+   * green runs do not prove a stable suite. A test that flakes one time in twenty will pass both
+   * and go on randomising the score. This catches an unstable suite cheaply; it does not certify
+   * a stable one, and measuring a flake *rate* is a separate job nothing here does yet.
+   */
+  const confirm = runSuite(command);
+  if (confirm.outcome !== 'passed') {
+    console.error(
+      `The suite is unstable (${command.join(' ')}): it passed once and then did not. Refusing to ` +
+        'report a score — a flaky test kills a mutation by chance, so every number below would be ' +
+        'noise with a mean. Fix the instability first; a test that needs a retry is not yet ' +
+        'evidence. The second run’s output:',
+    );
+    reportTail(confirm.output);
+    return null;
+  }
+
   const outcomes: MutationOutcome[] = [];
   for (const mutation of mutations) {
     const path = resolve(repo, mutation.file);
