@@ -56,6 +56,12 @@ const config: AppConfig = {
     // `node:test` has no xfail, so `todo` is the nearest honest thing: the test runs, its
     // failure is not counted against the suite, and the reason travels with it. This is the
     // slot the crash L6.4 found had nowhere to go — see `src/qe/known-defect.ts`.
+    //
+    // **And it is the weaker of the two idioms.** Measured 2026-10-03: a `todo` that starts
+    // passing — the defect got fixed — produces no complaint and exit 0, where vitest's
+    // `it.fails` would report a failure. So on this subject a stale marker is invisible to the
+    // runner, and the only thing that keeps it visible is `known-defect-check` printing the
+    // count on every gate run.
     knownDefect: "it('…', { todo: 'KNOWN: <what is broken>' }, async () => {});",
     knownDefectPattern: '\\btodo:\\s*[\'"`]',
   },

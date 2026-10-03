@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `aa801b5` — the commit this file was last checked against. A file cannot name
+Head is `2d3de80` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -768,6 +768,39 @@ Not done, and the reasons they were ranked lower: a flake **rate** across runs n
 to fill first (2 runs on disk, 20 kept); the spend cap is still a trailing stop with a measured
 35% overshoot; and `Transition` still computes `from`/`to` and discards them, so there is still
 no graph and **no coverage claim about an app is defensible**.
+
+### Two more, and a claim corrected — 2026-10-03
+
+**The spend cap stops a run before it overspends.** `exceeded()` is consulted _after_ a turn, so
+the limit was a trailing stop: measured $5.3834 against `AGENT_MAX_USD=4`, 35% over, and the
+overshoot scales with per-turn cost so the pricier the tier the further it runs. `wouldExceed()`
+stops when the most expensive turn observed so far would not fit in what is left — pessimistic on
+purpose, because stopping a turn early costs a partial session and stopping a turn late costs
+money nobody authorised. **It cannot bound the first turn**, there being nothing to forecast
+from, and says so rather than leaving it to be found.
+
+**The state model keeps its edges.** `observe` computed `from` and `to` on every look and threw
+them away, so a set of visited states answered how many and nothing else — not how to return to
+a state, not which moves from it have never been tried, not whether a path loops, not the
+shortest route to a failure. Now `graph()`, `triedFrom()` and a breadth-first `routeTo()`. That
+last is what a reproduction needs and nothing could produce: a session that found a defect twenty
+actions deep could say what it saw and not how to get back. An unlabelled move still records an
+edge, labelled `unknown`, because a graph with a hole is worse than one with a vague label; and an
+edge returning to a state already seen is kept, since dropping it would record the spanning tree
+of first visits rather than the graph.
+
+**Still only half a crawler.** The model can now be planned over; nothing plans over it. `maxStates`
+remains a ceiling used to stop rather than a frontier used to steer, and the complement of
+`triedFrom` — moves _not_ yet tried — cannot be computed in the model, because only the driver
+knows what a state affords. That junction is E5c.
+
+**A claim I made and then measured as false.** `TestStack.knownDefect` said the runner "flags it
+loudly if the subject is ever fixed". Measured 2026-10-03: for `node:test`'s `todo` the body runs
+and a failure keeps the suite green — both wanted — but a todo that **passes** produces no
+complaint and exit 0. So on `mcpa` a fixed defect leaves a marker behind silently, where vitest's
+`it.fails` would report a failure. One sentence had covered two idioms with different semantics.
+Corrected in `test-stack.ts` and in `mcpa`'s own config, and what keeps a stale marker visible
+there is not the runner but `known-defect-check` printing the count on every gate run.
 
 ### What is structurally missing
 

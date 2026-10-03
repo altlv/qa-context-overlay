@@ -47,7 +47,22 @@ export interface TestStack {
    * The marker is the runner's own — `test.fail(true, reason)` in Playwright,
    * `it.fails(…)` in vitest, `{ todo: 'reason' }` in `node:test` — and so it is **declared,
    * never assumed**, which is the lesson of every other field here. The test is written as
-   * it *should* pass, and the runner flags it loudly if the subject is ever fixed.
+   * it *should* pass.
+   *
+   * **The idioms are not equivalent, and an earlier version of this comment claimed they were.**
+   * It said the runner flags a marked test loudly if the subject is ever fixed. Measured on
+   * 2026-10-03:
+   *
+   * - vitest's `it.fails` and Playwright's `test.fail` *assert* the failure, so a test that
+   *   starts passing is reported as a failure. The claim holds.
+   * - `node:test`'s `todo` does not. The body runs and a failure keeps the suite green, which is
+   *   what the slot needs — but a todo that **passes** produces no complaint at all and exit 0.
+   *   So for a `node:test` subject a fixed defect leaves a marker behind silently.
+   *
+   * What notices it there is not the runner but `known-defect-check`, which prints the count on
+   * every gate run and says a green suite holding markers is not a green suite. That is the only
+   * reason a stale marker stays visible on such a subject, and it is worth knowing which of the
+   * two is doing the work.
    *
    * Absent means this stack has no such idiom, and a role must leave the suite red and say
    * why in its report rather than inventing one.
