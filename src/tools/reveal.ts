@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { INTERACTIVE_SELECTOR } from './controls.js';
 
 /**
  * Controls a static scan cannot see.
@@ -34,8 +35,7 @@ export interface RevealOptions {
   settleMs?: number;
 }
 
-const INTERACTIVE =
-  'button, a[href], input, select, textarea, [role=button], [role=link], [role=tab], [role=checkbox], [role=switch], [role=menuitem], [contenteditable=true]';
+const INTERACTIVE = INTERACTIVE_SELECTOR;
 
 const CONTAINER =
   'img, figure, li, tr, td, [class*="card"], [class*="item"], [class*="tile"], [class*="figure"], [class*="thumb"], [title]';

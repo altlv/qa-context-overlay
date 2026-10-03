@@ -1,4 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
+import { accessibleNameFrom } from './accessible-name.js';
+import { INTERACTIVE_SELECTOR } from './controls.js';
 import {
   describeFingerprint,
   explainMatch,
@@ -115,9 +117,9 @@ export interface Candidate {
   fingerprint: Fingerprint;
 }
 
-const INTERACTIVE =
-  'button, a[href], input, select, textarea, [role=button], [role=link], [role=tab], ' +
-  '[role=checkbox], [role=switch], [role=menuitem], [contenteditable=true]';
+// One definition, in `./controls.js`. It used to be written out here, in `reveal.ts` and
+// inline in `page-scanner.ts`, with nothing holding the three to each other.
+const INTERACTIVE = INTERACTIVE_SELECTOR;
 
 /**
  * Every element on the page that could be the one we lost, each with a way back
@@ -162,7 +164,16 @@ export async function harvestCandidates(
         path: string;
         tag: string;
         role: string | null;
-        name: string | null;
+        nameParts: {
+          ariaLabel: string | null;
+          labelledByText: string | null;
+          labelText: string | null;
+          text: string | null;
+          imageAlt: string | null;
+          value: string | null;
+          placeholder: string | null;
+          title: string | null;
+        };
         testId: string | null;
         fieldName: string | null;
         id: string | null;
@@ -207,19 +218,30 @@ export async function harvestCandidates(
 
         const ownId = el.getAttribute('id');
         const labelledBy = el.getAttribute('aria-labelledby');
-        const name =
-          (el.getAttribute('aria-label') ?? '').trim() ||
-          (labelledBy === null
-            ? ''
-            : (document.getElementById(labelledBy)?.textContent ?? '')
-          ).trim() ||
-          (ownId === null || ownId === ''
-            ? ''
-            : (document.querySelector(`label[for="${CSS.escape(ownId)}"]`)?.textContent ?? '')
-          ).trim() ||
-          ((el as HTMLElement).innerText ?? '').trim().slice(0, 80) ||
-          (el.getAttribute('placeholder') ?? '').trim() ||
-          (el.getAttribute('title') ?? '').trim();
+        // The raw sources only. The name is decided once, in Node, by
+        // `accessibleNameFrom` — the same function the scanner uses. This file used to run
+        // its own ladder here, which read neither `alt` nor `value`, so an icon button, a
+        // logo link and an `input[type=submit]` were all nameless to the healer while the
+        // scanner named them correctly. The accessible name is the strongest signal the
+        // matcher has and the join key between the two element sources, so the two of them
+        // disagreeing corrupted the thing that detects drift.
+        const nameParts = {
+          ariaLabel: el.getAttribute('aria-label'),
+          labelledByText:
+            labelledBy === null ? null : (document.getElementById(labelledBy)?.textContent ?? null),
+          labelText:
+            ownId === null || ownId === ''
+              ? null
+              : (document.querySelector(`label[for="${CSS.escape(ownId)}"]`)?.textContent ?? null),
+          text: (el as HTMLElement).innerText ?? null,
+          imageAlt:
+            Array.from(el.querySelectorAll('img[alt]'))
+              .map((img) => img.getAttribute('alt') ?? '')
+              .find((alt) => alt.trim() !== '') ?? null,
+          value: (el as HTMLInputElement).value ?? null,
+          placeholder: el.getAttribute('placeholder'),
+          title: el.getAttribute('title'),
+        };
 
         const ancestors: string[] = [];
         let up: Element | null = el.parentElement;
@@ -253,7 +275,7 @@ export async function harvestCandidates(
           path: segments.filter((segment) => segment !== '').join(' >> '),
           tag: el.tagName.toLowerCase(),
           role: el.getAttribute('role'),
-          name: name === '' ? null : name,
+          nameParts,
           testId: el.getAttribute(testIdAttribute),
           fieldName: isField ? el.getAttribute('name') : null,
           id: ownId === '' ? null : ownId,
@@ -279,7 +301,7 @@ export async function harvestCandidates(
       // all, so comparing the raw attribute would leave the signal uncomparable
       // on exactly the pages that need it most.
       role: element.role ?? defaultRole(element.tag, element.type),
-      name: element.name,
+      name: accessibleNameFrom(element.nameParts),
       testId: element.testId,
       fieldName: element.fieldName,
       id: element.id,

@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { ariaLocator, readAria, selectorBlindSpots } from './aria.js';
 import { readFrames, reportFrames, type FrameReading } from './frames.js';
 import { accessibleNameFrom, type NameParts } from './accessible-name.js';
+import { INTERACTIVE_SELECTOR } from './controls.js';
 
 /**
  * Testability, as this harness defines it:
@@ -52,6 +53,18 @@ export interface InputConstraints {
 export interface ScannedElement {
   tag: string;
   type: string | null;
+  /**
+   * The role the element **has**, not the attribute it carries — so `link` for a plain
+   * `<a href>` and `button` for a `<button>`, neither of which writes a `role`.
+   *
+   * It used to be the raw attribute, while `defaultRole` derived the real one three lines
+   * away and only `affordance` and the suggested locator used it. Joining the accessibility
+   * tree against this field then reported **79** blind spots on academybugs against a measured
+   * 13, because every ordinary link read as missing. That was fixed at the one call site, which
+   * left the trap armed for the next person to join on role. Fixed at the field now: the
+   * attribute itself is not kept, because nothing needed it and keeping both invites the same
+   * mistake from the other direction.
+   */
   role: string | null;
   accessibleName: string | null;
   testId: string | null;
@@ -224,9 +237,10 @@ export async function scanPage(
   // const-assigned functions: tsx/esbuild rewrites those with a `__name` helper
   // that does not exist in the page, and evaluate fails at runtime.
   const collected = await page.evaluate(
-    ([testIdAttr, scope, stateAttributes]: [string, string | null, string[]]) => {
-      const SELECTOR =
-        'button, a[href], input, select, textarea, [role=button], [role=link], [role=tab], [role=checkbox], [role=switch], [role=menuitem], [contenteditable=true]';
+    ([testIdAttr, scope, stateAttributes, SELECTOR]: [string, string | null, string[], string]) => {
+      // Passed in rather than written here. It is one definition in `./controls.js`, and this
+      // was the third copy of it — a `page.evaluate` cannot import, so the only way to share
+      // it is as an argument.
 
       // Scrolling is needed to judge occlusion honestly (see below), so the
       // position is restored before returning — a read-only scan must not leave
@@ -420,7 +434,12 @@ export async function scanPage(
       window.scrollTo(scrolledFrom.x, scrolledFrom.y);
       return result;
     },
-    [testIdAttr, scope, STATE_ATTRIBUTES] as [string, string | null, string[]],
+    [testIdAttr, scope, STATE_ATTRIBUTES, INTERACTIVE_SELECTOR] as [
+      string,
+      string | null,
+      string[],
+      string,
+    ],
   );
 
   const partial = collected.elements.map((raw) => {
@@ -459,7 +478,7 @@ export async function scanPage(
       element: {
         tag: raw.tag,
         type: raw.type,
-        role: raw.role,
+        role,
         accessibleName: accessible,
         testId: raw.testId,
         affordance: affordanceOf(raw.tag, raw.type, role, accessible),
@@ -496,15 +515,11 @@ export async function scanPage(
   try {
     const reading = await readAria(page, scope ?? 'body');
     const missed = selectorBlindSpots(
-      // `el.role` is the raw attribute, which is null for a plain `<a>` or `<button>`, while the
-      // accessibility tree always reports a computed role. Joining on the raw value made every
-      // ordinary link look like a blind spot: 79 reported against a measured 13 on the same page.
-      // `defaultRole` is the mapping the scan already uses for its own suggested locators, so
-      // this reuses it rather than inventing a second one.
-      interactive.map((el) => ({
-        role: el.role ?? defaultRole(el.tag, el.type),
-        name: el.accessibleName,
-      })),
+      // `el.role` is the derived role now, so no fallback is applied here. The fallback used to
+      // live at this call site and has been moved into the field — leaving it would make the
+      // field fix unobservable, because the join would be correct either way and nothing would
+      // show which of the two was doing it.
+      interactive.map((el) => ({ role: el.role, name: el.accessibleName })),
       reading.widgets,
     );
     ariaReading = {

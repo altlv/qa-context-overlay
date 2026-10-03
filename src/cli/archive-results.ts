@@ -11,9 +11,17 @@ import { archiveName, prune } from '../qe/run-history.js';
  * both at once. This copies — never moves — and leaves `artifacts/results.json` exactly
  * as it found it.
  *
- * Nothing runs this automatically. The history it builds is therefore a floor: the runs
- * somebody archived, not every run that happened. The line printed at the end says so
- * out loud, because a floor mistaken for a census is worse than no history at all.
+ * **Run automatically since 2026-10-03, and still a floor.** Nothing ran it before, and the
+ * consequence was exactly what it sounds like: two archived runs on disk, both from a single day
+ * in September, against a `KEEP` of twenty — so `npm run flake-rate` had almost nothing to
+ * compute from and no question of the form "is this getting better" had an answer at all.
+ *
+ * Now CI archives every run including a failing one, because a failing run is the one a flake
+ * rate most wants, and `posttest` archives a local run. That local half covers a **passing** run
+ * only: npm's `posttest` does not fire when `test` exits non-zero. So the history remains a floor
+ * rather than a census — better stocked, still incomplete, and incomplete in a direction that
+ * matters. The line printed at the end says so, because a floor mistaken for a census is worse
+ * than no history at all.
  */
 
 const RESULTS_FILE = 'artifacts/results.json';
@@ -23,8 +31,9 @@ const RUNS_DIR = 'artifacts/runs';
 const KEEP = 20;
 
 const BLIND_SPOT =
-  'note: nothing runs this automatically — the history is a floor: it holds the runs ' +
-  'somebody archived, not every run that happened.';
+  'note: CI archives every run and posttest archives a passing local one — but a local run ' +
+  'that FAILS is not archived, because npm skips posttest on a non-zero exit. The history is ' +
+  'therefore still a floor, and incomplete in the direction a flake rate cares about most.';
 
 /**
  * The run's own start time, or null when the report does not carry a usable one.

@@ -117,6 +117,7 @@ npm run known-defect-check -- --pattern <regexp> <test-file>...
 npm run subject-fault-check -- --entry <file> --suite <cmd>
                           # does a subject test notice the process it spawns failing
 npm run archive-results   # keep the last 20 runs, so a trend can be read
+npm run flake-rate        # how often each test has been unreliable, across archived runs
 npm run sessions          # what agent sessions have been kept, and what each holds
 npm run findings -- <app> # what every session against one app found between them
 npm run sessions -- rescue      # copy evidence out of a worktree before removing it

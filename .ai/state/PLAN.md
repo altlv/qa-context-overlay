@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `2d3de80` — the commit this file was last checked against. A file cannot name
+Head is `5de606e` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -802,6 +802,51 @@ complaint and exit 0. So on `mcpa` a fixed defect leaves a marker behind silentl
 Corrected in `test-stack.ts` and in `mcpa`'s own config, and what keeps a stale marker visible
 there is not the runner but `known-defect-check` printing the count on every gate run.
 
+### Items 81, 82 and 84 closed — 2026-10-03
+
+**81 — one definition each.** `src/tools/controls.ts` now holds the control selector, which was
+written out three times with nothing holding the copies to each other; `page-scanner.ts` takes it
+as a `page.evaluate` argument, since an evaluate cannot import. Collapsing them does not widen the
+net — it makes widening it one edit instead of three, which is the precondition for doing it.
+
+The name duplication was worse than untidy. `accessible-name.ts` already existed, with a comment
+saying the scanner and healer had been unified — and **`heal.ts` had never been migrated.** Its
+own ladder read neither `alt` nor `value`, so measured on 2026-10-03:
+
+| control                                     | before | after               |
+| ------------------------------------------- | ------ | ------------------- |
+| `<a href><img alt="Download report"></a>`   | `null` | `"Download report"` |
+| `<input type="submit" value="Place order">` | `null` | `"Place order"`     |
+
+Those are not edge cases: an icon button, a logo link and a product tile are all that shape. And
+because `name` is part of `controlSignature`, every icon link on a page carried the identical
+signature `a|link||||` and collapsed into one — so the state model was blind to them _as distinct
+controls_ while the scanner named them correctly. The name is also the join key between the two
+element sources, so the two implementations disagreeing corrupted the thing that detects drift.
+
+**82 — `ScannedElement.role` is the derived role.** It was the raw attribute, null for a plain
+`<a>`, which had already cost once: the accessibility join reported 79 blind spots on academybugs
+against a measured 13. That was fixed at the call site, leaving the trap armed. Fixed at the field
+now, and **the call-site fallback was removed** — leaving it would have made the field fix
+unobservable, because the join would be right either way and nothing would show which half did it.
+Re-measured after: still 12, so the field carries it.
+
+**84 — the archive fills, and a rate can be read.** Nothing ran `archive-results`, so two runs sat
+on disk from one day in September against a `KEEP` of twenty. CI now archives every run including
+a failing one — a failing run is the one a rate most wants — and `posttest` archives a local one.
+Verified: the archive went from 2 to 3 on the next passing suite.
+
+`npm run flake-rate` reads them. It prints the **number of runs before the figures**, warns below
+five that a handful is not a rate, and ranks a well-evidenced problem above a noisier one, so half
+of twenty outranks one of one. Three refusals it makes rather than flattering: no archive is "no
+rate to compute, not a clean bill"; an unreadable archived run makes every rate "a floor"; and a
+quiet archive is explicitly **not a promise of stability**, because a test that flakes one time in
+twenty is invisible in ten runs and is exactly the one that randomises a mutation score.
+
+**The local half covers a passing run only** — npm skips `posttest` on a non-zero exit — so the
+history is still a floor, and incomplete in the direction a flake rate cares about most. Said in
+the command's own output rather than left to be discovered.
+
 ### What is structurally missing
 
 - **Content is not perceived at all.** The one confirmed blindness, above.
@@ -1029,6 +1074,10 @@ Three separate problems, and conflating them is the trap:
 | 73 | **The assertion floor attributes inherited holes to the run.** Its two findings on the unit run are the human file's own `conditional-only` tests, pushed down 120 lines by the agent's insertions | — | The gate holds the base revision, so it can say which holes a run inherited and which it wrote — and that distinction is what makes §9's strength delta usable rather than noise. A run that fixes an inherited hole should be credited for it, which is the "improve" capability the floor currently cannot see. The rollout for the remaining roles — what each inherits, the tools they still need, and the schedule — is `.ai/state/POC-CODER-ROLLOUT.md`, named to the exempt pattern on purpose: a plan names paths that do not exist yet, and `npm run precommit` checks every tracked `.md` except `PLAN.md` and `POC-*.md`. That exemption is also why the first version passed at commit time and failed the moment it became tracked — the check reads tracked files only, so it cannot see the document a commit is about to add |
 
 | 80 | **Category discovery, as a capability.** The scanner and the state model both work by matching a page against names someone wrote down — twelve selectors in `INTERACTIVE`, five surface names in item 4. What is needed instead is deriving what kind of thing is present from **how it behaves**, with the category as output rather than input. Several cheap projections of the same page, none of them a taxonomy: the set of visible text blocks (catches a toast, a banner, an empty state, a validation message — all invisible today); geometry and stacking, which is what occludes what and the one spatial fact no DOM query returns; where focus went and whether it is trapped; whether a surface vanished unprompted or persists; and `aria-live`, `role=status`, `role=alert`. A modal is then _overlays, traps focus, persists_ and a toast is _does not overlay, vanishes unprompted, announced_ — labels with their evidence attached, not matched names | — | **The constraint that makes this discovery rather than a longer list: it must be able to say "something arrived and I cannot classify it", and that output must be louder than a confident wrong label.** This is the `unknown truths` rule — already standing in the explorer role at the user's instruction — applied to the instrument instead of the agent. Raised by the user on 2026-10-02, reading item 4's surface list as plausible web structures rather than discovered ones, which is exactly what it was. It also connects to two things already here: zoom as an oracle, where magnification reveals what a query does not, and `testability-reviewer`'s own best finding, a consent banner occluding a product image |
+| 81 | **One concept, three definitions — twice.** The control selector list is written out three times (`INTERACTIVE` in `src/tools/heal.ts`, `INTERACTIVE` in `src/tools/reveal.ts`, and a third copy inline in the `page.evaluate` in `src/tools/page-scanner.ts`), and the accessible name is computed three times (`src/tools/accessible-name.ts`, plus inline in both of the others). Nothing holds either set to the others | — | The three selector copies carry the same twelve selectors today by coincidence of maintenance, not by construction: widen one and the map, the state count and the hover sweep disagree about what a control **is**. The name triplication has **already** produced a disagreement — the a11y blind-spot join reported 12 missed controls on academybugs where an independent probe found 13, on the same page, because the two implementations differ. Harmless only until it matters: the name is the join key between two element sources, so drift there corrupts the thing that detects drift |
+| 82 | **`ScannedElement.role` is the raw attribute while `defaultRole` derives the real one three lines away.** Null for a plain `<a>` or `<button>` | — | It has already cost once: joining the accessibility tree against it reported **79** blind spots on academybugs against a measured 13, because every ordinary link read as missing. That was fixed at the one call site rather than at the field. Checked on 2026-10-03: nothing else reads it — consumers use `affordance`, which is computed from the derived role — so this is a **latent trap rather than an active bug**, and the next person to join on role hits exactly what I hit. Fix the field, not the next call site |
+| 83 | **`maxStates` is a ceiling while the state model now supports a frontier.** Edges, `triedFrom` and `routeTo` exist as of 2026-10-03; the count is still wired only to stopping | 4 | The two halves disagree about what the state count is _for_. A crawler's number steers; this one only refuses, which is why a session that hit the ceiling on Polymer Shop could report what it saw and not what it had left untried. The complement of `triedFrom` — moves not yet attempted — cannot be computed in the model, because only the driver knows what a state affords. That junction is E5c, and until something plans over the graph **no coverage claim about an app is defensible** |
+| 84 | **No flake rate, and the archive that would hold one is empty.** `npm run archive-results` keeps the last 20 runs and 2 are on disk | — | The comparator now refuses an _unstable_ suite, which catches a suite that fails on the second run — but **two green runs do not certify stability**, and a test that flakes one time in twenty passes both and goes on randomising every mutation score. The release gate reports flakes it sees within one run; nothing measures a rate across runs, so there is no answer to "is this getting better". Archiving is a call in the run path rather than a feature, and it is the prerequisite: a rate cannot be computed from two samples |
 | 75 | **Replay real fixed bugs from a subject's git history.** Find a commit that fixed a defect, revert the fix in a worktree, and ask whether the suite — the subject's own, then the agent's — notices. `docs/mutation-evals.md` names this the highest-value gap | — | Every mutation in both sets was invented by me from the source, so the fault distribution is mine rather than the product's, and `coursera-rag`'s set leans one way by its own admission: all fourteen loosen the limiter. A real fix is a fault that really happened, in the shape it really took. Both coder subjects have the history, and no new instrument is needed — a reverted fix is a mutation whose author was the product. The work is selection: a fix that also changed tests cannot be used, and one that changed several files is not one fault |
 | 78 | **The README leads with the pillar that has the least evidence.** "Context" there means a map of the page, handed over rather than bought. Nothing has shown that map changes a session — item 30 is still unpaid, and both eprimer models did their real work from controls they found themselves. What _has_ moved numbers is a different kind of context: the session clock and a thin charter (13 minutes → 41, 9 defects → 17) and the coverage briefing (8 of 14 mutations → 11, with 23 tests instead of 34) | 30 answers it; this is what to do either way | Process context and coverage context are earning the claim that page context was written to make. Either pay 30 and find out, or reorder the README to lead with what works — but not leave the strongest sentence on the page attached to the weakest evidence behind it. Found by auditing the repo against its own README on 2026-10-02, in the same pass that found five _Not proven_ bullets contradicted by this file |
 | 79 | **Nothing measures whether a person is helped.** Every number here compares an agent to another agent, or an agent's suite to a hand-written one (4 of 14 against 8, then 11 — a real comparison, and of **artifacts**) | 76 gives the variance this would need | "Meaningful aid for QA activities" is the purpose in the README's first line and it is the one claim with no instrument at all. The activity has never been measured: whether a tester working with this finds more, or faster, or with better evidence, than the same tester without it. It may not be cheaply measurable — that is a reason to say so plainly rather than to let the artifact comparisons stand in for it |

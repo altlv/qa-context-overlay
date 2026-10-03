@@ -150,6 +150,7 @@ if (!planStatus.fresh) {
  * that matters, and then get ignored.
  */
 const INTERNAL: Record<string, string> = {
+  posttest: 'an npm hook, not a command — it archives the run that  just finished',
   typecheck: 'composed by `check`; nobody runs it alone',
   lint: 'composed by `check`',
   'lint:fix': 'composed by `check`',

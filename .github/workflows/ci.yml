@@ -58,6 +58,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run check-report -- examples/reports
 
+      # Copies this run into artifacts/runs/ so a flake rate can be read across runs.
+      # Before this nothing ran it and two runs sat on disk from a single day, so
+      # `npm run flake-rate` had nothing to compute from. Archiving is idempotent — the
+      # name comes from the run's own start time — and runs on failure too, because a
+      # failing run is the one a flake rate most wants.
+      - name: Archive this run
+        if: ${{ !cancelled() }}
+        run: npm run archive-results
+
       # Aggregates results, flake and quality findings into a PASS/CONDITIONAL/FAIL
       # verdict. Exits non-zero only on FAIL, so an accepted risk is recorded
       # rather than silently swallowed or treated as a blocker.

@@ -39,6 +39,8 @@
     "survey": "tsx src/cli/survey.ts",
     "fault-check": "tsx src/cli/fault-check.ts",
     "archive-results": "tsx src/cli/archive-results.ts",
+    "posttest": "npm run archive-results",
+    "flake-rate": "tsx src/cli/flake-rate.ts",
     "sessions": "tsx src/cli/sessions.ts",
     "findings": "tsx src/cli/findings.ts",
     "subject-fault-check": "tsx src/cli/subject-fault-check.ts"
