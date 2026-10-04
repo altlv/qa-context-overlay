@@ -177,6 +177,21 @@ export async function isRunWorktree(repoRoot: string, path: string): Promise<boo
   return registered.includes(wanted);
 }
 
+/**
+ * Whether a path is a git checkout at all.
+ *
+ * Asked before anything runs git in a directory a config named. Without it a bad or misread
+ * `sourceRepo` reached `git -C` and the run died with git's own `Invalid argument` and a node
+ * stack trace — which tells a reader nothing about the config line that caused it.
+ */
+export async function isGitCheckout(path: string): Promise<boolean> {
+  try {
+    return (await git(path, ['rev-parse', '--git-dir'])).trim() !== '';
+  } catch {
+    return false;
+  }
+}
+
 /** Everything changed in a run worktree — all of it the run's, by construction. */
 export async function worktreeChanges(path: string): Promise<string[]> {
   return dirtyPaths(await git(path, ['status', '--porcelain', '-uall']));

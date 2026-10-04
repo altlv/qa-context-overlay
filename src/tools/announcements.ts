@@ -27,8 +27,13 @@ import type { Page } from '@playwright/test';
 /**
  * Regions whose job is to announce. `aria-live` catches what carries no role, which is the half
  * the accessibility tree cannot see.
+ *
+ * Exported because `src/tools/surfaces.ts` asks a different question of the same set — not *what*
+ * the page is saying, but whether **this** surface is one of the things saying it. Writing the six
+ * selectors out again there is how `INTERACTIVE_SELECTOR` ended up in three files with nothing
+ * holding them to each other; see `./controls.js`.
  */
-const ANNOUNCING =
+export const ANNOUNCING =
   '[aria-live], [role=status], [role=alert], [role=log], [role=timer], [role=marquee]';
 
 /**

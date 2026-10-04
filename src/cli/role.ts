@@ -22,6 +22,7 @@ import { parseConsoleLog, reportConsole, summariseConsole } from '../qe/console-
 import { browserGuard, movesThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
+import { describeSurface } from '../tools/surfaces.js';
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
 import { describePatience, runWithPatience } from '../qe/patience.js';
@@ -53,6 +54,7 @@ import {
   headCommit,
   isRunWorktree,
   lockfileProblem,
+  isGitCheckout,
   worktreeChanges,
 } from '../qe/run-worktree.js';
 import { shellGuard } from '../qe/shell-guard.js';
@@ -108,6 +110,20 @@ const snapshots: SnapshotMode = flag('--snapshots') === 'none' ? 'none' : 'full'
 // Hand the agent the map instead of making it buy one: the scanner produces graded
 // selectors, ambiguity and unlabelled inputs for no tokens.
 const prescan = rest.includes('--scan');
+/**
+ * `--scan map` hands over the map and **withholds the action plan**.
+ *
+ * Added for item 30, which is the oldest unpaid debt in `PLAN.md` and could not be paid as
+ * written. It asks whether `npm run ideas` changes a session — and `--scan` hands over two
+ * different things at once: the page map, and the candidate actions the ideas generators derive
+ * from it. A with/without comparison across that flag measures the pair, so a difference could
+ * not be attributed to either, and the README's lead claim is specifically about the map (item
+ * 78). Three arms can be told apart; two cannot.
+ *
+ * Deliberately a value on `--scan` rather than a flag of its own: `--scan --no-actions` would let
+ * someone write `--no-actions` alone and expect it to mean something.
+ */
+const scanMapOnly = flag('--scan') === 'map';
 // Every check that can refuse a run, and nothing that costs anything: no worktree, no
 // browser, no agent. Also what the refusal tests use, so a check that fails to refuse
 // ends in exit 0 instead of a paid run.
@@ -194,10 +210,38 @@ async function mainCheckout(repoRoot: string): Promise<string> {
 // named it exactly.
 const subjectConfig =
   runTarget === null ? undefined : apps.find((app) => app.name === runTarget.app);
+/**
+ * The subject's own checkout, when there is one on this machine.
+ *
+ * **`sourceRepo` carries two incompatible meanings and this is the one that is operational.**
+ * `coursera-rag` and `mcpa` declare a relative path — a real sibling checkout, which a run
+ * branches a worktree from and runs git in. The other seven subjects declare a **URL**:
+ * `https://academybugs.com`, `https://github.com/Polymer/shop`. That is provenance, not a
+ * checkout, and there is no local clone of any of them.
+ *
+ * Resolving a URL against a directory produced `<repo>/https:/academybugs.com`, which the dirty
+ * check then handed to `git -C`, and the run died with an unhandled
+ * `fatal: cannot change to …: Invalid argument` — before the preflight, the browser or the agent.
+ * **So no agent run could start against seven of the nine subjects.** Found on 2026-10-05 by
+ * attempting item 30 against `academybugs`; it had never been found by reading, because the only
+ * two subjects anybody had run a coder against are the two that declare a path.
+ *
+ * A URL therefore means *provenance only* and the run uses this repository, which is what those
+ * runs did before the field existed. A local path that is **not** a checkout is a different case
+ * and is refused below rather than resolved into a crash.
+ */
+const declaredRepo = subjectConfig?.sourceRepo;
 const subjectRepo =
-  subjectConfig?.sourceRepo !== undefined
-    ? resolve(await mainCheckout(repoRoot), subjectConfig.sourceRepo)
-    : null;
+  declaredRepo === undefined || /^[a-z][a-z0-9+.-]*:\/\//i.test(declaredRepo)
+    ? null
+    : resolve(await mainCheckout(repoRoot), declaredRepo);
+if (subjectRepo !== null && !(await isGitCheckout(subjectRepo))) {
+  refuse(
+    `${runTarget?.app ?? 'the subject'} declares sourceRepo "${declaredRepo}", which resolves to ${subjectRepo} — and that ` +
+      'is not a git checkout. A run branches a worktree from the subject, so it needs one. Clone ' +
+      'it there, or make sourceRepo a URL if it is only provenance.',
+  );
+}
 
 // Which repository the run's worktree comes from. A subject is a repository of its own, so
 // branching the harness would confine the agent to a worktree that does not contain the code
@@ -514,10 +558,13 @@ if (access !== undefined && runTarget !== null) {
         scan: probe.scan,
         policy,
       });
-      actions = formatActionPlan(plan, runTarget.environment);
+      // Computed either way, printed either way, and handed over only when asked. The operator
+      // has to be able to see what the withheld arm withheld, or the comparison is unauditable.
+      if (!scanMapOnly) actions = formatActionPlan(plan, runTarget.environment);
       process.stderr.write(
         `${map.split('\n').length} lines, ${plan.candidates.length} candidate action(s), ` +
-          `${plan.skipped.length} refused by policy, 0 tokens spent\n`,
+          `${plan.skipped.length} refused by policy, 0 tokens spent` +
+          `${scanMapOnly ? ' — action plan WITHHELD from the session (--scan map)' : ''}\n`,
       );
     } finally {
       await chrome.close();
@@ -761,9 +808,15 @@ try {
         : {
             PostToolUse: [
               observerHook(async () => {
-                const transition = await browser!.observer.observe();
-                const moved = transition === null ? null : describeTransition(transition);
+                const look = await browser!.observer.observe();
+                const moved = look === null ? null : describeTransition(look.transition);
                 if (moved !== null) console.error(`  page: ${moved}`);
+                // What arrived, when something did. Printed beside the transition rather than
+                // instead of it: "3 appeared" says the page moved and "modal" says what kind of
+                // thing moved it, and neither substitutes for the other.
+                if (look !== null && look.arrival !== null) {
+                  console.error(`  surface: ${describeSurface(look.arrival.classification)}`);
+                }
               }, movesThePage),
             ],
           }),

@@ -147,17 +147,67 @@ wait rather than trusting the loop to come back.
 Mutation scoring is one instrument. These are the others, with what each buys that
 mutations cannot. Nothing below is built unless it says so.
 
-| Option                                                                                                                                                          | What it buys                                                                                                                                           | State                                                             |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| **Holdout half of the set**                                                                                                                                     | Removes the contamination the briefing creates. Cheapest real fix available                                                                            | **Built** — `holdout`, `splitScore`, `holdoutPower`               |
-| **Replay real fixed bugs** — find a fix in the subject's history, revert it, ask whether a suite notices                                                        | The distribution of faults is real rather than invented. Both coder subjects have the history                                                          | Not built — the highest-value gap                                 |
-| **Existential checks** — the process dies, a dependency returns 500, config is missing, the clock jumps                                                         | Mutations are all in-process logic edits, so they never ask whether the suite would notice there being no application at all                           | One of them built: `src/qe/process-fault.ts`                      |
-| **Repeat-run variance** — the same seam several times, union of killed mutations against best single                                                            | Measures the process rather than one artifact. The explorer equivalent already showed the best single session reaching 39% of what five sessions found | Built for explorers (`finding-union`), nothing for coders         |
-| **Killed mutations per dollar**                                                                                                                                 | The axis that should decide model choice. Cost and turns are already logged for every run                                                              | Never computed                                                    |
-| **Metamorphic oracles** — same question phrased twice retrieves the same documents; an irrelevant document does not change the answer; a reranker is idempotent | Scores behaviour where there is no fixed expected output. Mutation-scoring a retrieval layer will always be thin                                       | Not built. `coursera-rag` already ships rubrics and a holdout set |
-| **Mutating the agent's own test file and requiring the gate to fail**                                                                                           | Evaluates the eval                                                                                                                                     | Built for gate steps: `src/qe/gate-poison.ts`                     |
-| **Assertion floor**                                                                                                                                             | A static floor under everything above: does the test assert something the code can falsify                                                             | Built: `src/quality/assertion-floor.ts`                           |
-| **Line coverage**                                                                                                                                               | Can say a seam is untouched. Can never say a test is good                                                                                              | Deliberately **not** a score — keep it a negative filter          |
+| Option                                                                                                                                                          | What it buys                                                                                                                                           | State                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Holdout half of the set**                                                                                                                                     | Removes the contamination the briefing creates. Cheapest real fix available                                                                            | **Built** — `holdout`, `splitScore`, `holdoutPower`                                                                   |
+| **Replay real fixed bugs** — find a fix in the subject's history, revert it, ask whether a suite notices                                                        | The distribution of faults is real rather than invented. Both coder subjects have the history                                                          | **Built** 2026-10-05 — `npm run bug-replay`. Measured: 3 of 10 commits replayable on `coursera-rag`, 0 of 3 on `mcpa` |
+| **Existential checks** — the process dies, a dependency returns 500, config is missing, the clock jumps                                                         | Mutations are all in-process logic edits, so they never ask whether the suite would notice there being no application at all                           | One of them built: `src/qe/process-fault.ts`                                                                          |
+| **Repeat-run variance** — the same seam several times, union of killed mutations against best single                                                            | Measures the process rather than one artifact. The explorer equivalent already showed the best single session reaching 39% of what five sessions found | Built for explorers (`finding-union`), nothing for coders                                                             |
+| **Killed mutations per dollar**                                                                                                                                 | The axis that should decide model choice. Cost and turns are already logged for every run                                                              | Never computed                                                                                                        |
+| **Metamorphic oracles** — same question phrased twice retrieves the same documents; an irrelevant document does not change the answer; a reranker is idempotent | Scores behaviour where there is no fixed expected output. Mutation-scoring a retrieval layer will always be thin                                       | Not built. `coursera-rag` already ships rubrics and a holdout set                                                     |
+| **Mutating the agent's own test file and requiring the gate to fail**                                                                                           | Evaluates the eval                                                                                                                                     | Built for gate steps: `src/qe/gate-poison.ts`                                                                         |
+| **Assertion floor**                                                                                                                                             | A static floor under everything above: does the test assert something the code can falsify                                                             | Built: `src/quality/assertion-floor.ts`                                                                               |
+| **Line coverage**                                                                                                                                               | Can say a seam is untouched. Can never say a test is good                                                                                              | Deliberately **not** a score — keep it a negative filter                                                              |
+
+## Replaying a real fix — what the number means
+
+`npm run bug-replay` reverses a commit's **source** changes, leaves every test at HEAD, and runs
+the suite. A suite that goes red noticed the behaviour being undone; one that stays green did
+not, and for a fix commit that means the defect can come back in silence. Mechanics in
+`src/qe/bug-replay.ts`.
+
+It answers consideration 1 above and nothing else. The faults are the subject's, so the
+distribution is real — but everything else in this file still applies, and two limits are its
+own.
+
+### Most commits cannot be replayed, and that is the headline
+
+A reverse patch needs the lines it removes to still be there. A fix worth replaying is usually
+several commits back, so later work has often rewritten them. `git apply -R --3way` closes most
+of the gap — measured 2026-10-05, a plain apply failed on **all six** commits first tried across
+both subjects and three-way recovered three of them — and a genuine conflict still cannot be
+measured.
+
+First run, `coursera-rag`, 10 commits: **3 replayable, 2 defended, 1 undefended.** On `mcpa`,
+**0 of 3** — its commits are enormous (one names 125 files of generated quiz results) and old
+enough that everything has moved under them. So this instrument wants a subject with small,
+frequent commits, and says `would-not-revert` rather than guessing when it does not have one.
+
+**A replay that could not be performed is never counted.** The denominator is
+`defended + undefended`, and a run with nothing measurable prints _no score_ instead of 0% or
+100% — the same rule as everywhere else here, and the one this repository keeps having to
+re-learn.
+
+### An undefended verdict is not automatically a finding
+
+Reverting a change that cannot affect behaviour will always read as undefended. Documentation,
+lockfiles, images and notebooks are excluded by extension for exactly this reason — `.ipynb`
+was added after `mcpa` produced a perfectly true and useless finding about two study notebooks
+— but **a comment-only edit inside a source file cannot be detected by path.** `coursera-rag`'s
+`f8e5171` is one: a `docs:` commit that touched `server/rag.js`, and its undefended verdict says
+nothing about the suite. The candidate ranking already sorts such commits to the bottom, since
+they carry no evidence of being a fault; the verdict is still worth reading rather than
+counting.
+
+### It writes into somebody else's checkout
+
+So it refuses more than it runs: not a git repository, anything uncommitted at all, a red
+suite, an unstartable one, an unstable one. It restores after every commit and verifies against
+git rather than assuming, because **a reverted source left on disk reads exactly like a suite
+that caught the fault.** Both live runs found a hole in that restore — a recreated file git
+could not check out, then a conflicted three-way apply whose failure path returned before
+restoring — and the second one _reported success over a broken checkout_. Both are pinned in
+`tests/integration/bug-replay.int.test.ts`.
 
 ## Writing a new set
 

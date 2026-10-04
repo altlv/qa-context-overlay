@@ -133,6 +133,20 @@ export interface Transition {
   isNewState: boolean;
   /** Present after, matched to nothing before. A menu opening looks like this. */
   appeared: Fingerprint[];
+  /**
+   * Where those arrivals sit in the observation that was just passed in.
+   *
+   * The same reasoning that kept the edges: `matchAll` returns indices, `observe` maps them to
+   * fingerprints, and the indices were **thrown away** — so a caller holding richer records for
+   * the same controls, in the same order, had no way back to them. `harvestCandidates` holds
+   * exactly that: a `Candidate` is a fingerprint *and* a path, and the path is what
+   * `classifyArrival` needs to ask what kind of surface arrived.
+   *
+   * Indices into `Observation.fingerprints` as given, so a caller that passed
+   * `candidates.map((c) => c.fingerprint)` can read `candidates[i]` back. That correspondence is
+   * the caller's to keep; the model only promises the index it matched on.
+   */
+  appearedAt: number[];
   /** Present before, matched to nothing after. */
   disappeared: Fingerprint[];
   /** Paired confidently, but something decisive about them differs. */
@@ -268,6 +282,7 @@ export class StateModel {
       to,
       isNewState,
       appeared: result.unmatchedAfter.map((index) => after[index]!),
+      appearedAt: [...result.unmatchedAfter],
       disappeared: result.unmatchedBefore.map((index) => before[index]!),
       changed,
     };

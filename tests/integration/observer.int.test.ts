@@ -60,10 +60,39 @@ test.describe('the harness and the agent share one browser', () => {
 
       const second = await observer.observe();
       expect(
-        second?.appeared.map((control) => control.name).sort(),
+        second?.transition.appeared.map((control) => control.name).sort(),
         'a surface opening without a URL change is the case the whole state model exists for',
       ).toEqual(['Cancel', 'Confirm']);
-      expect(second?.isNewState, 'and it has to register as somewhere new').toBe(true);
+      expect(second?.transition.isNewState, 'and it has to register as somewhere new').toBe(true);
+
+      /**
+       * The join that turns `src/tools/surfaces.ts` from a tested module into a used one, and
+       * the reason `appearedAt` exists: the arrivals above are matched by index, the candidate
+       * records hold a path, and the common prefix of those paths is the element the surface
+       * occupies. Asserted here rather than only in a unit test because every part of it that
+       * can be wrong needs a real browser — the path format, the prefix reaching a live element,
+       * and the properties being readable through it.
+       *
+       * `main` is the deepest thing both buttons sit inside, so that is the container. The
+       * classification is `inline` because this is what it should be: two buttons appended to a
+       * page in the flow, covering nothing, announcing nothing. A classifier that called that a
+       * modal would be the failure worth catching.
+       */
+      expect(second?.arrival?.container, 'the deepest element both arrivals sit inside').toBe(
+        'html:nth-child(1) > body:nth-child(2) > main:nth-child(1)',
+      );
+      expect(
+        await page.locator(second!.arrival!.container).evaluate((el) => el.tagName),
+        'and it has to resolve to a live element — a path that reaches nothing would make every property read as absent rather than as unobserved',
+      ).toBe('MAIN');
+      expect(
+        second?.arrival?.classification.kind,
+        'two buttons appended in the flow are an inline arrival, and nothing more dramatic',
+      ).toBe('inline');
+      expect(
+        second?.arrival?.properties.vanishedUnprompted,
+        'and the lifetime was not paid for, so it must read as unobserved rather than persistent',
+      ).toBeNull();
       expect(observer.missed(), 'nothing should have been missed on a settled page').toBe(0);
     } finally {
       await driver.close();
@@ -109,14 +138,14 @@ test.describe('the harness and the agent share one browser', () => {
         arguments: { url: PAGE },
       });
 
-      const transition = await observer.observe();
+      const look = await observer.observe();
 
       expect(
-        transition,
+        look,
         'MCP launching its own browser would leave the observer with nothing, and a silent zero reads like a session that never moved',
       ).not.toBeNull();
       expect(
-        transition?.appeared.map((control) => control.name),
+        look?.transition.appeared.map((control) => control.name),
         'the control MCP put on screen must be the one the harness reads back',
       ).toEqual(['Open cart']);
     } finally {

@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { ANNOUNCING } from './announcements.js';
 import { INTERACTIVE_SELECTOR } from './controls.js';
 
 /**
@@ -254,4 +255,267 @@ export async function vanishesUnprompted(
     // Still there at the deadline. That is an observation, not a failure — the surface persists.
     return false;
   }
+}
+
+/**
+ * Where a surface *is*, derived from the controls that arrived with it.
+ *
+ * Everything above takes a `container` selector and nothing produced one, which is the whole
+ * reason this module sat built and unused: `Transition.appeared` carries fingerprints, and a
+ * fingerprint is an identity rather than an address. `harvestCandidates` does produce an address —
+ * `Candidate.path`, a positional `nth-child` chain valid for this render — so the join is the
+ * **deepest element all the arrived controls sit inside**, which is the common prefix of their
+ * paths.
+ *
+ * Positional paths are exactly the kind of selector this harness reports as fragile, and that is
+ * fine here for the same reason `heal.ts` gives: it is used within milliseconds of being built and
+ * never written down.
+ *
+ * **Three limits, stated rather than discovered later.**
+ *
+ * A prefix of fewer than three steps is `html`, or `html > body` — controls arriving all over the
+ * document is a page changing, not a surface arriving, so that returns null rather than
+ * classifying the whole page as a popover.
+ *
+ * With a **single** arrived control the prefix is that control itself, so the properties describe
+ * the control and not the panel around it. Climbing a level would be a guess about where the
+ * surface starts, and a guess is what this module exists to avoid.
+ *
+ * A surface that brought **no controls at all** — a text-only toast — produces no arrival here,
+ * because there is nothing to take a path from. That is not a hole in this function but the
+ * division of labour: `readAnnouncements` is the projection that sees those, and it is already in
+ * every state key.
+ */
+export function commonContainer(paths: string[]): string | null {
+  if (paths.length === 0) return null;
+  const walks = paths.map(pathSteps);
+  const first = walks[0]!;
+  let shared = 0;
+  while (shared < first.length) {
+    const step = first[shared]!;
+    const agrees = walks.every((walk) => {
+      const other = walk[shared];
+      return other !== undefined && other.step === step.step && other.sep === step.sep;
+    });
+    if (!agrees) break;
+    shared += 1;
+  }
+  // `html`, or `html > body`: the arrivals share nothing but the document.
+  if (shared < 3) return null;
+  return first
+    .slice(0, shared)
+    .map((at, index) => (index === 0 ? at.step : ` ${at.sep} ${at.step}`))
+    .join('');
+}
+
+/**
+ * One path split into steps, keeping which separator preceded each.
+ *
+ * `>>` must survive as itself: it is a shadow boundary, and treating it as an ordinary `>` would
+ * let a prefix cross a shadow root and produce a selector that reaches nothing.
+ */
+function pathSteps(path: string): { step: string; sep: string }[] {
+  const parts = path.split(/ (>>?) /);
+  const out = [{ step: parts[0] ?? '', sep: '' }];
+  for (let index = 1; index < parts.length; index += 2) {
+    out.push({ step: parts[index + 1] ?? '', sep: parts[index] ?? '>' });
+  }
+  return out;
+}
+
+/**
+ * Whether a surface covers content, asked of the surface.
+ *
+ * **Not a second occlusion implementation, and the distinction is the point.**
+ * `page-scanner.ts` asks the control-side question — *is this control covered by something?* — and
+ * its answer is a per-control blocker string produced by a full scan. This asks the surface-side
+ * question: *does this thing cover anything?* One is about a victim and one is about a culprit,
+ * and no amount of the first answers the second. They share a primitive, and sharing a primitive
+ * is not duplicating a definition — what `controls.ts` exists to prevent is two answers to **one**
+ * question.
+ *
+ * A full scan after every action is also not affordable. This is one `elementsFromPoint` call.
+ *
+ * The stack at the surface's centre always contains `html`, `body` and every ancestor of the
+ * surface, so none of those count: what counts is an element that is neither inside the surface
+ * nor an ancestor of it. One of those under the surface's centre means a reader had something
+ * there and now has this instead.
+ */
+export async function coversContent(page: Page, container: string): Promise<boolean> {
+  try {
+    return await page.evaluate((selector) => {
+      const host = document.querySelector(selector);
+      if (host === null) return false;
+      const rect = host.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      if (x < 0 || x >= window.innerWidth || y < 0 || y >= window.innerHeight) return false;
+      for (const el of document.elementsFromPoint(x, y)) {
+        // Inside the surface, or an ancestor of it: both are the surface's own business.
+        if (el === host || host.contains(el) || el.contains(host)) continue;
+        return true;
+      }
+      return false;
+    }, container);
+  } catch {
+    // Gone mid-probe, or a page mid-navigation. False here is "not observed to cover"; the
+    // caller's own failure path is what says a look could not be taken at all.
+    return false;
+  }
+}
+
+/**
+ * Whether **this** surface is one of the things the page is saying.
+ *
+ * `readAnnouncements` answers the page-level question and cannot attribute a message to a surface,
+ * which is what a classification needs: a toast is announced *and* floating, and a floating panel
+ * sitting next to an unrelated live region elsewhere on the page is not a toast.
+ *
+ * Both directions count. A `role=status` wrapper whose text sits in a child is announcing, and so
+ * is a control inside an alert region — the author marked a region as one that speaks, and whether
+ * the marked element is the surface or its parent is markup style.
+ */
+export async function announcedWithin(page: Page, container: string): Promise<boolean> {
+  try {
+    return await page.evaluate(
+      ([selector, announcing]: [string, string]) => {
+        const host = document.querySelector(selector);
+        if (host === null) return false;
+        if (host.closest(announcing) !== null) return true;
+        for (const el of Array.from(host.querySelectorAll(announcing))) {
+          if (((el as HTMLElement).innerText ?? '').trim() !== '') return true;
+        }
+        return false;
+      },
+      [container, ANNOUNCING] as [string, string],
+    );
+  } catch {
+    return false;
+  }
+}
+
+export interface ObserveOptions {
+  /**
+   * Whether to pay for the lifetime observation.
+   *
+   * **Off by default, and that is a budget decision rather than an oversight.**
+   * `vanishesUnprompted` waits up to six seconds, and a session that paid that after every action
+   * would spend its wall-clock watching surfaces instead of testing the application. Left off, the
+   * classifier is told the lifetime was *not observed* — which is why that field is nullable and
+   * why a label resting on it comes back `provisional`.
+   */
+  watchLifetime?: boolean;
+  lifetimeMs?: number;
+}
+
+/**
+ * Observe one surface's properties, then let `classifySurface` decide what they mean.
+ *
+ * The split is the one `accessible-name.ts` uses: the part that needs a browser is here, and the
+ * part that can be argued with in a unit test is pure.
+ */
+export async function observeSurface(
+  page: Page,
+  container: string,
+  options: ObserveOptions = {},
+): Promise<SurfaceProperties> {
+  const [overlays, announced, floating] = await Promise.all([
+    coversContent(page, container),
+    announcedWithin(page, container),
+    isFloating(page, container),
+  ]);
+  // Last and on its own: it presses Tab, so running it alongside the reads above would move focus
+  // under them.
+  const traps = await trapsFocus(page, container);
+  const vanished =
+    options.watchLifetime === true
+      ? await vanishesUnprompted(page, container, options.lifetimeMs)
+      : null;
+  return { overlays, trapsFocus: traps, announced, floating, vanishedUnprompted: vanished };
+}
+
+export interface Arrival {
+  /** The selector the properties were observed through, so a finding can be re-checked. */
+  container: string;
+  properties: SurfaceProperties;
+  classification: Classification;
+}
+
+/**
+ * What arrived, from the addresses of the controls that arrived with it.
+ *
+ * Null when the paths name no surface — see `commonContainer` for the three cases.
+ */
+export async function classifyArrival(
+  page: Page,
+  paths: string[],
+  options: ObserveOptions = {},
+): Promise<Arrival | null> {
+  const container = commonContainer(paths);
+  if (container === null) return null;
+  const properties = await observeSurface(page, container, options);
+  return { container, properties, classification: classifySurface(properties) };
+}
+
+/**
+ * The lines a run summary carries about every surface it saw.
+ *
+ * Pure, and here rather than in `src/qe/observer.ts`, for the reason the whole module is split
+ * this way: the observer needs a browser to produce an `Arrival`, so formatting written inside it
+ * could only be exercised by driving Chromium — and the two rules below are exactly the sort that
+ * rot silently. They were written once in the observer and moved here when it turned out they'd
+ * have shipped untested.
+ */
+export function arrivalLines(arrivals: Arrival[]): string[] {
+  if (arrivals.length === 0) return [];
+  const lines: string[] = [];
+
+  /**
+   * The unnameable ones counted apart and printed in full, because they are the finding.
+   *
+   * A surface whose properties match no shape is either a product doing something the categories
+   * do not cover or an instrument that has run out of vocabulary, and both are worth a
+   * person's minute. Folding them into a tally of labels would undo the one thing
+   * `classifySurface` was written to make possible.
+   */
+  const unnamed = arrivals.filter((arrival) => arrival.classification.kind === null);
+  const counts = new Map<string, number>();
+  for (const arrival of arrivals) {
+    const kind = arrival.classification.kind;
+    if (kind === null) continue;
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  const named = [...counts].map(([kind, n]) => `${n} ${kind}`).join();
+  lines.push(
+    `Surfaces that arrived: ${arrivals.length}` +
+      `${named === '' ? '' : ` — ${named}`}` +
+      `${unnamed.length === 0 ? '' : `, ${unnamed.length} this cannot name`}`,
+  );
+  for (const arrival of unnamed) {
+    lines.push(`  ${arrival.container}: ${describeSurface(arrival.classification)}`);
+  }
+
+  /**
+   * Counted, said once, and at the end.
+   *
+   * A reader seeing `3 toast` has been told something that rests on an observation nobody paid
+   * for, and the hedge belongs where the tally is rather than only on an object a report may never
+   * print. Said per-run rather than per-line because a caveat repeated on every line is a caveat
+   * nobody reads.
+   *
+   * **Counted rather than all-or-nothing**, which is how this was first written and wrong: a run
+   * with one lifetime observed and one not printed no caveat at all, so the label resting on
+   * nothing went out bare. A mixed run is the normal case once a caller pays for some surfaces and
+   * not others, which is exactly what `watchLifetime` is for.
+   */
+  const provisional = arrivals.filter((arrival) => arrival.classification.provisional);
+  if (provisional.length > 0) {
+    lines.push(
+      `  ${provisional.length} of these rest on a lifetime that was not observed, so those ` +
+        `labels are provisional: not watching is a budget choice (see ` +
+        'ObserveOptions.watchLifetime) and not an observation that they stayed',
+    );
+  }
+  return lines;
 }

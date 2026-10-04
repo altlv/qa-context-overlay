@@ -1,6 +1,8 @@
 import type { Browser, Page } from '@playwright/test';
 import { readAnnouncements } from '../tools/announcements.js';
 import { harvestCandidates } from '../tools/heal.js';
+import { arrivalLines, classifyArrival } from '../tools/surfaces.js';
+import type { Arrival, ObserveOptions } from '../tools/surfaces.js';
 import { StateModel, describeTransition } from './state-model.js';
 import type { Transition } from './state-model.js';
 
@@ -26,7 +28,7 @@ import type { Transition } from './state-model.js';
 
 export interface Observer {
   /** Look now, record, and say what moved. Null when the look could not be taken. */
-  observe(): Promise<Transition | null>;
+  observe(): Promise<Look | null>;
   /** For the guard. Narrow by design — the guard asks, it never records. */
   count(): number;
   atCeiling(maxStates: number): boolean;
@@ -74,9 +76,32 @@ export async function activePage(browser: Browser, waitMs = 2_000): Promise<Page
   }
 }
 
-export function pageObserver(find: () => Promise<Page | null>): Observer {
+/**
+ * One look, and what it meant.
+ *
+ * `observe` used to return the transition alone, which left no room for anything the state model
+ * does not own. The arrival is one of those: deciding what kind of surface appeared needs the
+ * **page**, and the model is deliberately page-free so it can be tested without a browser.
+ */
+export interface Look {
+  transition: Transition;
+  /**
+   * What kind of surface arrived, or null.
+   *
+   * Null for three different reasons and the distinction matters to a reader: nothing appeared,
+   * the arrivals named no surface (see `commonContainer`), or the observation of it failed. The
+   * last of those is counted in `missed()` like any other failed look.
+   */
+  arrival: Arrival | null;
+}
+
+export function pageObserver(
+  find: () => Promise<Page | null>,
+  options: ObserveOptions = {},
+): Observer {
   const model = new StateModel();
   let missedLooks = 0;
+  const arrivals: Arrival[] = [];
 
   return {
     count: () => model.count(),
@@ -95,11 +120,36 @@ export function pageObserver(find: () => Promise<Page | null>): Observer {
         // read at one moment rather than two. Reading them separately would let a toast
         // appear between the calls and be attributed to the wrong state.
         const announcements = await readAnnouncements(page);
-        return model.observe({
+        const transition = model.observe({
           url: page.url(),
           fingerprints: candidates.map((candidate) => candidate.fingerprint),
           announcements,
         });
+
+        /**
+         * What kind of thing arrived — the step that turns `src/tools/surfaces.ts` from a module
+         * with tests into a module with a caller.
+         *
+         * Read **after** the state is recorded, and separately guarded. A classification is a
+         * nicety; the state count is what a ceiling is enforced on, so a surface probe that threw
+         * must not cost the harness a state it had already seen. The probe presses Tab and reads
+         * layout, which on a page mid-navigation is exactly the sort of thing that fails.
+         *
+         * The paths come from `appearedAt`, which indexes the array this call just built, so
+         * `candidates[index]` is the record for the same control. Mapping by fingerprint equality
+         * instead would re-answer the identity question `matchAll` has already answered, and
+         * answer it worse.
+         */
+        if (transition.appearedAt.length === 0) return { transition, arrival: null };
+        try {
+          const paths = transition.appearedAt.map((index) => candidates[index]!.path);
+          const arrival = await classifyArrival(page, paths, options);
+          if (arrival !== null) arrivals.push(arrival);
+          return { transition, arrival };
+        } catch {
+          missedLooks += 1;
+          return { transition, arrival: null };
+        }
       } catch {
         // A page mid-navigation, a tab closed between finding it and reading it, a
         // context torn down by the run ending. None of these is the session's fault
@@ -118,6 +168,7 @@ export function pageObserver(find: () => Promise<Page | null>): Observer {
             'therefore enforced on an undercount',
         );
       }
+      lines.push(...arrivalLines(arrivals));
       return lines;
     },
   };

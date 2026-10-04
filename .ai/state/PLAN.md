@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `8215ec9` — the commit this file was last checked against. A file cannot name
+Head is `1672d16` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -931,9 +931,54 @@ toast with an unwatched lifetime is called a toast **provisionally**, and paying
 observation can change the answer: a floating announced surface seen to persist is no longer a
 toast at all.
 
-Not yet wired into a run. The classifier and its readers are built and tested; nothing calls them
-from `observer.ts` yet, because the properties are about a surface that _arrived_ and that means
-pairing them with a transition's `appeared` set — which is where this meets E5c.
+#### Wired into a run, 2026-10-04
+
+The join that was missing was an **address**. `Transition.appeared` carries fingerprints, and a
+fingerprint is an identity rather than a place — so every function in `surfaces.ts` took a
+container selector and nothing in the harness could produce one. `harvestCandidates` had the
+answer all along: a `Candidate` is a fingerprint _and_ a path. What was missing was the index
+linking them, which `matchAll` computes and `observe` was throwing away — the same thing that had
+happened to the edges.
+
+So `Transition.appearedAt` keeps those indices, and the surface is the **common prefix** of the
+arrived controls’ paths: the deepest element they all sit inside. `src/qe/observer.ts` classifies
+it after every look, and `src/cli/role.ts` prints it beside the transition line — `3 appeared` says
+the page moved, `popover` says what kind of thing moved it.
+
+**Two properties needed observing rather than supplying.** `announcedWithin` asks whether _this_
+surface is one of the things the page is saying, which `readAnnouncements` cannot answer because it
+is page-level — without it, a floating panel on a page with an unrelated live region anywhere on it
+would be labelled a toast. `coversContent` asks the **surface-side** occlusion question: the
+scanner asks _is this control covered?_ and no number of those answers _does this thing cover
+anything?_. They share `elementsFromPoint` and nothing else; sharing a primitive is not what
+`controls.ts` exists to prevent, which is two answers to one question.
+
+Measured live: a `<div>` with no role, no class and `position: fixed` over the page content is
+named `popover`; the same div inside a `role=status` is named `toast` and comes back
+`provisional`; paying for the lifetime with `watchLifetime` changes that to a confident label and
+adds `went away with nobody acting` to the reason. Proven over CDP in
+`observer.int.test.ts`, on a page a _different_ client changed, with the container asserted to
+resolve to a live element — a path reaching nothing would make every property read as absent
+rather than as unobserved.
+
+**Three limits, stated rather than discovered later.** A prefix of fewer than three steps is
+`html > body`, which is a page changing and not a surface arriving, so it returns null — without
+that guard every navigation would be reported as an `inline` arrival, and a confident label on
+everything is worth less than none. With a single arrived control the prefix is that control, so
+the properties describe the control and not the panel around it; climbing a level would be a guess.
+And a surface that brings **no controls at all** — a text-only toast — produces no arrival, because
+there is nothing to take a path from. That last one is the division of labour rather than a hole:
+`readAnnouncements` is what sees those, and it is already in every state key.
+
+**One thing was written wrong and caught by its own test.** The provisional caveat fired only when
+_every_ lifetime was unobserved, so a run that paid for one surface and not the other printed no
+caveat and the unpaid label went out bare. A mixed run is the normal case once a caller pays
+selectively, which is the entire purpose of the option. Now counted rather than all-or-nothing.
+
+Still open from the original item: a text-block projection beyond announcements, and geometry
+findings other than occlusion — overflow, stacking, off-canvas. **And nothing acts on a
+classification yet**: the driver does not prefer an untried control inside a modal, or treat an
+unnameable surface as a thing to report. That is item 83 and E5c.
 
 ### The plan-freshness rule failed CI twice, from two different states
 
@@ -1011,6 +1056,88 @@ The scan already ends with a statement of what it could not see, and names frame
 rather than skipping them silently; `tests/harness/perception.ui.spec.ts` now pins that so a
 refactor cannot drop it. It is point 5 in miniature and the only part of perception that fails
 honestly today.
+
+### Item 75 — faults with a different author, 2026-10-05
+
+`src/qe/bug-replay.ts` and `npm run bug-replay`. The uncomfortable fact behind it is in
+`docs/mutation-evals.md`'s first consideration: every mutation in both sets was invented here, so
+every strength score measures a suite against one author’s imagination of what breaks. A subject’s
+own fix commit does not share that author.
+
+The split is the design. **Reverse the source, keep the tests at HEAD** — a fix commit normally
+carries its own regression test, so reverting the commit whole would remove the one test most
+likely to catch it and the run would prove nothing. It is also the shape of the thing being
+feared: the fix is lost, the tests are not.
+
+**Measured, first run.** `coursera-rag`, 10 commits: 3 replayable, 2 defended, 1 undefended.
+`a091804 fix(security)` is defended — reverting the streaming guard turns the suite red. `mcpa`: 0
+of 3, because its commits are enormous (one names 125 files of generated quiz results) and old
+enough that everything has moved under them. **That is a fact about the subject, not the
+instrument**, and it is the first thing this measurement established.
+
+**Three mistakes, all caught by running it rather than by reading it.**
+
+First, `spawnSync`'s 1 MB `maxBuffer`. `mcpa` commits a Jupyter notebook, so one diff is 7.5 MB,
+and all three replays came back `would-not-revert — its diff could not be read`. A harness limit
+wearing a finding’s clothes, which is the hazard below in its purest form; it was caught only
+because the reason was too vague to believe. The diff now goes straight to a file descriptor.
+
+Second, the restore handled a _modified_ file and not one the commit had **deleted** — reversing
+that recreates it, and `git checkout --` cannot remove a path git does not track. It left
+`mcpa`'s checkout holding a deletion and an untracked file.
+
+Third, and worst: a conflicted `--3way` apply leaves partial work and a staged index, and the
+failure path returned **before restoring**. The run printed `restored and verified clean on 3
+file(s)` over a `coursera-rag` checkout with a `UU` conflict in it — reporting success while
+leaving the subject broken. Both subjects were restored by hand and verified; all three holes are
+pinned in `tests/integration/bug-replay.int.test.ts`, which builds throwaway repositories with a
+real bug and a real fix in them.
+
+**A ranking of signals, not a classifier.** The first version counted signals and put a commit
+editing `daily-commit.bat` above one whose subject reads “Bug fixes, added e2e tests”: both scored
+two, and the tie went to the smaller diff. Two of those signals speak to whether a commit is a
+_fault_; two speak only to whether it is _cheap to replay_. They are now ordered
+lexicographically, so no amount of cheapness promotes a commit over one with more reason to be a
+real fault. `fix:` in a subject line is allowed to be decisive because it is the author’s own
+declaration, the same justification `announced` carries in `surfaces.ts` — not an inference from
+the diff.
+
+**Deliberately not in TOOLBOX.** Every other measurement command is listed there for agents to
+reach for. This one writes into a subject’s checkout and calls `git clean`, and that is not an
+agent’s to do — the precommit obligation says a new command _usually_ belongs in TOOLBOX, and this
+is the exception, recorded here so it does not read as an omission.
+
+### No agent run could start against seven of the nine subjects — found 2026-10-05
+
+Found by **attempting** item 30 against `academybugs`, which died before the preflight, the
+browser or the agent:
+
+```
+fatal: cannot change to 'C:\…\qa-context-overlay\https:\academybugs.com': Invalid argument
+```
+
+`sourceRepo` carries two incompatible meanings. `coursera-rag` and `mcpa` declare a relative
+path — a real sibling checkout, which a run branches its worktree from and runs git in. The
+other **seven** declare a URL: `https://academybugs.com`,
+`https://github.com/Polymer/shop`, `https://github.com/juice-shop/juice-shop`. That is
+provenance; there is no local clone of any of them. `role.ts` resolved the URL against a
+directory and handed `<repo>/https:/academybugs.com` to `git -C`.
+
+**Why it survived this long.** The only two subjects anyone has run a coder against are the two
+that declare a path, and the field has exactly one consumer. Reading the code would not have
+found it — the line is correct for the values it was written against. Running it did, on the
+first attempt, against the eighth subject.
+
+Fixed: a URL means provenance and the run uses this repository, which is what those runs did
+before the field existed. A local path that is **not** a checkout is now a refusal naming the
+config line, via `isGitCheckout` in `run-worktree.ts`, rather than git’s `Invalid argument` under
+a node stack trace. `academybugs` preflights clean.
+
+**This is the strongest argument in this file for item 30 and item 77 both.** Two items have sat
+unpaid for a fortnight on the grounds that a live run costs money, and the first live attempt
+against an unused subject found a defect that silently disabled three quarters of the subject
+list. The capability table said eight roles over five subjects; it could not have been eight
+roles over most of these five.
 
 ### A standing hazard, recorded because it is now a pattern
 
@@ -1213,12 +1340,12 @@ Three separate problems, and conflating them is the trap:
 | 72 | **"The human baseline is never edited" has no mechanism.** The unit run added 120 lines to the subject's own `test/searchIndex.test.js` rather than writing a new file | — | The file guard confines writes to the worktree, and inside the worktree the baseline is just another file. The gate is the component holding the pre-change revision, so the check belongs there: a problem when the diff modifies a pre-existing test file, unless the run is an improve/remove run declaring §9's grounds. Until then the comparison is the agent's edits against the unmodified baseline — an honest 12 → 14 of 20, but not the two-file comparison E1 describes |
 | 73 | **The assertion floor attributes inherited holes to the run.** Its two findings on the unit run are the human file's own `conditional-only` tests, pushed down 120 lines by the agent's insertions | — | The gate holds the base revision, so it can say which holes a run inherited and which it wrote — and that distinction is what makes §9's strength delta usable rather than noise. A run that fixes an inherited hole should be credited for it, which is the "improve" capability the floor currently cannot see. The rollout for the remaining roles — what each inherits, the tools they still need, and the schedule — is `.ai/state/POC-CODER-ROLLOUT.md`, named to the exempt pattern on purpose: a plan names paths that do not exist yet, and `npm run precommit` checks every tracked `.md` except `PLAN.md` and `POC-*.md`. That exemption is also why the first version passed at commit time and failed the moment it became tracked — the check reads tracked files only, so it cannot see the document a commit is about to add |
 
-| 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts`: kinds derived from observed properties, with the unnameable case first-class and an unobserved lifetime kept apart from a persistent one.** Occlusion was already in the scanner and is taken as an input rather than reimplemented; focus trapping and lifetime are the two that were missing and are now observed. Proven role-independent for `modal` and `popover` with the roles deleted | — | **Not wired into a run.** The properties describe a surface that _arrived_, so calling them means pairing with a transition's `appeared` set, which is where this meets E5c. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas |
+| 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts` derives a kind from observed properties, and as of the same day it is called after every action in a run.** Occlusion is taken as an input from the scanner for the control-side question and asked of the surface for the culprit-side one; focus trapping and lifetime are observed. Proven role-independent for `modal` and `popover` with the roles deleted, and proven live over CDP against a page another client changed | — | **Nothing acts on a classification.** The label is printed and summarised; no planning prefers an untried control inside a modal, and an unnameable surface is reported rather than pursued — that junction is 83. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas. A surface arriving with no interactive controls produces no arrival at all, by construction |
 | 81 | **One concept, three definitions — twice.** The control selector list is written out three times (`INTERACTIVE` in `src/tools/heal.ts`, `INTERACTIVE` in `src/tools/reveal.ts`, and a third copy inline in the `page.evaluate` in `src/tools/page-scanner.ts`), and the accessible name is computed three times (`src/tools/accessible-name.ts`, plus inline in both of the others). Nothing holds either set to the others | — | The three selector copies carry the same twelve selectors today by coincidence of maintenance, not by construction: widen one and the map, the state count and the hover sweep disagree about what a control **is**. The name triplication has **already** produced a disagreement — the a11y blind-spot join reported 12 missed controls on academybugs where an independent probe found 13, on the same page, because the two implementations differ. Harmless only until it matters: the name is the join key between two element sources, so drift there corrupts the thing that detects drift |
 | 82 | **`ScannedElement.role` is the raw attribute while `defaultRole` derives the real one three lines away.** Null for a plain `<a>` or `<button>` | — | It has already cost once: joining the accessibility tree against it reported **79** blind spots on academybugs against a measured 13, because every ordinary link read as missing. That was fixed at the one call site rather than at the field. Checked on 2026-10-03: nothing else reads it — consumers use `affordance`, which is computed from the derived role — so this is a **latent trap rather than an active bug**, and the next person to join on role hits exactly what I hit. Fix the field, not the next call site |
 | 83 | **`maxStates` is a ceiling while the state model now supports a frontier.** Edges, `triedFrom` and `routeTo` exist as of 2026-10-03; the count is still wired only to stopping | 4 | The two halves disagree about what the state count is _for_. A crawler's number steers; this one only refuses, which is why a session that hit the ceiling on Polymer Shop could report what it saw and not what it had left untried. The complement of `triedFrom` — moves not yet attempted — cannot be computed in the model, because only the driver knows what a state affords. That junction is E5c, and until something plans over the graph **no coverage claim about an app is defensible** |
 | 84 | **No flake rate, and the archive that would hold one is empty.** `npm run archive-results` keeps the last 20 runs and 2 are on disk | — | The comparator now refuses an _unstable_ suite, which catches a suite that fails on the second run — but **two green runs do not certify stability**, and a test that flakes one time in twenty passes both and goes on randomising every mutation score. The release gate reports flakes it sees within one run; nothing measures a rate across runs, so there is no answer to "is this getting better". Archiving is a call in the run path rather than a feature, and it is the prerequisite: a rate cannot be computed from two samples |
-| 75 | **Replay real fixed bugs from a subject's git history.** Find a commit that fixed a defect, revert the fix in a worktree, and ask whether the suite — the subject's own, then the agent's — notices. `docs/mutation-evals.md` names this the highest-value gap | — | Every mutation in both sets was invented by me from the source, so the fault distribution is mine rather than the product's, and `coursera-rag`'s set leans one way by its own admission: all fourteen loosen the limiter. A real fix is a fault that really happened, in the shape it really took. Both coder subjects have the history, and no new instrument is needed — a reverted fix is a mutation whose author was the product. The work is selection: a fix that also changed tests cannot be used, and one that changed several files is not one fault |
+| 75 | **DONE 2026-10-05 — `npm run bug-replay`.** Reverses a commit's _source_ changes, keeps every test at HEAD, runs the suite: red means the suite noticed the behaviour being undone, green means the fault can come back in silence. Measured on `coursera-rag`: 10 commits attempted, **3 replayable, 2 defended, 1 undefended**. On `mcpa`: **0 of 3** | — | **Most history cannot be replayed, and that is the finding.** A reverse patch needs its context lines intact, and a fix worth replaying is usually several commits back. `--3way` recovered 3 of the 6 a plain apply refused; the rest are reported `would-not-revert` and kept out of the denominator. So the instrument wants a subject with small frequent commits, which `mcpa` is not. Also: a comment-only edit inside a source file always reads as undefended and cannot be detected by path |
 | 78 | **The README leads with the pillar that has the least evidence.** "Context" there means a map of the page, handed over rather than bought. Nothing has shown that map changes a session — item 30 is still unpaid, and both eprimer models did their real work from controls they found themselves. What _has_ moved numbers is a different kind of context: the session clock and a thin charter (13 minutes → 41, 9 defects → 17) and the coverage briefing (8 of 14 mutations → 11, with 23 tests instead of 34) | 30 answers it; this is what to do either way | Process context and coverage context are earning the claim that page context was written to make. Either pay 30 and find out, or reorder the README to lead with what works — but not leave the strongest sentence on the page attached to the weakest evidence behind it. Found by auditing the repo against its own README on 2026-10-02, in the same pass that found five _Not proven_ bullets contradicted by this file |
 | 79 | **Nothing measures whether a person is helped.** Every number here compares an agent to another agent, or an agent's suite to a hand-written one (4 of 14 against 8, then 11 — a real comparison, and of **artifacts**) | 76 gives the variance this would need | "Meaningful aid for QA activities" is the purpose in the README's first line and it is the one claim with no instrument at all. The activity has never been measured: whether a tester working with this finds more, or faster, or with better evidence, than the same tester without it. It may not be cheaply measurable — that is a reason to say so plainly rather than to let the artifact comparisons stand in for it |
 | 76 | **Repeat-run variance for coders.** Same seam, same task, three runs; compare mutation scores and take the union of killed mutations against the best single run | 75 is independent of this; neither blocks the other | The explorer side measures this and the number was the most useful one we have — the best single session reaches **39%** of what five sessions found between them, 31 of 57 findings seen exactly once. The coder side measures nothing of the kind, so every coder number on this page is a sample of one, including the 4/8/11 progression. A capability whose spread is unmeasured cannot be said to have improved. It also gives killed-mutations-per-dollar, which is the axis that should decide model choice and which we have never computed despite logging cost and turns for every run |

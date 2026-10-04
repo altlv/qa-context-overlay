@@ -66,7 +66,18 @@ export interface AppConfig {
    * team to ignore red.
    */
   external?: boolean;
-  /** Where the app itself lives, when it is not in this repo. */
+  /**
+   * Where the app itself lives, when it is not in this repo.
+   *
+   * **Two meanings, told apart by whether it is a URL.** A relative path is a real checkout on
+   * this machine — `../mcpa-training-bot` — which a run branches its worktree from and runs git
+   * in. A URL is **provenance only**: there is no local clone of `https://academybugs.com`, and a
+   * run against it uses this repository for its worktree.
+   *
+   * The distinction was implicit and cost every one of the seven URL subjects the ability to
+   * start an agent run at all: the URL was resolved against a directory and the result handed to
+   * `git -C`. See the comment at the use site in `src/cli/role.ts`.
+   */
   sourceRepo?: string;
   /**
    * Where the subject's own source lives, relative to `sourceRepo`.

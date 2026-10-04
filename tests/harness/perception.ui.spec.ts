@@ -1,7 +1,14 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { readAnnouncements } from '../../src/tools/announcements.js';
 import { harvestCandidates } from '../../src/tools/heal.js';
-import { stateKey } from '../../src/qe/state-model.js';
+import { StateModel, stateKey } from '../../src/qe/state-model.js';
+import {
+  announcedWithin,
+  classifyArrival,
+  coversContent,
+  describeSurface,
+} from '../../src/tools/surfaces.js';
 
 /**
  * What the agent can and cannot perceive about the page in front of it.
@@ -196,5 +203,190 @@ test.describe('what the page says, as a projection', () => {
     expect(await readAnnouncements(page), 'empty when the page says nothing').toEqual([]);
     await page.setContent(`<body><div role="alert">Something broke</div></body>`);
     expect(await readAnnouncements(page), 'and full when it does').toEqual(['something broke']);
+  });
+});
+
+test.describe('what kind of surface arrived', () => {
+  /**
+   * The properties `classifySurface` decides on, observed against a real browser rather than
+   * supplied by a caller — which is the half the unit tests cannot reach and the half that was
+   * missing while the module had no caller at all.
+   *
+   * Every fixture here carries **no role and no class name a matcher could recognise**. That is
+   * the claim the module rests on: a surface is named by how it behaves, so deleting the word
+   * `dialog` must not change the answer. A fixture with `role="dialog"` on it would prove nothing,
+   * because it could be passing on a name match.
+   */
+
+  const UNDER = '<main style="height:600px"><p>page content</p><button>In the page</button></main>';
+
+  /** Harvest, then harvest again, and return the paths of whatever arrived between the two. */
+  const arrivedPaths = async (page: Page, act: () => Promise<void>): Promise<string[]> => {
+    const model = new StateModel();
+    const before = await harvestCandidates(page);
+    model.observe({
+      url: page.url(),
+      fingerprints: before.map((c) => c.fingerprint),
+      announcements: await readAnnouncements(page),
+    });
+    await act();
+    const after = await harvestCandidates(page);
+    const transition = model.observe({
+      url: page.url(),
+      fingerprints: after.map((c) => c.fingerprint),
+      announcements: await readAnnouncements(page),
+    });
+    // Exactly what `src/qe/observer.ts` does: the indices index the array just passed in, so the
+    // candidate record for an arrival is the one at the same position.
+    return transition.appearedAt.map((index) => after[index]!.path);
+  };
+
+  test('should see that a floating panel covers the content under it', async ({ page }) => {
+    await page.setContent(`<!doctype html><body>${UNDER}
+      <div id="panel" style="position:fixed;top:0;left:0;width:320px;height:320px;background:#fff">
+        <button>Confirm</button><button>Cancel</button>
+      </div></body>`);
+
+    expect(
+      await coversContent(page, '#panel'),
+      'the surface-side question: something was readable at that point and this is there instead',
+    ).toBe(true);
+  });
+
+  test('should not call a panel in the flow a cover', async ({ page }) => {
+    // Instrument liveness. A `coversContent` that always said true would pass the assertion above
+    // and make `overlays` a constant, which would turn every in-flow arrival into a popover.
+    await page.setContent(`<!doctype html><body>${UNDER}
+      <div id="panel"><button>Confirm</button><button>Cancel</button></div></body>`);
+
+    expect(
+      await coversContent(page, '#panel'),
+      'placed after the content rather than over it, so it covers nothing',
+    ).toBe(false);
+  });
+
+  test('should attribute an announcement to the surface making it', async ({ page }) => {
+    /**
+     * The discrimination `readAnnouncements` cannot make. It answers "what is the page saying",
+     * which is a page-level fact, and a classification needs "is *this* surface the thing saying
+     * it" — otherwise a floating panel on a page that happens to have a live region elsewhere
+     * would be labelled a toast.
+     */
+    await page.setContent(`<!doctype html><body>
+      <div role="status" style="position:fixed;top:0"><button id="undo">Undo</button></div>
+      <div id="quiet"><button>Ordinary</button></div>
+      <div aria-live="polite">Saved automatically</div></body>`);
+
+    expect(
+      await announcedWithin(page, '[role=status]'),
+      'a control inside an announcing region is part of what the page is saying',
+    ).toBe(true);
+    expect(
+      await announcedWithin(page, '#quiet'),
+      'and a panel beside one is not, however loud the rest of the page is',
+    ).toBe(false);
+  });
+
+  test('should name a floating overlay a popover with no role to go on', async ({ page }) => {
+    await page.setContent(`<!doctype html><body>${UNDER}<div id="host"></div></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        document.getElementById('host')!.innerHTML =
+          '<div style="position:fixed;top:0;left:0;width:300px;height:300px;background:#eee">' +
+          '<button>Profile</button><button>Sign out</button></div>';
+      }),
+    );
+    const arrival = await classifyArrival(page, paths);
+
+    expect(
+      arrival?.classification.kind,
+      'a menu covering content, holding no focus and announcing nothing — named without the word "menu" appearing anywhere',
+    ).toBe('popover');
+    expect(
+      arrival?.container,
+      'and the container is the panel the two controls share, not either button',
+    ).toMatch(/div:nth-child\(1\)$/);
+  });
+
+  test('should name an announced floating arrival a toast, provisionally', async ({ page }) => {
+    await page.setContent(`<!doctype html><body>${UNDER}<div id="host"></div></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        document.getElementById('host')!.innerHTML =
+          '<div role="status" style="position:fixed;bottom:0;left:0">Added to cart ' +
+          '<button>Undo</button><button>View cart</button></div>';
+      }),
+    );
+    const arrival = await classifyArrival(page, paths);
+
+    expect(arrival?.classification.kind).toBe('toast');
+    expect(
+      arrival?.classification.provisional,
+      'nothing waited to see whether it left, and an unpaid observation must not read as a confident label',
+    ).toBe(true);
+    expect(
+      arrival?.properties.vanishedUnprompted,
+      'not observed, which is a third value and not a quiet false',
+    ).toBeNull();
+  });
+
+  test('should pay for the lifetime when asked, and change its mind', async ({ page }) => {
+    /**
+     * The property that costs wall-clock, and the one place in this file where it is bought. A
+     * banner that stays and a toast that leaves differ **only** in this, so a run that never pays
+     * cannot tell them apart — which is what `provisional` is admitting above.
+     */
+    await page.setContent(`<!doctype html><body>${UNDER}<div id="host"></div></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        const host = document.getElementById('host')!;
+        host.innerHTML =
+          '<div role="status" style="position:fixed;bottom:0;left:0">Saved ' +
+          '<button>Undo</button><button>Dismiss</button></div>';
+        setTimeout(() => (host.innerHTML = ''), 300);
+      }),
+    );
+    const arrival = await classifyArrival(page, paths, { watchLifetime: true, lifetimeMs: 3_000 });
+
+    expect(
+      arrival?.properties.vanishedUnprompted,
+      'it went away with nobody acting on it, and that was observed rather than assumed',
+    ).toBe(true);
+    expect(
+      arrival?.classification.provisional,
+      'so nothing about this label is hedged any more',
+    ).toBe(false);
+    expect(
+      describeSurface(arrival!.classification),
+      'and the line a person reads must say the lifetime was paid for',
+    ).toContain('went away with nobody acting');
+  });
+
+  test('should refuse to name a page change as a surface', async ({ page }) => {
+    /**
+     * The guard that keeps this from labelling every navigation. Controls arriving at both ends of
+     * `body` share nothing but the document, and classifying `body` would hand the classifier the
+     * layout of the whole page — in the flow, covering nothing, announcing nothing — so every page
+     * load would be reported as an `inline` arrival. A confident label on everything is worth less
+     * than no label.
+     */
+    await page.setContent(`<!doctype html><body><header id="top"></header>${UNDER}
+      <footer id="bottom"></footer></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        document.getElementById('top')!.innerHTML = '<a href="/one">One</a>';
+        document.getElementById('bottom')!.innerHTML = '<a href="/two">Two</a>';
+      }),
+    );
+
+    expect(paths.length, 'two controls really did arrive').toBe(2);
+    expect(
+      await classifyArrival(page, paths),
+      'but they name no surface, and saying so is the honest answer',
+    ).toBeNull();
   });
 });
