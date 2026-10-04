@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readAnnouncements } from '../../src/tools/announcements.js';
 import { harvestCandidates } from '../../src/tools/heal.js';
 import { stateKey } from '../../src/qe/state-model.js';
 
@@ -72,7 +73,25 @@ test.describe('what the agent can see on the page in front of it', () => {
     ).toBe(1);
   });
 
-  test('should not tell a toast or an error banner from the page at rest', async ({ page }) => {
+  test('should tell a toast and an error banner from the page at rest', async ({ page }) => {
+    /**
+     * **This assertion was inverted on 2026-10-04, and the inversion is the point.** It used to
+     * assert that a toast and a banner left the state key *unchanged*, which was true and was the
+     * confirmed blindness: a state was a URL and a set of control signatures, so what the page
+     * said was outside what the agent could perceive as a change.
+     *
+     * `src/tools/announcements.ts` is the projection that closes it. A characterisation test
+     * failing because the thing it characterised got better is the outcome this file was written
+     * hoping for — see its header.
+     *
+     * **`announcements` is read here, deliberately and with a warning.** The field on
+     * `Observation` is optional, and when the inversion was first made this test still passed,
+     * because it built an observation without the projection and so measured one that was never
+     * read. An optional field lets a caller omit a projection silently, which is the
+     * blind-instrument problem in a new costume: the observer passes it, a test did not, and
+     * nothing complained. Any new caller of `stateKey` has to pass it or it is measuring the old
+     * world.
+     */
     await page.setContent(TEXT_SURFACES);
     const look = async (): Promise<string> =>
       stateKey({
@@ -83,7 +102,8 @@ test.describe('what the agent can see on the page in front of it', () => {
         // having measured nothing. That is how the first version of this file was written, and
         // it also produced a retracted finding about polymer-shop being told apart by URL alone.
         fingerprints: (await harvestCandidates(page)).map((c) => c.fingerprint),
-      } as never);
+        announcements: await readAnnouncements(page),
+      });
 
     const atRest = await look();
     await page.click('#toast');
@@ -93,17 +113,15 @@ test.describe('what the agent can see on the page in front of it', () => {
     await expect(page.locator('[role=alert]')).toBeVisible();
     const withBanner = await look();
 
-    // A state is the URL plus the set of interactive-control signatures, so content is not part
-    // of it. Every surface made of text rather than controls is therefore outside what the agent
-    // can perceive as a change: error messages, validation, confirmations, empty states, loading
-    // states. `PLAN.md` called this fold "by design", which made a hole sound survivable.
-    expect(withToast, 'a toast that is visibly on screen is not a change the agent can see').toBe(
-      atRest,
-    );
+    expect(
+      withToast,
+      'a toast on screen is now a change the agent can perceive — errors, validation and confirmations with it',
+    ).not.toBe(atRest);
+    expect(withBanner, 'and so is an error announced as role=alert').not.toBe(atRest);
     expect(
       withBanner,
-      'nor is an error message announced as role=alert — and that is where defects live',
-    ).toBe(atRest);
+      'and the two say different things, so they must not fold into one state',
+    ).not.toBe(withToast);
   });
 
   test('should keep naming its own blind spots, which is the one honest part', async ({ page }) => {
@@ -132,5 +150,51 @@ test.describe('what the agent can see on the page in front of it', () => {
       scan.shadowHosts.length,
       'likewise an open shadow root — named, not silently skipped',
     ).toBeGreaterThan(0);
+  });
+});
+
+test.describe('what the page says, as a projection', () => {
+  test('should read a live region that carries no role at all', async ({ page }) => {
+    // The half the accessibility tree cannot see: measured 2026-10-02, `aria-live` on an element
+    // with no role renders in the tree as a bare text node. That is why this projection reads the
+    // DOM rather than being a fourth use of `readAria`.
+    await page.setContent(
+      `<body><button>A</button><div aria-live="polite">Saved automatically</div></body>`,
+    );
+    expect(await readAnnouncements(page)).toEqual(['saved automatically']);
+  });
+
+  test('should ignore a region that is present but empty', async ({ page }) => {
+    // Most live regions sit on the page from load and fill only when something happens. Counting
+    // them would make the projection a constant, and a constant in a state key is decoration.
+    await page.setContent(`<body><button>A</button><div role="status"></div></body>`);
+    expect(await readAnnouncements(page)).toEqual([]);
+  });
+
+  test('should ignore a region that is hidden', async ({ page }) => {
+    // A toast container that exists but is not displayed is not saying anything. Reporting it
+    // would claim an announcement nobody could read — the mirror of missing one they could.
+    await page.setContent(
+      `<body><div role="alert" style="display:none">Card declined</div></body>`,
+    );
+    expect(await readAnnouncements(page)).toEqual([]);
+  });
+
+  test('should deduplicate two regions saying the same thing', async ({ page }) => {
+    // A page that announces into both a polite and an assertive region — which is a real pattern
+    // — would otherwise make one message look like two.
+    await page.setContent(
+      `<body><div role="status">Saved</div><div aria-live="assertive">saved</div></body>`,
+    );
+    expect(await readAnnouncements(page)).toEqual(['saved']);
+  });
+
+  test('should be able to come back empty and come back full', async ({ page }) => {
+    // Instrument liveness: a reader that always returns nothing would have passed every assertion
+    // above except this one, and would have made the whole projection decoration.
+    await page.setContent(`<body><button>Alone</button></body>`);
+    expect(await readAnnouncements(page), 'empty when the page says nothing').toEqual([]);
+    await page.setContent(`<body><div role="alert">Something broke</div></body>`);
+    expect(await readAnnouncements(page), 'and full when it does').toEqual(['something broke']);
   });
 });

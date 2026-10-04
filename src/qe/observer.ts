@@ -1,4 +1,5 @@
 import type { Browser, Page } from '@playwright/test';
+import { readAnnouncements } from '../tools/announcements.js';
 import { harvestCandidates } from '../tools/heal.js';
 import { StateModel, describeTransition } from './state-model.js';
 import type { Transition } from './state-model.js';
@@ -90,9 +91,14 @@ export function pageObserver(find: () => Promise<Page | null>): Observer {
           return null;
         }
         const candidates = await harvestCandidates(page);
+        // Both projections from the same look, so what the page shows and what it says are
+        // read at one moment rather than two. Reading them separately would let a toast
+        // appear between the calls and be attributed to the wrong state.
+        const announcements = await readAnnouncements(page);
         return model.observe({
           url: page.url(),
           fingerprints: candidates.map((candidate) => candidate.fingerprint),
+          announcements,
         });
       } catch {
         // A page mid-navigation, a tab closed between finding it and reading it, a

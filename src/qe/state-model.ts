@@ -47,6 +47,19 @@ export interface Observation {
   url: string;
   /** From `harvestCandidates` in `src/tools/heal.ts` — the live DOM, not a snapshot. */
   fingerprints: Fingerprint[];
+  /**
+   * What the page is currently **saying**, from `readAnnouncements`.
+   *
+   * The second projection, and the one that closes the blindness measured twice: a
+   * `role=status` toast and a `role=alert` banner both used to leave the state key unchanged,
+   * because a state was controls and a URL and nothing else.
+   *
+   * Optional, so an observation built before this existed still type-checks and so a caller
+   * that cannot read the page still produces one. **Absent means not read, not silent** — and
+   * the distinction is kept rather than collapsed, because an unread projection reporting as
+   * an empty one is this repository's recurring mistake.
+   */
+  announcements?: string[];
 }
 
 /**
@@ -94,7 +107,15 @@ export function controlSignature(fingerprint: Fingerprint): string {
  */
 export function stateKey(observation: Observation): string {
   const signatures = [...new Set(observation.fingerprints.map(controlSignature))].sort();
-  return `${observation.url}\n${signatures.join('\n')}`;
+  // Announcements get a section of their own rather than being mixed into the signatures, so a
+  // control named "Saved" and a status region saying "Saved" cannot collide.
+  //
+  // Omitted entirely when the projection was not read, so an observation built without it
+  // produces the key it always did instead of every state quietly acquiring an empty section —
+  // which would make a run with the projection and a run without it incomparable for no reason.
+  const said = observation.announcements ?? [];
+  const saying = said.length === 0 ? '' : `\nsays:\n${[...said].sort().join('\n')}`;
+  return `${observation.url}\n${signatures.join('\n')}${saying}`;
 }
 
 export interface ChangedControl {
