@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `27cdbf9` — the commit this file was last checked against. A file cannot name
+Head is `8215ec9` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -963,22 +963,43 @@ was verified against the state that produced it and not against the rule it was 
 which is the adjacent-measurement habit recorded under the discovery layer, wearing yet another
 costume: I tested that the symptom was gone rather than that the rule was now right.
 
-### What is structurally missing
+### What is structurally missing — corrected 2026-10-04
 
-- **Content is not perceived at all.** The one confirmed blindness, above.
-- **One moment.** The scan is taken once, on a page nobody has touched. Nothing is observed
-  arriving, changing or leaving.
-- **Still no iframe interaction** — the frames are read, and nothing acts inside one yet.
-- **No geometry.** Occlusion, stacking, overflow and off-screen are invisible — and the single best
-  finding `testability-reviewer` ever produced was an occlusion, a consent banner over a product
-  image, which is a spatial fact no DOM query returns.
-- **No diff.** Nothing turns two observations into "what arrived, what left, what changed", which
-  is the unit behaviour is visible in, and which E5c needs anyway.
+The previous version of this list had five bullets. **Two were closed by later work, and two were
+wrong on the day they were written** — which makes this section its own best example of the hazard
+recorded below it. The corrections first, because a stale inventory of gaps is worse than none: it
+sends work at problems that do not exist and hides the ones that do.
+
+- ~~**Content is not perceived at all.**~~ Closed 2026-10-04 by `src/tools/announcements.ts`.
+- ~~**No geometry. Occlusion, stacking, overflow and off-screen are invisible.**~~ **Wrong when
+  written.** `page-scanner.ts` has judged occlusion all along: it scrolls to judge it honestly,
+  uses `elementFromPoint`, pierces a shadow host to keep answering on a Web Components page,
+  distinguishes being below the fold from being covered, and reports `covered by <tag#id>` as an
+  `interact` blocker with the finding "Addressable but not actionable". The bullet even cited
+  `testability-reviewer`'s occlusion finding as proof of the gap — that finding **was** this
+  capability working. What is genuinely absent is narrower: stacking order, overflow clipping and
+  off-canvas positioning as findings of their own, and occlusion as part of a _state_ rather than a
+  scan-time property.
+- ~~**No diff. Nothing turns two observations into what arrived, what left, what changed.**~~
+  **Wrong when written.** `Transition` has carried `appeared`, `disappeared` and `changed` since
+  the state model existed, computed by `matchAll` with the disagreeing signals named. E5c needs
+  something to _choose_ from the diff; the diff was never the missing half.
+- **One moment — still true of the scan.** A scan is taken once, on a page nobody has touched. The
+  observer does see transitions, so this is a property of the scan rather than of the harness.
+- **Still no iframe interaction — true.** The frames are read; nothing acts inside one.
+
+Writing two false gaps cost more than leaving them out would have. Item 4's own wording claimed a
+list of plausible surfaces was needed when the mechanism was already there, and item 80 was filed
+partly against a geometry gap that did not exist. **Both were written from reading the code's
+shape rather than running it**, which is the same habit as the hazard below and the reason that
+hazard's count is now seven rather than four.
 
 ### The mechanics it wants
 
-1. **Observation as several cheap projections of one page**: controls (which work), visible text
-   blocks, geometry and stacking, focus and whether it is trapped, liveness, network, console.
+1. **Observation as several cheap projections of one page.** Controls work; announcements work
+   (`announcements.ts`); occlusion works at scan time; focus-trapping works (`surfaces.ts`).
+   **Still absent**: visible text blocks beyond announcements, stacking order and overflow
+   clipping as findings, network and console as projections of a state.
 2. **The transition as the unit of perception** — this action, these projections changed.
 3. **Interactivity confirmed by probe for the tail only.** The selector list is adequate for the
    bulk; probing is for the `cursor: pointer` residue nothing static can resolve.
@@ -993,7 +1014,10 @@ honestly today.
 
 ### A standing hazard, recorded because it is now a pattern
 
-Four times in this session I measured something **adjacent** to the thing I was claiming, and
+**Seven times across these sessions** — the count was four when this was written and three more
+followed, including two false gaps in the list above, a `sed` range that could not contain what it
+was used to prove absent, and a test fixture whose shape mismatch was hidden by `as never`. I
+measured something **adjacent** to the thing I was claiming, and
 reported the result as the thing: a write to an already-destroyed stream instead of a draining one
 (nearly declaring a real crash nonexistent); a substring match against a JSON blob instead of a
 selector match; a light-DOM-only query instead of the shadow-piercing one the harness uses
