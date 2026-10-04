@@ -26,6 +26,9 @@ decide whether the result proves anything.
 | State model (E5b) — shared browser over CDP       | built, has refused a live session    | `src/qe/state-model.ts`          |
 | Accessibility tree as a second element source     | built, in every scan                 | `src/tools/aria.ts`              |
 | Inside the frames — a third element source        | built, live on demoqa                | `src/tools/frames.ts`            |
+| What the page says — announcements projection     | built, in every state key            | `src/tools/announcements.ts`     |
+| What kind of surface arrived, derived not matched | built, not wired into a run          | `src/tools/surfaces.ts`          |
+| Flake rate across archived runs                   | built, needs the archive to fill     | `src/qe/flake-rate.ts`           |
 | Role runner — preflight, guards, worktree, gate   | drives every run                     | `src/cli/role.ts`                |
 | Fault check — does a spec notice a 500            | built                                | `src/cli/fault-check.ts`         |
 | Process fault — does a subject test notice        | built, a gate step for two subjects  | `src/qe/process-fault.ts`        |
