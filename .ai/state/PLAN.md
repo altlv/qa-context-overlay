@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `252dfb7` — the commit this file was last checked against. A file cannot name
+Head is `06460a0` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -890,6 +890,51 @@ silently**: the observer passed it, the test did not, and nothing complained. Th
 blind-instrument problem in a new costume, and the cost of the compatibility is now written beside
 the field — any new caller of `stateKey` must pass it or it is measuring the old world.
 
+### Item 80 — categories derived rather than matched, 2026-10-04
+
+`src/tools/surfaces.ts`. Nothing in it matches a name. A surface is described by properties that
+can be observed, and a kind is **derived** with the evidence attached: a modal is _traps focus,
+covers content that was visible before_; a popover is _pinned to the viewport and covering content,
+does not trap focus and announces nothing_. The label is output, never input — which is the
+correction the user made to item 4's list of mini-cart, dropdown, modal, toast, drawer.
+
+**Occlusion was already built**, so it is an input rather than a second implementation.
+`page-scanner.ts` judges it, pierces shadow roots with `elementFromPoint`, and distinguishes
+below-the-fold from covered — and `testability-reviewer`'s best live finding was an occlusion.
+Writing it again is what put the control selector in three files. What was genuinely missing was
+**focus trapping** and **lifetime**, and those are what the two new readers observe.
+
+`trapsFocus` presses Tab from the last control inside the container and asks where focus went,
+rather than looking for `role=dialog` or `aria-modal`: a page that writes neither and traps focus
+anyway is trapping focus, and one that writes both and does not is not. It restores focus
+afterwards, because a session whose focus moved because the harness looked would be debugging the
+harness.
+
+Measured live on four surfaces, then **again with `role="dialog"` deleted**: a focus-trapping
+overlay is still `modal`, and a floating silent overlay with no role and no class is still
+`popover`. Those two carry the claim. The same run proves nothing about `banner` or `toast`, whose
+deciding property — `announced` — is supplied by the caller from `readAnnouncements`, which does
+read roles. That is a legitimate difference and it is written beside the code: **the author
+marking a region as one that speaks is a fact about the page, where matching a surface against the
+word "modal" would be a guess about its kind.** One input is declared; no kind is.
+
+**The unnameable case is first-class.** `kind` is null when the properties fit no shape, every
+observed property is reported, and `describeSurface` says a surface arrived that cannot be named
+and offers both readings — the page is doing something unusual, or the categories are wrong. A
+classifier that always produces a category is one whose categories mean nothing. This is the
+`unknown truths` rule applied to the instrument instead of the agent.
+
+**An unobserved lifetime is null, never false.** Watching whether a surface leaves on its own
+costs a session wall-clock, so a caller may skip it — and a classifier reading the skip as
+"persists" would turn an unpaid measurement into a confident label. A surface that looks like a
+toast with an unwatched lifetime is called a toast **provisionally**, and paying for the
+observation can change the answer: a floating announced surface seen to persist is no longer a
+toast at all.
+
+Not yet wired into a run. The classifier and its readers are built and tested; nothing calls them
+from `observer.ts` yet, because the properties are about a surface that _arrived_ and that means
+pairing them with a transition's `appeared` set — which is where this meets E5c.
+
 ### What is structurally missing
 
 - **Content is not perceived at all.** The one confirmed blindness, above.
@@ -1116,7 +1161,7 @@ Three separate problems, and conflating them is the trap:
 | 72 | **"The human baseline is never edited" has no mechanism.** The unit run added 120 lines to the subject's own `test/searchIndex.test.js` rather than writing a new file | — | The file guard confines writes to the worktree, and inside the worktree the baseline is just another file. The gate is the component holding the pre-change revision, so the check belongs there: a problem when the diff modifies a pre-existing test file, unless the run is an improve/remove run declaring §9's grounds. Until then the comparison is the agent's edits against the unmodified baseline — an honest 12 → 14 of 20, but not the two-file comparison E1 describes |
 | 73 | **The assertion floor attributes inherited holes to the run.** Its two findings on the unit run are the human file's own `conditional-only` tests, pushed down 120 lines by the agent's insertions | — | The gate holds the base revision, so it can say which holes a run inherited and which it wrote — and that distinction is what makes §9's strength delta usable rather than noise. A run that fixes an inherited hole should be credited for it, which is the "improve" capability the floor currently cannot see. The rollout for the remaining roles — what each inherits, the tools they still need, and the schedule — is `.ai/state/POC-CODER-ROLLOUT.md`, named to the exempt pattern on purpose: a plan names paths that do not exist yet, and `npm run precommit` checks every tracked `.md` except `PLAN.md` and `POC-*.md`. That exemption is also why the first version passed at commit time and failed the moment it became tracked — the check reads tracked files only, so it cannot see the document a commit is about to add |
 
-| 80 | **Category discovery, as a capability.** The scanner and the state model both work by matching a page against names someone wrote down — twelve selectors in `INTERACTIVE`, five surface names in item 4. What is needed instead is deriving what kind of thing is present from **how it behaves**, with the category as output rather than input. Several cheap projections of the same page, none of them a taxonomy: the set of visible text blocks (catches a toast, a banner, an empty state, a validation message — all invisible today); geometry and stacking, which is what occludes what and the one spatial fact no DOM query returns; where focus went and whether it is trapped; whether a surface vanished unprompted or persists; and `aria-live`, `role=status`, `role=alert`. A modal is then _overlays, traps focus, persists_ and a toast is _does not overlay, vanishes unprompted, announced_ — labels with their evidence attached, not matched names | — | **The constraint that makes this discovery rather than a longer list: it must be able to say "something arrived and I cannot classify it", and that output must be louder than a confident wrong label.** This is the `unknown truths` rule — already standing in the explorer role at the user's instruction — applied to the instrument instead of the agent. Raised by the user on 2026-10-02, reading item 4's surface list as plausible web structures rather than discovered ones, which is exactly what it was. It also connects to two things already here: zoom as an oracle, where magnification reveals what a query does not, and `testability-reviewer`'s own best finding, a consent banner occluding a product image |
+| 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts`: kinds derived from observed properties, with the unnameable case first-class and an unobserved lifetime kept apart from a persistent one.** Occlusion was already in the scanner and is taken as an input rather than reimplemented; focus trapping and lifetime are the two that were missing and are now observed. Proven role-independent for `modal` and `popover` with the roles deleted | — | **Not wired into a run.** The properties describe a surface that _arrived_, so calling them means pairing with a transition's `appeared` set, which is where this meets E5c. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas |
 | 81 | **One concept, three definitions — twice.** The control selector list is written out three times (`INTERACTIVE` in `src/tools/heal.ts`, `INTERACTIVE` in `src/tools/reveal.ts`, and a third copy inline in the `page.evaluate` in `src/tools/page-scanner.ts`), and the accessible name is computed three times (`src/tools/accessible-name.ts`, plus inline in both of the others). Nothing holds either set to the others | — | The three selector copies carry the same twelve selectors today by coincidence of maintenance, not by construction: widen one and the map, the state count and the hover sweep disagree about what a control **is**. The name triplication has **already** produced a disagreement — the a11y blind-spot join reported 12 missed controls on academybugs where an independent probe found 13, on the same page, because the two implementations differ. Harmless only until it matters: the name is the join key between two element sources, so drift there corrupts the thing that detects drift |
 | 82 | **`ScannedElement.role` is the raw attribute while `defaultRole` derives the real one three lines away.** Null for a plain `<a>` or `<button>` | — | It has already cost once: joining the accessibility tree against it reported **79** blind spots on academybugs against a measured 13, because every ordinary link read as missing. That was fixed at the one call site rather than at the field. Checked on 2026-10-03: nothing else reads it — consumers use `affordance`, which is computed from the derived role — so this is a **latent trap rather than an active bug**, and the next person to join on role hits exactly what I hit. Fix the field, not the next call site |
 | 83 | **`maxStates` is a ceiling while the state model now supports a frontier.** Edges, `triedFrom` and `routeTo` exist as of 2026-10-03; the count is still wired only to stopping | 4 | The two halves disagree about what the state count is _for_. A crawler's number steers; this one only refuses, which is why a session that hit the ceiling on Polymer Shop could report what it saw and not what it had left untried. The complement of `triedFrom` — moves not yet attempted — cannot be computed in the model, because only the driver knows what a state affords. That junction is E5c, and until something plans over the graph **no coverage claim about an app is defensible** |
