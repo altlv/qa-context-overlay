@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `06460a0` — the commit this file was last checked against. A file cannot name
+Head is `27cdbf9` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -934,6 +934,34 @@ toast at all.
 Not yet wired into a run. The classifier and its readers are built and tested; nothing calls them
 from `observer.ts` yet, because the properties are about a surface that _arrived_ and that means
 pairing them with a transition's `appeared` set — which is where this meets E5c.
+
+### The plan-freshness rule failed CI twice, from two different states
+
+**First, `3b8cea1`** — a plan edited again on top of a plan commit. `planChangedInHead` was true
+and the stamp named HEAD's parent, so the parent-stamp branch called it fresh while the file sat
+**dirty** on disk, about to be committed on top of a commit it did not name. Closed by
+`planChangedInWorkingTree`.
+
+**Then `27cdbf9`** — the same shape with a **clean** plan. A plan updated in HEAD and naming its
+parent is a committed state that is fine; committing other files on top of it produces a tree
+where the stamp names the grandparent and the latest commit did not update the plan, which is the
+code-only-commit case the rule exists to refuse. CI refused what `precommit` had just approved,
+again.
+
+The root cause both times was the same and the first fix only covered half of it: **the check was
+reasoning about the commit that exists rather than the one being prepared.** The honest form is
+one sentence — if a commit is being made, the plan must be part of it and must name HEAD — which
+is also what this file's own first line has always asked for, so the rule and the doctrine now
+agree instead of nearly agreeing.
+
+`dirtyWorkingTree` is the input that makes it expressible. Without it the check could not tell
+"about to commit code without the plan" from "somebody asking whether the plan is current", and
+refusing the second would make the command unusable for the question it is named after.
+
+**Two near-identical CI failures, four days apart, from one unexamined assumption.** The first fix
+was verified against the state that produced it and not against the rule it was implementing —
+which is the adjacent-measurement habit recorded under the discovery layer, wearing yet another
+costume: I tested that the symptom was gone rather than that the rule was now right.
 
 ### What is structurally missing
 

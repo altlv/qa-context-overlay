@@ -98,6 +98,7 @@ test.describe('whether the plan is current', () => {
       parent: 'aaaaaaa',
       planChangedInHead: true,
       planChangedInWorkingTree: false,
+      dirtyWorkingTree: false,
       ...over,
     });
 
@@ -163,6 +164,34 @@ test.describe('whether the plan is current', () => {
     expect(
       stamp({ recorded: 'bbbbbbb', planChangedInWorkingTree: true }).fresh,
       'refusing this would make the plan impossible to update at all',
+    ).toBe(true);
+  });
+
+  test('should refuse a code-only commit before it is made, not after', () => {
+    /**
+     * The second time this rule failed CI, and the one the first fix missed. A plan updated in
+     * HEAD and naming its parent is a *committed* state that is fine — and committing code on
+     * top of it without touching the plan produces a tree where the stamp names the
+     * grandparent and the latest commit did not update it, which is the code-only-commit case
+     * this rule exists to refuse. CI then refused what precommit had approved.
+     *
+     * Caught on 27cdbf9. The first fix handled a **dirty** plan naming the parent; this is a
+     * **clean** one, with other files staged.
+     */
+    const result = stamp({ planChangedInWorkingTree: false, dirtyWorkingTree: true });
+    expect(
+      result.fresh,
+      'committing code without re-verifying the plan is the drift the rule is for, and it must be refused at the desk',
+    ).toBe(false);
+    expect(result.reason, 'and the refusal must name the head to stamp').toContain('bbbbbbb');
+  });
+
+  test('should stay quiet about a clean tree nobody is committing', () => {
+    // Asking whether the plan is current must not be refused just for asking. A check that
+    // rejects a question it was not asked is worse than one that answers it.
+    expect(
+      stamp({ planChangedInWorkingTree: false, dirtyWorkingTree: false }).fresh,
+      'a committed state that is fine reads as fine',
     ).toBe(true);
   });
 

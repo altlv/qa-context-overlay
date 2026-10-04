@@ -127,6 +127,10 @@ try {
 // Staged and unstaged both: either way the file is part of the commit being prepared, whose
 // parent will be HEAD — so a stamp of HEAD's parent is stale by one. Without this the check
 // approved `3b8cea1` and CI then refused it.
+// Whether a commit is being prepared at all. A clean tree is somebody asking whether the plan
+// is current; a dirty one is somebody about to commit, and that is when the plan must name HEAD.
+const dirtyWorkingTree = git('status', '--porcelain') !== '';
+
 const planChangedInWorkingTree = git('status', '--porcelain', '--', '.ai/state/PLAN.md') !== '';
 
 const recorded = /Head is `([0-9a-f]+)`/.exec(readFileSync('.ai/state/PLAN.md', 'utf8'))?.[1];
@@ -136,6 +140,7 @@ const planStatus = planFreshness({
   parent,
   planChangedInHead,
   planChangedInWorkingTree,
+  dirtyWorkingTree,
 });
 if (!planStatus.fresh) {
   fail('PLAN.md is not current', planStatus.reason);

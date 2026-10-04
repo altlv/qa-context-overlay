@@ -145,6 +145,17 @@ export interface PlanStamp {
    * this file, so the gap had been open for as long as the rule has.
    */
   planChangedInWorkingTree: boolean;
+  /**
+   * Whether **anything** is staged or modified — i.e. whether a commit is actually being
+   * prepared.
+   *
+   * Without it this check could not tell "about to commit code without the plan" from "just
+   * looking at a clean tree", and refusing the second would make the command unusable for
+   * asking whether the plan is current. Undefined means the caller did not say, and the
+   * permissive reading is taken — a check that refuses a question it was not asked is worse
+   * than one that answers it.
+   */
+  dirtyWorkingTree?: boolean;
 }
 
 /**
@@ -168,7 +179,8 @@ export interface PlanStamp {
  * where it costs a minute, to CI, where it costs a red build and a second commit.
  */
 export function planFreshness(stamp: PlanStamp): { fresh: boolean; reason: string } {
-  const { recorded, head, parent, planChangedInHead, planChangedInWorkingTree } = stamp;
+  const { recorded, head, parent, planChangedInHead, planChangedInWorkingTree, dirtyWorkingTree } =
+    stamp;
   if (recorded === undefined) {
     return { fresh: false, reason: 'PLAN.md names no head — expected: Head is `<sha>`' };
   }
@@ -177,6 +189,31 @@ export function planFreshness(stamp: PlanStamp): { fresh: boolean; reason: strin
   }
   const sameAsParent = parent !== undefined && sameCommit(recorded, parent);
   if (sameAsParent && planChangedInHead && !planChangedInWorkingTree) {
+    /**
+     * Fresh as a **committed** state and stale as a **pending** one, which is the distinction
+     * that let this rule fail CI twice.
+     *
+     * The committed tree at HEAD is fine: the plan was updated in HEAD and names its parent. But
+     * a commit made from here with the plan untouched produces a tree where the stamp names the
+     * grandparent and the latest commit did not update the plan — the code-only-commit case this
+     * rule exists to refuse. CI then refuses what this command had just approved, which is the
+     * worst thing a pre-commit check can do.
+     *
+     * It happened on `3b8cea1` with a dirty plan, which `planChangedInWorkingTree` fixed, and
+     * again on `27cdbf9` with a clean one, which it did not. So the honest form of the check is
+     * about the commit being prepared rather than the one that exists: **the plan must be part of
+     * it and must name HEAD.** That is also what this file's own first line asks for — before
+     * every commit, every fact re-verified — so the rule and the doctrine now agree.
+     */
+    if (dirtyWorkingTree === true) {
+      return {
+        fresh: false,
+        reason:
+          `it names ${recorded}, which is HEAD's parent, and this commit does not touch it. ` +
+          `Once committed, ${recorded} becomes the grandparent and the plan reads as left behind ` +
+          `— the code-only-commit case. Re-verify it and name ${head} as the head.`,
+      };
+    }
     return { fresh: true, reason: `updated in HEAD ${head}, stamped with its parent` };
   }
   if (sameAsParent && planChangedInHead && planChangedInWorkingTree) {
