@@ -21,6 +21,22 @@ import { freePort } from '../../src/qe/run-worktree.js';
 
 const PAGE = 'data:text/html,<main><button>Open cart</button></main>';
 
+/**
+ * The same page with navigation of its own, for the arrival test.
+ *
+ * `PAGE` alone cannot carry one: `<main>` holds every control in that document, so a panel
+ * appended to it is not a *part* of the page but the whole of it — and `classifyArrival` now says
+ * so, correctly. This test asserted an `inline` arrival against that fixture and passed until the
+ * proportional guard landed, which makes the fixture the defect and not the guard.
+ *
+ * It is the same mistake the unit test made with `header` and `footer` under `body`, and the same
+ * one academybugs exposed live: a fixture simple enough to reason about is often simple enough to
+ * be unlike any page. Four links outside `main` are the minimum that makes the panel a part.
+ */
+const PAGE_WITH_NAV =
+  'data:text/html,<nav><a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>' +
+  '<a href="/d">D</a></nav><main><button>Open cart</button></main>';
+
 async function sharedBrowser() {
   const port = await freePort();
   const endpoint = `http://127.0.0.1:${port}`;
@@ -45,7 +61,7 @@ test.describe('the harness and the agent share one browser', () => {
     try {
       const context = driver.contexts()[0]!;
       const page = context.pages()[0] ?? (await context.newPage());
-      await page.goto(PAGE);
+      await page.goto(PAGE_WITH_NAV);
 
       const first = await observer.observe();
       expect(first, 'the observer must be able to read a page it did not open').not.toBeNull();
@@ -79,7 +95,7 @@ test.describe('the harness and the agent share one browser', () => {
        * modal would be the failure worth catching.
        */
       expect(second?.arrival?.container, 'the deepest element both arrivals sit inside').toBe(
-        'html:nth-child(1) > body:nth-child(2) > main:nth-child(1)',
+        'html:nth-child(1) > body:nth-child(2) > main:nth-child(2)',
       );
       expect(
         await page.locator(second!.arrival!.container).evaluate((el) => el.tagName),

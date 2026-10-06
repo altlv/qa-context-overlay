@@ -6,6 +6,7 @@ import { StateModel, stateKey } from '../../src/qe/state-model.js';
 import {
   announcedWithin,
   classifyArrival,
+  commonContainer,
   coversContent,
   describeSurface,
 } from '../../src/tools/surfaces.js';
@@ -363,6 +364,73 @@ test.describe('what kind of surface arrived', () => {
       describeSurface(arrival!.classification),
       'and the line a person reads must say the lifetime was paid for',
     ).toContain('went away with nobody acting');
+  });
+
+  test('should refuse to name a page change as a surface on a realistically nested page', async ({
+    page,
+  }) => {
+    /**
+     * **The depth guard was not enough, and this is the fixture that shows it.** The test above
+     * puts the arrivals in `header` and `footer` directly under `body`, so they share only
+     * `html > body` and the three-step guard refuses them. No real site is built that way.
+     *
+     * Measured live against academybugs on 2026-10-05: a transition of `53 appeared, 30 gone, 3
+     * changed` was classified `inline`. It is WordPress, so everything hangs under
+     * `body > div#page > div#content`, and fifty-three unrelated arrivals still share a four-step
+     * prefix. The rule held in the test and not on the web, which makes the test the problem.
+     *
+     * The question that does work is proportional: a surface is a *part* of the page, so a
+     * container holding essentially every control in the document is the document.
+     */
+    await page.setContent(`<!doctype html><body><div id="page"><div id="content">
+      <nav id="top"></nav>
+      <main style="height:600px"><p>page content</p></main>
+      <div id="rail"></div>
+    </div></div></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        document.getElementById('top')!.innerHTML =
+          '<a href="/one">One</a><a href="/two">Two</a><a href="/three">Three</a>';
+        document.getElementById('rail')!.innerHTML =
+          '<button>Filter</button><button>Sort</button><a href="/four">Four</a>';
+      }),
+    );
+
+    expect(paths.length, 'six controls really did arrive, all over the page').toBe(6);
+    expect(
+      commonContainer(paths),
+      'and they share a deep prefix, so depth cannot refuse them',
+    ).not.toBeNull();
+    expect(
+      await classifyArrival(page, paths),
+      'but the container holds every control in the document, so it is the page and not a surface',
+    ).toBeNull();
+  });
+
+  test('should still name a real surface on the same nesting', async ({ page }) => {
+    // Instrument liveness for the proportional guard. A check that refused everything on a
+    // nested page would make the whole classifier dead on the real web, which is worse than the
+    // bug it fixes.
+    await page.setContent(`<!doctype html><body><div id="page"><div id="content">
+      <nav><a href="/a">A</a><a href="/b">B</a><a href="/c">C</a><a href="/d">D</a></nav>
+      <main style="height:600px"><p>page content</p><button>Buy</button></main>
+      <div id="host"></div>
+    </div></div></body>`);
+
+    const paths = await arrivedPaths(page, () =>
+      page.evaluate(() => {
+        document.getElementById('host')!.innerHTML =
+          '<div style="position:fixed;top:0;left:0;width:300px;height:300px;background:#eee">' +
+          '<button>Profile</button><button>Sign out</button></div>';
+      }),
+    );
+    const arrival = await classifyArrival(page, paths);
+
+    expect(
+      arrival?.classification.kind,
+      'the page keeps its own controls outside the panel, so the panel is a part and not the whole',
+    ).toBe('popover');
   });
 
   test('should refuse to name a page change as a surface', async ({ page }) => {

@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `1672d16` — the commit this file was last checked against. A file cannot name
+Head is `dce8ad1` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -1107,7 +1107,7 @@ reach for. This one writes into a subject’s checkout and calls `git clean`, an
 agent’s to do — the precommit obligation says a new command _usually_ belongs in TOOLBOX, and this
 is the exception, recorded here so it does not read as an omission.
 
-### No agent run could start against seven of the nine subjects — found 2026-10-05
+### A URL in `sourceRepo` makes a subject unrunnable — found 2026-10-05
 
 Found by **attempting** item 30 against `academybugs`, which died before the preflight, the
 browser or the agent:
@@ -1133,15 +1133,85 @@ before the field existed. A local path that is **not** a checkout is now a refus
 config line, via `isGitCheckout` in `run-worktree.ts`, rather than git’s `Invalid argument` under
 a node stack trace. `academybugs` preflights clean.
 
+#### The scope claim was overstated, and dce8ad1 carries it
+
+That commit says **"no agent run could start against seven of the nine subjects."** Verified: the
+bad resolve is reached for `academybugs` and for `polymer-shop`, and `academybugs` crashed on it
+today before its preflight. **Not verified: that this ever blocked the other six.**
+
+`sessions/polymer-shop/exploratory-tester-2026-09-25T22-26-43-608Z` is a complete run — gate PASS,
+13 defects, 4.1231 — made on 2026-09-25 with that config and with the crash path already
+committed on 2026-09-24. Its gate record names its report as `<repo>artifactspolymer-shop
+eport.md`,
+inside this repository rather than a run worktree, so it reached the runner differently from the
+runs made today. **Why is unexplained**, and no mechanism is claimed here.
+
+So the defect is real and reproducible and the fix stands; the sentence about seven subjects is a
+scope claim built from reading one config field across nine files rather than from running any of
+them. The hazard below, committed into a commit message — which is the one place a correction
+cannot be edited in afterwards.
+
 **This is the strongest argument in this file for item 30 and item 77 both.** Two items have sat
 unpaid for a fortnight on the grounds that a live run costs money, and the first live attempt
 against an unused subject found a defect that silently disabled three quarters of the subject
 list. The capability table said eight roles over five subjects; it could not have been eight
 roles over most of these five.
 
+### Item 30, attempt two — and two findings worth more than the attempt
+
+`AGENT_TIMEOUT_MS` was raised from 280s to 480s, with turns and spend left to the role and the
+tier. Arms 1 and 2 were **not** re-run: both stopped on `spend limit` at 214s and 243s, so the
+clock never bound them and a longer one cannot change their outcome. That saved two sessions and
+is stated here because comparing arms run under different clocks is only legitimate while the
+clock is not the thing that stopped them.
+
+**Arm 3 timed out again — 483s of 480s, `0 turns, cost unmeasured`.** So the clock was not the
+cause. The deeper problem is this:
+
+#### A run that never receives a result message is unbounded by spend
+
+`Budget.record()` is driven by messages. No message means no cost recorded, which means neither
+`exceeded()` nor `wouldExceed()` can fire. Arm 3 did real work both times — 3 states, 5
+state-changing actions, 25 tool calls on the first attempt — and spent real money in an **unknown
+amount**, with the $1 cap never engaging. The only thing that stopped it was the wall clock.
+
+This is worse than item 49 and distinct from it. Item 49 is that the cap is a trailing stop and
+overshoots; this is that the cap **does not apply at all** to a run shaped like arm 3 — and
+therefore that raising `AGENT_TIMEOUT_MS` widens the window in which spending is unbounded, which
+is the opposite of what an operator raising it expects. Two runs, same shape, same result, so it
+is not a one-off; the mechanism is read from the code and not yet proven by instrumenting a run,
+and that is the next step rather than a conclusion.
+
+Arms 1 and 2 reported cost normally, and the only difference between them and arm 3 is `--scan`.
+Why that changes whether result messages arrive is not established.
+
+#### The surface classifier called a page change a surface — found live, same day
+
+Against academybugs: `53 appeared, 30 gone, 3 changed` → `surface: inline`. That is exactly the
+outcome `commonContainer`'s depth guard was written to prevent, and the guard did not hold.
+
+It refuses a prefix shorter than three steps, reasoning that scattered arrivals share only
+`html > body`. True of the fixture, false of the web: academybugs is WordPress and nests
+everything under `body > div#page > div#content`, so fifty-three unrelated arrivals share a
+four-step prefix. **The unit test put `header` and `footer` directly under `body`, which no real
+site does — so the test passed and the rule did not hold.** The same fixture mistake was in the
+CDP integration test, where `<main>` held every control in the document and a panel appended to
+it was asserted to be an `inline` arrival.
+
+Depth was the wrong question. A surface is a _part_ of the page, so the test is proportional:
+`holdsMostOfPage` refuses a container holding 90% or more of the document’s controls, whatever its
+nesting. A wrapper measures at or near 1.0; a panel over a page that keeps its own navigation
+measures well under half. The threshold is a judgement and is named in the code rather than
+buried. Both fixtures are now realistically nested, and the guard is proven load-bearing by
+poisoning it.
+
+**The lesson is about fixtures, not about surfaces.** A fixture simple enough to reason about is
+often simple enough to be unlike any page, and a rule tested only against one is untested. This
+is the hazard below pointed at test data: the test measured something adjacent to the claim.
+
 ### A standing hazard, recorded because it is now a pattern
 
-**Seven times across these sessions** — the count was four when this was written and three more
+**Nine times across these sessions** — the count was four when this was written and three more
 followed, including two false gaps in the list above, a `sed` range that could not contain what it
 was used to prove absent, and a test fixture whose shape mismatch was hidden by `as never`. I
 measured something **adjacent** to the thing I was claiming, and
@@ -1158,6 +1228,28 @@ records against the coverage briefing, where a module namespace was passed where
 wanted and ten survivors read as a clean bill. The guard that would have caught all four: before
 believing a measurement, check that the instrument can produce the _opposite_ result — a state key
 that can never differ, a selector set that can never match, a write that can never fail.
+
+**Two more on 2026-10-05, and the second is the worst form of it yet.**
+
+`spawnSync`'s default 1 MB `maxBuffer` truncated a 7.5 MB `git show`, and `bug-replay` reported
+`would-not-revert — its diff could not be read` for all three commits. A harness limit wearing a
+finding's clothes: the verdict was in the right column, so nothing was _wrong_ on the face of it,
+and it was caught only because the reason was too vague to believe. Had the message been more
+confident it would have been recorded as a fact about the subject.
+
+Then: **an unset `ANTHROPIC_API_KEY` in one shell, reported to the user as "I cannot verify
+credentials", with a spending decision put to them on that basis.** It was false — this project
+authenticates by OAuth, `client.ts` carries an explicit warning against pre-checking that
+variable, and `.env.example` calls the key "OPTIONAL, and not the route to reach for". One turn
+through `runAgent` with no tools answered it for a fraction of a cent. The user had to say so
+twice.
+
+That one is worse than the others because the adjacent measurement was used to **stop work and
+ask for a decision**, so the error propagated to the person instead of into a file. The guard is
+unchanged and now also applies to statements about what cannot be done: run the cheapest thing
+that would prove it can, and if there is none, name the check performed rather than the
+conclusion. "No key in my shell" and "no credentials" are different sentences. Trap recorded in
+`HANDOFF.md`.
 
 ## Work queue
 
@@ -1340,7 +1432,7 @@ Three separate problems, and conflating them is the trap:
 | 72 | **"The human baseline is never edited" has no mechanism.** The unit run added 120 lines to the subject's own `test/searchIndex.test.js` rather than writing a new file | — | The file guard confines writes to the worktree, and inside the worktree the baseline is just another file. The gate is the component holding the pre-change revision, so the check belongs there: a problem when the diff modifies a pre-existing test file, unless the run is an improve/remove run declaring §9's grounds. Until then the comparison is the agent's edits against the unmodified baseline — an honest 12 → 14 of 20, but not the two-file comparison E1 describes |
 | 73 | **The assertion floor attributes inherited holes to the run.** Its two findings on the unit run are the human file's own `conditional-only` tests, pushed down 120 lines by the agent's insertions | — | The gate holds the base revision, so it can say which holes a run inherited and which it wrote — and that distinction is what makes §9's strength delta usable rather than noise. A run that fixes an inherited hole should be credited for it, which is the "improve" capability the floor currently cannot see. The rollout for the remaining roles — what each inherits, the tools they still need, and the schedule — is `.ai/state/POC-CODER-ROLLOUT.md`, named to the exempt pattern on purpose: a plan names paths that do not exist yet, and `npm run precommit` checks every tracked `.md` except `PLAN.md` and `POC-*.md`. That exemption is also why the first version passed at commit time and failed the moment it became tracked — the check reads tracked files only, so it cannot see the document a commit is about to add |
 
-| 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts` derives a kind from observed properties, and as of the same day it is called after every action in a run.** Occlusion is taken as an input from the scanner for the control-side question and asked of the surface for the culprit-side one; focus trapping and lifetime are observed. Proven role-independent for `modal` and `popover` with the roles deleted, and proven live over CDP against a page another client changed | — | **Nothing acts on a classification.** The label is printed and summarised; no planning prefers an untried control inside a modal, and an unnameable surface is reported rather than pursued — that junction is 83. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas. A surface arriving with no interactive controls produces no arrival at all, by construction |
+| 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts` derives a kind from observed properties, and as of the same day it is called after every action in a run.** Occlusion is taken as an input from the scanner for the control-side question and asked of the surface for the culprit-side one; focus trapping and lifetime are observed. Proven role-independent for `modal` and `popover` with the roles deleted, and proven live over CDP against a page another client changed. **Its depth guard did not hold on a real page and was replaced by a proportional one on 2026-10-05 — see the section above** | — | **Nothing acts on a classification.** The label is printed and summarised; no planning prefers an untried control inside a modal, and an unnameable surface is reported rather than pursued — that junction is 83. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas. A surface arriving with no interactive controls produces no arrival at all, by construction |
 | 81 | **One concept, three definitions — twice.** The control selector list is written out three times (`INTERACTIVE` in `src/tools/heal.ts`, `INTERACTIVE` in `src/tools/reveal.ts`, and a third copy inline in the `page.evaluate` in `src/tools/page-scanner.ts`), and the accessible name is computed three times (`src/tools/accessible-name.ts`, plus inline in both of the others). Nothing holds either set to the others | — | The three selector copies carry the same twelve selectors today by coincidence of maintenance, not by construction: widen one and the map, the state count and the hover sweep disagree about what a control **is**. The name triplication has **already** produced a disagreement — the a11y blind-spot join reported 12 missed controls on academybugs where an independent probe found 13, on the same page, because the two implementations differ. Harmless only until it matters: the name is the join key between two element sources, so drift there corrupts the thing that detects drift |
 | 82 | **`ScannedElement.role` is the raw attribute while `defaultRole` derives the real one three lines away.** Null for a plain `<a>` or `<button>` | — | It has already cost once: joining the accessibility tree against it reported **79** blind spots on academybugs against a measured 13, because every ordinary link read as missing. That was fixed at the one call site rather than at the field. Checked on 2026-10-03: nothing else reads it — consumers use `affordance`, which is computed from the derived role — so this is a **latent trap rather than an active bug**, and the next person to join on role hits exactly what I hit. Fix the field, not the next call site |
 | 83 | **`maxStates` is a ceiling while the state model now supports a frontier.** Edges, `triedFrom` and `routeTo` exist as of 2026-10-03; the count is still wired only to stopping | 4 | The two halves disagree about what the state count is _for_. A crawler's number steers; this one only refuses, which is why a session that hit the ceiling on Polymer Shop could report what it saw and not what it had left untried. The complement of `triedFrom` — moves not yet attempted — cannot be computed in the model, because only the driver knows what a state affords. That junction is E5c, and until something plans over the graph **no coverage claim about an app is defensible** |

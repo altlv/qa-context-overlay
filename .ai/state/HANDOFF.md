@@ -94,6 +94,23 @@ heuristics are separate tools that also support it. All are needed.
 
 Curated, not appended. Delete anything that stops being true.
 
+- **Credentials cannot be checked by looking for an environment variable, and "I cannot
+  verify this" is a claim that needs evidence like any other.** On 2026-10-05 a session
+  reported that item 30 could not run because `ANTHROPIC_API_KEY` was unset in its shell, and
+  put the spending decision to the user on that basis. The claim was false. `client.ts` already
+  carried the warning in so many words — _"do not pre-check for an API key. An earlier version
+  of this file gated every run on `ANTHROPIC_API_KEY` being set, which refuses to run for
+  anyone signed in through Claude Code"_ — and `.env.example` says the key is "OPTIONAL, and
+  not the route to reach for". The user had to say so twice. One turn through `runAgent` with
+  no tools answered it for a fraction of a cent: `AUTH OK`.
+
+  The documentation was not missing, so adding more of it is not the fix. The error was
+  **asserting an unavailability from an adjacent signal** — the same shape as every entry in
+  PLAN.md's standing-hazard list, applied to the environment instead of to the product. Before
+  telling anyone that something cannot be done, run the cheapest thing that would prove it can,
+  and if no such thing exists, say which check was actually performed rather than naming the
+  conclusion. "No key in my shell" and "no credentials" are different sentences.
+
 - **A guard is only proven by a refusal it made in a live run.** The browser guard was
   wired as `canUseTool`, a permission handler, and listed as proven. Every run uses
   `bypassPermissions`, which the SDK's own types describe as "Bypass all permission

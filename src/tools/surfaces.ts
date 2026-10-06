@@ -454,8 +454,54 @@ export async function classifyArrival(
 ): Promise<Arrival | null> {
   const container = commonContainer(paths);
   if (container === null) return null;
+  // A surface is a *part* of the page. See `holdsMostOfPage`.
+  if (await holdsMostOfPage(page, container)) return null;
   const properties = await observeSurface(page, container, options);
   return { container, properties, classification: classifySurface(properties) };
+}
+
+/**
+ * Whether this "surface" is really the page.
+ *
+ * **The depth guard in `commonContainer` was not enough, and a live run proved it the same day it
+ * was written.** Against academybugs on 2026-10-05 a transition of `53 appeared, 30 gone, 3
+ * changed` — a page re-render by any reading — was classified `inline`, which is precisely the
+ * outcome the depth guard exists to prevent. The guard refuses a prefix shorter than three steps,
+ * on the reasoning that scattered arrivals share only `html > body`. That is true of the fixture
+ * the unit test used and false of the web: academybugs is WordPress and nests everything under
+ * `html > body > div#page > div#content`, so fifty-three unrelated arrivals still share a
+ * four-step prefix and the prefix is not `body`.
+ *
+ * **Depth was the wrong question.** A surface is a part of the page, so the test is proportional:
+ * if the container holds essentially every control in the document, it *is* the document, whatever
+ * its nesting. A modal leaves the page's own navigation and links outside itself and so holds a
+ * small share; a content wrapper holds all of it.
+ *
+ * The threshold is a judgement and is named rather than hidden. 0.9 was chosen because the two
+ * cases are far apart in practice — a wrapper measures at or near 1.0, and a surface arriving over
+ * a page that keeps its own controls measures well under half — so anything in between is a shape
+ * worth a person's attention rather than a confident label, and `classifyArrival` returning null
+ * is how it asks for one.
+ */
+export async function holdsMostOfPage(page: Page, container: string): Promise<boolean> {
+  try {
+    const share = await page.evaluate(
+      ([selector, controls]: [string, string]) => {
+        const host = document.querySelector(selector);
+        if (host === null) return 0;
+        const all = document.querySelectorAll(controls).length;
+        if (all === 0) return 0;
+        return host.querySelectorAll(controls).length / all;
+      },
+      [container, INTERACTIVE_SELECTOR] as [string, string],
+    );
+    return share >= 0.9;
+  } catch {
+    // Unreadable mid-navigation. False means "not shown to be the page", which lets the
+    // classification proceed and be judged on its properties — the same direction the rest of
+    // this module fails in.
+    return false;
+  }
 }
 
 /**

@@ -12,35 +12,43 @@ browser through Playwright MCP, with three things laid over the app under test:
 its environment permits, enforced as tools it does not hold, and the **QA** checks that
 decide whether the result proves anything.
 
-| Capability                                        | Status                                   | Entry point                      |
-| ------------------------------------------------- | ---------------------------------------- | -------------------------------- |
-| Network capture                                   | built                                    | `src/capture/network.ts`         |
-| Page scanner + testability audit                  | built                                    | `src/tools/page-scanner.ts`      |
-| Test quality gate                                 | built                                    | `src/quality/assertions.ts`      |
-| Release gate verdict                              | built                                    | `src/qe/gate.ts`                 |
-| Failure triage agent                              | built, unverified against live API       | `src/agents/triage.ts`           |
-| Agent roles — coding family and testing family    | driven: 5 of 8, over 5 subjects          | `src/agents/roles.ts`            |
-| Self-healing selectors                            | built                                    | `src/tools/heal.ts`              |
-| Test ideas from a scan, heuristics catalogue      | built, reaches a run via the driver      | `src/qe/test-ideas.ts`           |
-| Driver (E5a) — candidate actions under a policy   | built, reaches a live session            | `src/qe/driver.ts`               |
-| State model (E5b) — shared browser over CDP       | built, has refused a live session        | `src/qe/state-model.ts`          |
-| Accessibility tree as a second element source     | built, in every scan                     | `src/tools/aria.ts`              |
-| Inside the frames — a third element source        | built, live on demoqa                    | `src/tools/frames.ts`            |
-| What the page says — announcements projection     | built, in every state key                | `src/tools/announcements.ts`     |
-| What kind of surface arrived, derived not matched | built, reported after every action       | `src/tools/surfaces.ts`          |
-| Flake rate across archived runs                   | built, needs the archive to fill         | `src/qe/flake-rate.ts`           |
-| Role runner — preflight, guards, worktree, gate   | drives every run                         | `src/cli/role.ts`                |
-| Fault check — does a spec notice a 500            | built                                    | `src/cli/fault-check.ts`         |
-| Process fault — does a subject test notice        | built, a gate step for two subjects      | `src/qe/process-fault.ts`        |
-| Subject test stack — a subject's own runner       | built, two subjects declare one          | `src/qe/test-stack.ts`           |
-| Source map — units, callers, what tests point at  | built                                    | `src/quality/repomap.ts`         |
-| Assertion floor for a non-Playwright suite        | built                                    | `src/quality/assertion-floor.ts` |
-| Mutation comparator — a suite against a set       | built, a gate step for two subjects      | `src/qe/mutation-compare.ts`     |
-| Known defects — a test that fails for the product | built, a gate step for every subject     | `src/qe/known-defect.ts`         |
-| Replay a real fix from a subject's history        | built, 3 of 10 replayable on one subject | `src/qe/bug-replay.ts`           |
+| Capability                                        | Status                                                     | Entry point                      |
+| ------------------------------------------------- | ---------------------------------------------------------- | -------------------------------- |
+| Network capture                                   | built                                                      | `src/capture/network.ts`         |
+| Page scanner + testability audit                  | built                                                      | `src/tools/page-scanner.ts`      |
+| Test quality gate                                 | built                                                      | `src/quality/assertions.ts`      |
+| Release gate verdict                              | built                                                      | `src/qe/gate.ts`                 |
+| Failure triage agent                              | built, unverified against live API                         | `src/agents/triage.ts`           |
+| Agent roles — coding family and testing family    | some have never run — `npm run sessions`                   | `src/agents/roles.ts`            |
+| Self-healing selectors                            | built                                                      | `src/tools/heal.ts`              |
+| Test ideas from a scan, heuristics catalogue      | built, reaches a run via the driver                        | `src/qe/test-ideas.ts`           |
+| Driver (E5a) — candidate actions under a policy   | built, reaches a live session                              | `src/qe/driver.ts`               |
+| State model (E5b) — shared browser over CDP       | built, has refused a live session                          | `src/qe/state-model.ts`          |
+| Accessibility tree as a second element source     | built, in every scan                                       | `src/tools/aria.ts`              |
+| Inside the frames — a third element source        | built, live on demoqa                                      | `src/tools/frames.ts`            |
+| What the page says — announcements projection     | built, in every state key                                  | `src/tools/announcements.ts`     |
+| What kind of surface arrived, derived not matched | built, reported after every action                         | `src/tools/surfaces.ts`          |
+| Flake rate across archived runs                   | built — prints its run count before any figure             | `src/qe/flake-rate.ts`           |
+| Role runner — preflight, guards, worktree, gate   | drives every run                                           | `src/cli/role.ts`                |
+| Fault check — does a spec notice a 500            | built                                                      | `src/cli/fault-check.ts`         |
+| Process fault — does a subject test notice        | built, a gate step where a subject declares an entry point | `src/qe/process-fault.ts`        |
+| Subject test stack — a subject's own runner       | built, used where a subject declares one                   | `src/qe/test-stack.ts`           |
+| Source map — units, callers, what tests point at  | built                                                      | `src/quality/repomap.ts`         |
+| Assertion floor for a non-Playwright suite        | built                                                      | `src/quality/assertion-floor.ts` |
+| Mutation comparator — a suite against a set       | built, a gate step where a subject declares a set          | `src/qe/mutation-compare.ts`     |
+| Known defects — a test that fails for the product | built, a gate step for every subject                       | `src/qe/known-defect.ts`         |
+| Replay a real fix from a subject's history        | built — `--candidates` ranks what is replayable            | `src/qe/bug-replay.ts`           |
 
 Do not add placeholder modules for the planned items. Build one end to end when it
 is wanted.
+
+**No counts in that table.** It is read at the start of every session and re-verified by
+nobody, so "a gate step for two subjects" or "5 of 8 roles" is a claim that rots in place and
+is then believed — the failure `PLAN.md` opens by warning about. A status here says what a
+thing _is_ and names the command that prints the current number: `npm run sessions` for which
+roles have run, `npm run bug-replay -- --candidates` for what history is replayable,
+`npm run flake-rate` for how many runs are archived. Dated measurements belong in `PLAN.md`
+and `docs/`, where a reader can see how old they are.
 
 ## Non-negotiables
 
