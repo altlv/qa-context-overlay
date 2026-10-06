@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
-import { Budget } from './budget.js';
+import { Budget, tokensIn } from './budget.js';
 import { resolveModel } from './models.js';
 
 export interface AgentRunResult {
@@ -138,6 +138,30 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
       }
       // Keep the last assistant text, so a run that is cut short still returns what
       // it had reached rather than an empty string.
+      /**
+       * The only spend signal that arrives while the run is still going.
+       *
+       * Measured on 2026-10-06 by instrumenting this loop: a run emitted `system`, `assistant`
+       * and `rate_limit_event` messages and then **one** `result` at the end carrying
+       * `num_turns` and `total_cost_usd`. So the dollar limit had nothing to act on until the
+       * run was over — it is a post-mortem, not a bound, and the 35% overshoot recorded against
+       * it on 2026-09-20 is what that looks like from outside.
+       *
+       * `usage` rides on every assistant message, so a running total does exist. All four kinds
+       * are summed unweighted; weighting them by price would need a price table here, and the
+       * dollar conversion lives in `models.ts` as one measured rate instead.
+       *
+       * Cache tokens dominate: the measured run was 42,551 cache-creation tokens against 2
+       * input and 2 output. Leaving them out would undercount by three orders of magnitude and
+       * the ceiling would never fire.
+       */
+      if (message.type === 'assistant') {
+        // Summed by `tokensIn`, which is pure and tested. Inline, the cache-creation term —
+        // the one that carries almost the whole count — could be zeroed with every test
+        // still green, because nothing can reach into a `for await` over the SDK stream.
+        budget.record({ tokens: tokensIn(message.message.usage) });
+      }
+
       if (message.type === 'assistant') {
         const said = message.message.content
           .map((part) => (part.type === 'text' ? part.text : ''))

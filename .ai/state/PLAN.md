@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `dce8ad1` — the commit this file was last checked against. A file cannot name
+Head is `62b668b` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -1175,15 +1175,42 @@ cause. The deeper problem is this:
 state-changing actions, 25 tool calls on the first attempt — and spent real money in an **unknown
 amount**, with the $1 cap never engaging. The only thing that stopped it was the wall clock.
 
-This is worse than item 49 and distinct from it. Item 49 is that the cap is a trailing stop and
-overshoots; this is that the cap **does not apply at all** to a run shaped like arm 3 — and
-therefore that raising `AGENT_TIMEOUT_MS` widens the window in which spending is unbounded, which
-is the opposite of what an operator raising it expects. Two runs, same shape, same result, so it
-is not a one-off; the mechanism is read from the code and not yet proven by instrumenting a run,
-and that is the next step rather than a conclusion.
+#### Proven 2026-10-06, and worse than first written: the cap never bound **any** run
 
-Arms 1 and 2 reported cost normally, and the only difference between them and arm 3 is `--scan`.
-Why that changes whether result messages arrive is not established.
+Instrumented the SDK stream directly. One run emitted `system`, `assistant` and
+`rate_limit_event` messages throughout and then **one** `result num_turns=1 cost=0.13895` at the
+end. `client.ts` calls `record()` only on a `result`, so for the whole of every run `costUsd` is
+0, `worstTurnUsd` is 0, and `wouldExceed()` returns null by its own guard.
+
+So this was never about arm 3. **`AGENT_MAX_USD` has never stopped a run.** Item 49 called it a
+trailing stop that overshoots by 35%; it is a post-mortem, and the 35% was simply how far one run
+got before the final message arrived. Arms 1 and 2 looked bounded because their `result` arrived
+inside the clock and the check then aborted a run that had already finished. Arm 3 was killed by
+the clock first, so nothing was recorded and the report said `cost unmeasured` — honestly, which
+is the only reason any of this was noticed.
+
+**Fixed by bounding tokens instead.** `usage` rides on every assistant message, so a running
+total exists mid-flight: `tokensIn` sums the four kinds and `Budget.maxTokens` stops the run.
+Cache tokens are the whole of it — the measured message was 42,551 cache-creation tokens against
+2 input and 2 output — so omitting them would leave a ceiling that never fires.
+
+`models.ts` converts the operator’s dollars with `TOKENS_PER_USD`, **one measured dated number**
+rather than a price table, because a price table is the kind of claim `CLAUDE.md` now bans from
+its own status table. 42,551 tokens for $0.175568 is 242,362 per dollar, and it checks out
+independently: arm 1’s $0.9050 is 219,338 tokens at that rate, so a ceiling from its $1.00 limit
+would have bound it almost exactly where it stopped. It leans conservative for cache-read-heavy
+runs, which is the right direction to be wrong in.
+
+The banner no longer prints a bare dollar figure. It says `$1.00 as 242,362 tokens`, or
+`observed only at the end — NO spend bound in force` when there is no ceiling, because an
+operator reading a dollar sign as a bound sets the wrong number.
+
+**And the test that mattered most did not exist.** Poisoning the ceiling check and the
+accumulation each killed two tests; zeroing the **cache-creation term** — the one carrying three
+orders of magnitude — left all thirty-six green, because the summation was inline in a
+`for await` over the SDK stream where no test could reach it. That is the `unknown truths` rule
+turned on a limit: a bound that silently never fires is worse than none, since the banner claims
+it is there. `tokensIn` is now pure, exported and tested, and both poisons kill a test.
 
 #### The surface classifier called a page change a surface — found live, same day
 

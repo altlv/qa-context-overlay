@@ -22,25 +22,45 @@ export interface BudgetLine {
   /** What the run will actually enforce. */
   maxTurns: number;
   maxUsd: number;
+  /**
+   * The ceiling that can actually stop the run, derived from the dollars.
+   *
+   * Undefined means **no spend bound is in force at all**, which has to be said rather than
+   * left blank: cost reaches `Budget` only on the one `result` message the SDK emits at the
+   * end, so a run without this is bounded by turns and wall clock and by nothing else.
+   */
+  maxTokens?: number;
   timeoutSeconds: number;
   /** Spend is measured against a reference rather than capped. */
   measuringSpendOnly: boolean;
   /** Which limits an environment variable replaced. Each is said out loud. */
   overrodeTurns: boolean;
   overrodeUsd: boolean;
+  overrodeTokens: boolean;
   overrodeTimeout: boolean;
 }
 
 export function describeBudget(line: BudgetLine): string {
+  /**
+   * The dollar figure and what actually enforces it, in the same breath.
+   *
+   * Printing `$1.00` alone was true and misleading for every run this harness has made: the
+   * figure is a reference the run compares itself against at the end, and the token ceiling is
+   * what stops it. An operator who reads a dollar sign as a bound sets the wrong number — and
+   * one with no ceiling at all needs to know their run is bounded by the clock and nothing else.
+   */
   const spend = line.measuringSpendOnly
     ? `spend MEASURED not capped (reference $${line.maxUsd.toFixed(2)})`
-    : `$${line.maxUsd.toFixed(2)}`;
+    : line.maxTokens === undefined
+      ? `$${line.maxUsd.toFixed(2)} observed only at the end — NO spend bound in force`
+      : `$${line.maxUsd.toFixed(2)} as ${line.maxTokens.toLocaleString()} tokens`;
 
   const notes = [
     line.overrodeTurns
       ? `AGENT_MAX_TURNS overrides the role’s ${line.declaredTurns}`
       : `role asks ${line.declaredTurns} × ${line.tier}`,
     line.overrodeUsd ? 'AGENT_MAX_USD overrides the tier scale' : null,
+    line.overrodeTokens ? `AGENT_MAX_TOKENS overrides the converted ceiling` : null,
     // Only when it changes something. An override that lands on the value the role
     // already asked for is not news, and announcing it is the failure the test beside
     // this one pins: a banner that cries override on every run is one nobody reads, and

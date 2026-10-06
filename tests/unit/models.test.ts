@@ -5,6 +5,7 @@ import {
   TIER_BUDGET,
   budgetForTier,
   resolveModel,
+  TOKENS_PER_USD,
 } from '../../src/agents/models.js';
 
 /**
@@ -70,6 +71,9 @@ test.describe('tier budgets', () => {
     expect(budgetForTier('sonnet', 30, 1, 600)).toEqual({
       maxTurns: 30,
       maxUsd: 1,
+      // The dollar figure converted into the only spend bound that can stop a run mid-flight.
+      // Derived rather than declared, so it follows the dollars wherever they come from.
+      maxTokens: TOKENS_PER_USD,
       timeoutMs: 600_000,
     });
   });

@@ -25,6 +25,7 @@ const line = (over: Partial<BudgetLine> = {}): BudgetLine => ({
   measuringSpendOnly: false,
   overrodeTurns: false,
   overrodeUsd: false,
+  overrodeTokens: false,
   overrodeTimeout: false,
   ...over,
 });

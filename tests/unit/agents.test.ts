@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { Budget } from '../../src/agents/budget.js';
+import { Budget, tokensIn } from '../../src/agents/budget.js';
 import { isAuthFailure } from '../../src/agents/client.js';
 import { extractJson, triageVerdictSchema } from '../../src/agents/triage.js';
 import {
@@ -308,5 +308,155 @@ test.describe('auth failures — recognised, not thrown as a stack trace', () =>
       isAuthFailure(new Error('Maximum number of turns (30) reached')),
       'a budget stop must stay a budget stop, or the run reports the wrong cause',
     ).toBe(false);
+  });
+});
+
+test.describe('the only spend bound that can stop a run', () => {
+  /**
+   * **Proved by instrumenting the SDK stream on 2026-10-06**, not inferred: a run emitted
+   * `system`, `assistant` and `rate_limit_event` messages and then exactly one
+   * `result num_turns=1 cost=0.13895`. `client.ts` records cost only on that message, so for the
+   * whole of a run `costUsd` is 0 and `worstTurnUsd` is 0 — the dollar limit is a post-mortem and
+   * has never bounded anything, which is why `exploratory-tester` could spend an unmeasured amount
+   * against a $1.00 limit and be stopped only by the wall clock.
+   *
+   * Token usage rides on every assistant message, so a ceiling on it fires while the run is still
+   * going. These are the tests that the ceiling fires, and that it does not fire when absent.
+   */
+
+  test('should stop a run once the tokens are spent', () => {
+    const budget = new Budget({
+      maxTurns: 100,
+      maxUsd: 1,
+      timeoutMs: 600_000,
+      maxTokens: 1_000,
+    });
+
+    budget.record({ tokens: 400 });
+    expect(budget.exceeded(), 'under the ceiling, nothing to say').toBeNull();
+
+    budget.record({ tokens: 700 });
+    expect(
+      budget.exceeded(),
+      'and over it the run must end — this is the only spend-shaped limit that can',
+    ).toContain('token limit reached');
+  });
+
+  test('should accumulate rather than replace, because usage arrives per message', () => {
+    // `costUsd` is a running total the SDK reports once; tokens arrive in pieces. Assigning
+    // instead of adding would leave the ceiling reading the last message only, so a run of a
+    // thousand small messages would never reach any limit.
+    const budget = new Budget({ maxTurns: 100, maxUsd: 1, timeoutMs: 600_000, maxTokens: 300 });
+    for (let i = 0; i < 3; i += 1) budget.record({ tokens: 100 });
+
+    expect(budget.spent().tokens, 'three messages of a hundred are three hundred').toBe(300);
+    expect(budget.exceeded()).toContain('token limit reached');
+  });
+
+  test('should not bound a run that was given no ceiling', () => {
+    // The honest default. A ceiling invented in `Budget` would bound every caller at once, which
+    // is the mistake `.env.example` records against `AGENT_MAX_TURNS` — so absence means
+    // unbounded, and the banner says so in words rather than printing a dollar figure that
+    // enforces nothing.
+    const budget = new Budget({ maxTurns: 100, maxUsd: 1, timeoutMs: 600_000 });
+    budget.record({ tokens: 10_000_000 });
+
+    expect(
+      budget.exceeded(),
+      'no ceiling was asked for, so none is enforced — and the line must not claim one',
+    ).toBeNull();
+  });
+
+  test('should treat a ceiling of zero as no ceiling, not as a ceiling of nothing', () => {
+    // `AGENT_MAX_TOKENS=` unset reads as 0, and a 0 ceiling would abort every run on its first
+    // message while looking exactly like a limit that works.
+    const budget = Budget.fromEnv({ maxTurns: 5, maxUsd: 1, timeoutMs: 600_000 });
+
+    expect(
+      budget.limits.maxTokens,
+      'omitted rather than zeroed, or the first message of every run would end it',
+    ).toBeUndefined();
+  });
+
+  test('should keep the dollar figure reporting even though it cannot bound', () => {
+    // Still enforced *after* the fact, and still worth having: it is how a run says what it
+    // actually cost. What changed is the claim made for it, not the arithmetic.
+    const budget = new Budget({ maxTurns: 100, maxUsd: 1, timeoutMs: 600_000 });
+    budget.record({ costUsd: 1.5 });
+
+    expect(budget.exceeded()).toContain('spend limit reached');
+  });
+
+  test('should report tokens alongside cost, so the conversion can be re-derived', () => {
+    // `TOKENS_PER_USD` in `models.ts` is one measurement. It stays checkable only while every
+    // run prints both halves of the pair it was derived from.
+    const budget = new Budget({ maxTurns: 100, maxUsd: 1, timeoutMs: 600_000 });
+    budget.record({ tokens: 42_551 });
+    budget.record({ costUsd: 0.175568 });
+
+    const spent = budget.spent();
+    expect(spent.tokens, 'the token half of the pair TOKENS_PER_USD was measured from').toBe(
+      42_551,
+    );
+    expect(
+      spent.costUsd,
+      'and the dollar half — without both, that constant stops being checkable',
+    ).toBeCloseTo(0.175568, 6);
+  });
+});
+
+test.describe('counting what a message was billed for', () => {
+  /**
+   * **These exist because a poison test walked through the summation untouched.** Zeroing the
+   * cache-creation term left all thirty-six tests green: they exercise `Budget`, while the
+   * arithmetic lived inline in a `for await` over the SDK stream where nothing could reach it.
+   * That term carries almost the entire count, so zeroing it makes the ceiling never fire — and a
+   * limit that silently never fires is worse than none, because the banner claims it is there.
+   */
+
+  test('should count the cache tokens that carry almost the whole bill', () => {
+    // The shape measured on 2026-10-06, verbatim: cache creation dominates by three orders of
+    // magnitude. A count that leaves it out reads as 4 instead of 42,555.
+    expect(
+      tokensIn({
+        input_tokens: 2,
+        output_tokens: 2,
+        cache_creation_input_tokens: 42_551,
+        cache_read_input_tokens: 0,
+      }),
+      'cache creation is the term the ceiling depends on',
+    ).toBe(42_555);
+  });
+
+  test('should count a cache read, which a warm prompt is almost entirely made of', () => {
+    expect(
+      tokensIn({
+        input_tokens: 5,
+        output_tokens: 10,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 30_000,
+      }),
+      'a session that re-reads a warm prompt bills almost entirely here',
+    ).toBe(30_015);
+  });
+
+  test('should survive the nulls the API actually sends', () => {
+    // Two of the four are `number | null`, and a run with no cache writes sends null rather than
+    // omitting the field. `null + 5` is 5, but `undefined + 5` is NaN — and NaN exceeds no
+    // ceiling, so the bound would vanish on exactly the runs that have no cache.
+    const counted = tokensIn({
+      input_tokens: 7,
+      output_tokens: 3,
+      cache_creation_input_tokens: null,
+      cache_read_input_tokens: null,
+    });
+
+    expect(Number.isNaN(counted), 'a NaN total is an absent ceiling').toBe(false);
+    expect(counted).toBe(10);
+  });
+
+  test('should treat a missing field as nothing rather than as NaN', () => {
+    expect(tokensIn({ input_tokens: 4 }), 'the shape can change under us').toBe(4);
+    expect(tokensIn({}), 'and an empty usage is zero, not NaN').toBe(0);
   });
 });

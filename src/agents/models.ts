@@ -105,16 +105,42 @@ export function resolveModel(raw: string | undefined = process.env.HARNESS_MODEL
  * 180-second limit, while the coder method alone asked for a scan, a test run and a
  * mutation run.
  */
+/**
+ * Tokens an operator’s dollar gets, so a dollar limit can be converted into the one spend
+ * bound that can stop a run mid-flight. **Measured, not priced.**
+ *
+ * A price table in this repository would be four numbers per tier that change without anything
+ * here noticing, which is the kind of claim `CLAUDE.md` now bans from its own status table. This
+ * is one number, taken from one run, with the run recorded: on 2026-10-06 a sonnet run billed
+ * 42,551 tokens for $0.175568, which is 242,362 tokens per dollar. It checks out against a
+ * second, independent run — `exploratory-tester` against academybugs spent $0.9050, which at this
+ * rate is 219,338 tokens, and a ceiling derived from its $1.00 limit would have bound it at
+ * almost exactly the point it stopped.
+ *
+ * **It is one shape of run and it leans conservative.** That run was cache-*write* dominated,
+ * and a cache write costs several times a cache read, so a session that mostly re-reads a warm
+ * prompt gets far more tokens per dollar than this and will hit the ceiling before its money is
+ * gone. Stopping early costs a partial session; stopping late costs money nobody authorised, so
+ * that is the direction to be wrong in — the same reasoning `Budget.wouldExceed` was written
+ * with. Not tier-scaled for the same reason it is not a price table: one measurement is honest
+ * about being one measurement, and three guesses would not be.
+ *
+ * Re-derive it from any run: the summary prints tokens and cost together for exactly that.
+ */
+export const TOKENS_PER_USD = 242_362;
+
 export function budgetForTier(
   tier: ModelTier,
   declaredTurns: number,
   baseUsd: number,
   declaredSeconds = 180,
-): { maxTurns: number; maxUsd: number; timeoutMs: number } {
+): { maxTurns: number; maxUsd: number; maxTokens: number; timeoutMs: number } {
   const multiplier = TIER_BUDGET[tier];
+  const maxUsd = Number((baseUsd * multiplier.usd).toFixed(2));
   return {
     maxTurns: Math.ceil(declaredTurns * multiplier.turns),
-    maxUsd: Number((baseUsd * multiplier.usd).toFixed(2)),
+    maxUsd,
+    maxTokens: Math.round(maxUsd * TOKENS_PER_USD),
     timeoutMs: declaredSeconds * 1000,
   };
 }

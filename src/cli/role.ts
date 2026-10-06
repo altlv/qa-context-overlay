@@ -11,7 +11,7 @@ import { AgentAuthError, runAgent } from '../agents/client.js';
 import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
-import { budgetForTier, resolveModel } from '../agents/models.js';
+import { TOKENS_PER_USD, budgetForTier, resolveModel } from '../agents/models.js';
 import { describeBudget, describeSpend } from '../agents/budget-line.js';
 import { levelOfRole } from '../agents/subject-prompt.js';
 import { BROWSER_ACCESS, WALL_CLOCK_SECONDS, families, roles } from '../agents/roles.js';
@@ -630,11 +630,38 @@ const scaled = budgetForTier(
   WALL_CLOCK_SECONDS[name] ?? DEFAULT_LIMITS.timeoutMs / 1000,
 );
 const override = (variable: string): boolean => (process.env[variable]?.trim() ?? '') !== '';
+/**
+ * The token ceiling is derived from the dollar limit, and it is the only one of these that can
+ * stop a run before the money is gone.
+ *
+ * Measured on 2026-10-06: cost reaches `Budget` once, on the `result` message the SDK emits at
+ * the end, so `AGENT_MAX_USD` had nothing to act on for the whole of any run — a post-mortem
+ * rather than a bound. Token usage rides on every assistant message, so a ceiling on it fires
+ * mid-flight. `TOKENS_PER_USD` does the conversion from one measured run.
+ *
+ * Derived from whichever dollar figure is actually in force, the operator’s or the tier’s, so
+ * raising `AGENT_MAX_USD` raises the real bound with it rather than leaving it behind.
+ */
 const budget = Budget.fromEnv({
   ...(override('AGENT_MAX_TURNS') ? {} : { maxTurns: scaled.maxTurns }),
   ...(override('AGENT_MAX_USD') ? {} : { maxUsd: scaled.maxUsd }),
   ...(override('AGENT_TIMEOUT_MS') ? {} : { timeoutMs: scaled.timeoutMs }),
+  ...(override('AGENT_MAX_TOKENS') || override('AGENT_MAX_USD')
+    ? {}
+    : { maxTokens: scaled.maxTokens }),
 });
+
+/**
+ * When the operator set the dollars themselves, convert theirs rather than the tier’s.
+ *
+ * Without this, `AGENT_MAX_USD=4` would leave a ceiling derived from the tier’s $1 in place and
+ * the run would stop at a quarter of the budget the operator asked for — a limit that silently
+ * contradicts the one they set is worse than no limit, because they would conclude the work was
+ * cheap rather than that it was cut off.
+ */
+if (override('AGENT_MAX_USD') && !override('AGENT_MAX_TOKENS')) {
+  budget.limits.maxTokens = Math.round(budget.limits.maxUsd * TOKENS_PER_USD);
+}
 // The line is built by `describeBudget`, which is pure and tested: printed inline it needed a paid
 // run to observe, and a real defect lived in that blind spot — an operator's AGENT_TIMEOUT_MS
 // replaced this role's declared wall clock while the text still read as the role's own budget.
@@ -647,10 +674,12 @@ console.error(
     declaredSeconds: WALL_CLOCK_SECONDS[name] ?? DEFAULT_LIMITS.timeoutMs / 1000,
     maxTurns: budget.limits.maxTurns,
     maxUsd: budget.limits.maxUsd,
+    maxTokens: budget.limits.maxTokens,
     timeoutSeconds: budget.limits.timeoutMs / 1000,
     measuringSpendOnly: budget.measuringSpendOnly(),
     overrodeTurns: override('AGENT_MAX_TURNS'),
     overrodeUsd: override('AGENT_MAX_USD'),
+    overrodeTokens: override('AGENT_MAX_TOKENS'),
     overrodeTimeout: override('AGENT_TIMEOUT_MS'),
   }),
 );
