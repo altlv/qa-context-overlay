@@ -186,6 +186,21 @@ export class StateModel {
    */
   private readonly edges: { from: string; action: string; to: string }[] = [];
 
+  /**
+   * What each state offered to act on, by accessible name.
+   *
+   * Kept so the untried half of the frontier can be computed — see `src/qe/frontier.ts`. The
+   * comment on `triedFrom` below says the complement "cannot be computed here, because only the
+   * driver knows which actions a state affords". That stands for the **driver’s** candidate list,
+   * which enumerates values, boundaries and sequences from a scan. It does not stand for the
+   * weaker question the frontier asks: these are the controls already harvested for the state
+   * key, so they cost nothing extra and they are exactly the things a session could click.
+   *
+   * A set per state rather than per visit: returning to a state must not make its controls look
+   * freshly untried.
+   */
+  private readonly affords = new Map<string, Set<string>>();
+
   /** What the session did to cause the next observation, set before `observe`. */
   private pending: string | null = null;
 
@@ -213,6 +228,11 @@ export class StateModel {
    * knows which actions a state affords. This is the half the model owns; `src/qe/driver.ts`
    * holds the other, and E5c is where they meet.
    */
+  /** The controls a state offered, by name — the affordance half of the frontier. */
+  affordsIn(state: string): string[] {
+    return [...(this.affords.get(state) ?? [])];
+  }
+
   triedFrom(state: string): string[] {
     return this.edges.filter((edge) => edge.from === state).map((edge) => edge.action);
   }
@@ -252,6 +272,29 @@ export class StateModel {
     const from = this.last === null ? null : stateKey(this.last);
     const isNewState = !this.seen.has(to);
     this.seen.add(to);
+
+    /**
+     * Written whole, because a state cannot afford different things on two visits.
+     *
+     * The first version merged into whatever was already stored, guarding against "a partial
+     * render harvests fewer controls and the frontier shrinks because the page flickered". A
+     * poison test walked straight through that guard, and the reason is the state key itself:
+     * `to` is **derived from** this exact control set, so the same key cannot arrive with a
+     * different one. A re-render that drops a control produces a *different* state, not the same
+     * state with less in it.
+     *
+     * Which is worth knowing in its own right: a flickering page inflates the state count rather
+     * than deflating the frontier, and that cost is recorded against the state model's own
+     * discrimination rather than hidden behind a merge that never ran.
+     */
+    this.affords.set(
+      to,
+      new Set(
+        observation.fingerprints
+          .map((fingerprint) => normaliseName(fingerprint.name ?? ''))
+          .filter((name) => name !== ''),
+      ),
+    );
 
     const before = this.last?.fingerprints ?? [];
     const after = observation.fingerprints;

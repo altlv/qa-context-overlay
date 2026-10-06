@@ -38,6 +38,7 @@ decide whether the result proves anything.
 | Mutation comparator — a suite against a set       | built, a gate step where a subject declares a set          | `src/qe/mutation-compare.ts`     |
 | Known defects — a test that fails for the product | built, a gate step for every subject                       | `src/qe/known-defect.ts`         |
 | Replay a real fix from a subject's history        | built — `--candidates` ranks what is replayable            | `src/qe/bug-replay.ts`           |
+| What a session has NOT tried — the state frontier | built, in every run summary                                | `src/qe/frontier.ts`             |
 
 Do not add placeholder modules for the planned items. Build one end to end when it
 is wanted.

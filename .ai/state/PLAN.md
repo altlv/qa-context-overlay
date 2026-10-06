@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `62b668b` — the commit this file was last checked against. A file cannot name
+Head is `df5346a` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -1236,6 +1236,53 @@ poisoning it.
 often simple enough to be unlike any page, and a rule tested only against one is untested. This
 is the hazard below pointed at test data: the test measured something adjacent to the claim.
 
+### Item 83 — what a session did not try, 2026-10-06
+
+`maxStates` refused and never steered. A run reporting "25 states visited" has made a claim a
+reader hears as coverage, and it means nothing without "and 61 controls were never acted on".
+
+**The blocker was a dropped argument.** `triedFrom` needs edge labels, and nothing had ever
+called `StateModel.about()` — so every edge in every run this harness has made is labelled
+`unknown`. The observer hook received `tool_input` from the SDK and discarded it. One argument
+threaded through, and `moveLabel` turns a call into `browser_click:add to cart button`.
+
+Keyed on MCP’s own `element` description and **never on `ref`**: a ref is an index into one
+snapshot and is reassigned on the next, so the same button carries different refs in different
+states and a frontier keyed on them would report everything untried forever — which looks
+identical to a session that explored nothing.
+
+**Affordances are a narrowing, said out loud.** `state-model.ts` claims the complement "cannot be
+computed here, because only the driver knows which actions a state affords". That holds for the
+driver's candidate list, which enumerates values, boundaries and sequences from a scan. It does
+not hold for the weaker question: the controls already harvested for the state key are things a
+session could click, and they cost nothing extra. So the frontier counts **controls not yet acted
+on**, and cannot see a value never typed, a keyboard path, a scroll, a drag, the back button, a
+control the harvester misses, or the same control clicked versus right-clicked. Every one of those
+makes it an **undercount of what is possible**, which is the safe direction: it never reports an
+app as exhausted. An unmatched label likewise leaves its control untried, so the count of what is
+left errs high. Both biases point at "there is more to do" on purpose.
+
+#### Two of its own tests asserted nothing, and poisoning found both
+
+Four poisons, two survivors.
+
+The first: a guard stopping an **empty control part** from matching every control —
+`name.includes('')` is true for everything, so one such label would retire the whole page and
+report a fully explored app. The test fed it `browser_navigate`, which has no colon at all and
+takes the other branch entirely, so deleting the guard changed nothing. Now tested with
+`browser_click:`, the shape that actually reaches it.
+
+The second was a real piece of dead code. The affordance set was _merged_ into whatever was
+stored, guarding against "a partial render harvests fewer controls and the frontier shrinks
+because the page flickered". Replacing instead of merging left every test green, and the reason
+is the state key: **it is derived from the control set**, so the same key cannot arrive with a
+different one. A re-render that drops a control produces a _different_ state. The merge guarded
+against nothing and is gone.
+
+That inverts the concern worth recording: a flickering page **inflates the state count** rather
+than deflating the frontier. It is a cost of how finely this model discriminates, and it now sits
+in a test instead of behind a branch that never ran.
+
 ### A standing hazard, recorded because it is now a pattern
 
 **Nine times across these sessions** — the count was four when this was written and three more
@@ -1462,7 +1509,7 @@ Three separate problems, and conflating them is the trap:
 | 80 | **PARTLY DONE 2026-10-04 — `src/tools/surfaces.ts` derives a kind from observed properties, and as of the same day it is called after every action in a run.** Occlusion is taken as an input from the scanner for the control-side question and asked of the surface for the culprit-side one; focus trapping and lifetime are observed. Proven role-independent for `modal` and `popover` with the roles deleted, and proven live over CDP against a page another client changed. **Its depth guard did not hold on a real page and was replaced by a proportional one on 2026-10-05 — see the section above** | — | **Nothing acts on a classification.** The label is printed and summarised; no planning prefers an untried control inside a modal, and an unnameable surface is reported rather than pursued — that junction is 83. Also still open from the original item: a text-block projection beyond announcements, and geometry findings other than occlusion — overflow, stacking, off-canvas. A surface arriving with no interactive controls produces no arrival at all, by construction |
 | 81 | **One concept, three definitions — twice.** The control selector list is written out three times (`INTERACTIVE` in `src/tools/heal.ts`, `INTERACTIVE` in `src/tools/reveal.ts`, and a third copy inline in the `page.evaluate` in `src/tools/page-scanner.ts`), and the accessible name is computed three times (`src/tools/accessible-name.ts`, plus inline in both of the others). Nothing holds either set to the others | — | The three selector copies carry the same twelve selectors today by coincidence of maintenance, not by construction: widen one and the map, the state count and the hover sweep disagree about what a control **is**. The name triplication has **already** produced a disagreement — the a11y blind-spot join reported 12 missed controls on academybugs where an independent probe found 13, on the same page, because the two implementations differ. Harmless only until it matters: the name is the join key between two element sources, so drift there corrupts the thing that detects drift |
 | 82 | **`ScannedElement.role` is the raw attribute while `defaultRole` derives the real one three lines away.** Null for a plain `<a>` or `<button>` | — | It has already cost once: joining the accessibility tree against it reported **79** blind spots on academybugs against a measured 13, because every ordinary link read as missing. That was fixed at the one call site rather than at the field. Checked on 2026-10-03: nothing else reads it — consumers use `affordance`, which is computed from the derived role — so this is a **latent trap rather than an active bug**, and the next person to join on role hits exactly what I hit. Fix the field, not the next call site |
-| 83 | **`maxStates` is a ceiling while the state model now supports a frontier.** Edges, `triedFrom` and `routeTo` exist as of 2026-10-03; the count is still wired only to stopping | 4 | The two halves disagree about what the state count is _for_. A crawler's number steers; this one only refuses, which is why a session that hit the ceiling on Polymer Shop could report what it saw and not what it had left untried. The complement of `triedFrom` — moves not yet attempted — cannot be computed in the model, because only the driver knows what a state affords. That junction is E5c, and until something plans over the graph **no coverage claim about an app is defensible** |
+| 83 | **DONE 2026-10-06 — `src/qe/frontier.ts`.** Every run summary now says how many controls across how many states nothing ever acted on, and says outright that a run stopped at its ceiling measured its own budget rather than the app | 4 | **The blocker was a dropped argument, not anything structural**: nothing had ever called the model’s `about()`, so every edge in every run was labelled `unknown` and the tried half could not be computed. The observer hook had `tool_input` all along. Affordances are the controls already harvested for the state key, which is a **narrowing** of what the driver could offer — it cannot see a value never typed, a keyboard path, a control the harvester misses, or the same control acted on two ways |
 | 84 | **No flake rate, and the archive that would hold one is empty.** `npm run archive-results` keeps the last 20 runs and 2 are on disk | — | The comparator now refuses an _unstable_ suite, which catches a suite that fails on the second run — but **two green runs do not certify stability**, and a test that flakes one time in twenty passes both and goes on randomising every mutation score. The release gate reports flakes it sees within one run; nothing measures a rate across runs, so there is no answer to "is this getting better". Archiving is a call in the run path rather than a feature, and it is the prerequisite: a rate cannot be computed from two samples |
 | 75 | **DONE 2026-10-05 — `npm run bug-replay`.** Reverses a commit's _source_ changes, keeps every test at HEAD, runs the suite: red means the suite noticed the behaviour being undone, green means the fault can come back in silence. Measured on `coursera-rag`: 10 commits attempted, **3 replayable, 2 defended, 1 undefended**. On `mcpa`: **0 of 3** | — | **Most history cannot be replayed, and that is the finding.** A reverse patch needs its context lines intact, and a fix worth replaying is usually several commits back. `--3way` recovered 3 of the 6 a plain apply refused; the rest are reported `would-not-revert` and kept out of the denominator. So the instrument wants a subject with small frequent commits, which `mcpa` is not. Also: a comment-only edit inside a source file always reads as undefended and cannot be detected by path |
 | 78 | **The README leads with the pillar that has the least evidence.** "Context" there means a map of the page, handed over rather than bought. Nothing has shown that map changes a session — item 30 is still unpaid, and both eprimer models did their real work from controls they found themselves. What _has_ moved numbers is a different kind of context: the session clock and a thin charter (13 minutes → 41, 9 defects → 17) and the coverage briefing (8 of 14 mutations → 11, with 23 tests instead of 34) | 30 answers it; this is what to do either way | Process context and coverage context are earning the claim that page context was written to make. Either pay 30 and find out, or reorder the README to lead with what works — but not leave the strongest sentence on the page attached to the weakest evidence behind it. Found by auditing the repo against its own README on 2026-10-02, in the same pass that found five _Not proven_ bullets contradicted by this file |

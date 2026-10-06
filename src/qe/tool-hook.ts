@@ -63,8 +63,16 @@ export function decideToolUse(
  * of a missed look is an undercount, and `observer.ts` reports that as a floor rather
  * than swallowing it.
  */
+/**
+ * The observer, and the arguments of the call that woke it.
+ *
+ * `tool_input` was available all along and discarded. Without it the model could only label an
+ * edge `unknown`, so `triedFrom` returned a list of that word and the untried half of the
+ * frontier could not be computed at all — which is the blocker under item 83, and it was a
+ * dropped argument rather than anything structural.
+ */
 export function observerHook(
-  observe: (toolName: string) => Promise<void>,
+  observe: (toolName: string, toolInput: unknown) => Promise<void>,
   interestedIn: (toolName: string) => boolean,
 ): HookCallbackMatcher {
   return {
@@ -73,7 +81,7 @@ export function observerHook(
         if (input.hook_event_name !== 'PostToolUse') return { continue: true };
         if (!interestedIn(input.tool_name)) return { continue: true };
         try {
-          await observe(input.tool_name);
+          await observe(input.tool_name, input.tool_input);
         } catch {
           // Already fail-soft inside the observer; this is the belt to that braces.
           // An exception escaping here would surface as a tool failure to the model,

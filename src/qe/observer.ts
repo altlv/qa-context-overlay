@@ -3,6 +3,8 @@ import { readAnnouncements } from '../tools/announcements.js';
 import { harvestCandidates } from '../tools/heal.js';
 import { arrivalLines, classifyArrival } from '../tools/surfaces.js';
 import type { Arrival, ObserveOptions } from '../tools/surfaces.js';
+import { describeFrontier, frontier, moveLabel } from './frontier.js';
+import type { StateFrontier } from './frontier.js';
 import { StateModel, describeTransition } from './state-model.js';
 import type { Transition } from './state-model.js';
 
@@ -34,6 +36,15 @@ export interface Observer {
   atCeiling(maxStates: number): boolean;
   /** Looks that could not be taken. Above zero, `count()` is a floor. */
   missed(): number;
+  /**
+   * Name the move about to be made, so the edge it produces can be labelled.
+   *
+   * Called from the hook with the tool name and its arguments. Nothing called the model’s
+   * `about()` before this, so every edge in every run was labelled `unknown`.
+   */
+  about(toolName: string, toolInput: unknown): void;
+  /** Every state that still offers a control nothing acted on. */
+  frontier(): StateFrontier[];
   /** Lines for the run summary. */
   summary(): string[];
 }
@@ -103,10 +114,32 @@ export function pageObserver(
   let missedLooks = 0;
   const arrivals: Arrival[] = [];
 
+  /**
+   * The ceiling the guard last asked about, or null when nothing ever enforced one.
+   *
+   * The observer is not told `maxStates` — the guard holds it and asks `atCeiling` on every tool
+   * call. Remembered here so the summary can say whether the run stopped with the frontier still
+   * open, which is a different statement from a run that finished with it open. Null stays null: a
+   * run nobody capped must not be reported as having run out of allowance.
+   */
+  let ceilingAsked: number | null = null;
+
+  const frontierNow = (): StateFrontier[] =>
+    frontier({
+      states: model.graph().states,
+      affordsIn: (state) => model.affordsIn(state),
+      triedFrom: (state) => model.triedFrom(state),
+    });
+
   return {
     count: () => model.count(),
-    atCeiling: (maxStates) => model.atCeiling(maxStates),
+    atCeiling: (maxStates) => {
+      ceilingAsked = maxStates;
+      return model.atCeiling(maxStates);
+    },
     missed: () => missedLooks,
+    about: (toolName, toolInput) => model.about(moveLabel(toolName, toolInput)),
+    frontier: frontierNow,
 
     async observe() {
       try {
@@ -169,6 +202,11 @@ export function pageObserver(
         );
       }
       lines.push(...arrivalLines(arrivals));
+      // After the states and the surfaces, because it is the line that qualifies both: a state
+      // count with nothing said about what was left untried reads as coverage.
+      lines.push(
+        ...describeFrontier(frontierNow(), ceilingAsked !== null && model.atCeiling(ceilingAsked)),
+      );
       return lines;
     },
   };

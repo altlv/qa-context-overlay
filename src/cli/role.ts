@@ -836,7 +836,12 @@ try {
         ? {}
         : {
             PostToolUse: [
-              observerHook(async () => {
+              observerHook(async (toolName, toolInput) => {
+                // Named before the look, because the edge this produces is labelled from it and
+                // the model has to know before it records the transition. Nothing called this
+                // before, so every edge in every run was labelled `unknown` and the untried half
+                // of the frontier could not be computed at all — item 83's actual blocker.
+                browser!.observer.about(toolName, toolInput);
                 const look = await browser!.observer.observe();
                 const moved = look === null ? null : describeTransition(look.transition);
                 if (moved !== null) console.error(`  page: ${moved}`);
