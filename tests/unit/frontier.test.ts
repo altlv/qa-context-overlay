@@ -3,8 +3,10 @@ import {
   actedOnControl,
   describeFrontier,
   frontier,
+  handoverLine,
   moveLabel,
   untriedControls,
+  type Handover,
   type StateFrontier,
 } from '../../src/qe/frontier.js';
 import { StateModel } from '../../src/qe/state-model.js';
@@ -255,5 +257,159 @@ test.describe('what a run says about its own incompleteness', () => {
     expect(said, 'it must say what it cannot see rather than imply completeness').toContain(
       'not the same as an app explored',
     );
+  });
+});
+
+test.describe('handing what was discovered to the agent', () => {
+  /**
+   * The gap the whole frontier had until 2026-10-07: everything the observer learned went to
+   * `console.error` and a post-run `summary()` — the operator, and a report. The session that could
+   * act on an untried control was told nothing after its opening prompt.
+   */
+
+  const handover = (over: Partial<Handover> = {}): Handover => ({
+    moved: null,
+    surface: null,
+    untriedHere: [],
+    atCeiling: false,
+    budgetLeft: null,
+    ...over,
+  });
+
+  test('should tell the session what it has not touched where it is standing', () => {
+    const said = handoverLine(
+      handover({
+        moved: '3 appeared — a state not seen before',
+        untriedHere: ['checkout', 'search'],
+      }),
+    );
+
+    expect(said, 'what the action did').toContain('3 appeared');
+    expect(
+      said,
+      'and what is left here, which is the half that could not reach it before',
+    ).toContain('checkout, search');
+  });
+
+  test('should say nothing at all when there is nothing to say', () => {
+    /**
+     * Silence is the default, and it is a budget decision rather than tidiness. A run is bounded by
+     * tokens since 2026-10-06, so every line here is money and wall-clock taken from the session
+     * itself. An action that moved nothing, into a state with nothing left, must cost nothing.
+     */
+    expect(handoverLine(handover()), 'nothing moved and nothing is left — send nothing').toBeNull();
+  });
+
+  test('should not tell the agent what to do', () => {
+    /**
+     * `formatActionPlan` settles this for the opening briefing — "Which deserve your budget is your
+     * call — that judgement is the part no script makes" — and it holds here. A line that said "now
+     * click Checkout" would replace the judgement that is the whole value of an exploratory role,
+     * and turn the agent into a crawler that happens to cost model prices.
+     */
+    const said = handoverLine(handover({ untriedHere: ['checkout'] })) ?? '';
+
+    expect(said, 'it reports a fact about what has been acted on').toContain(
+      'nothing has acted on',
+    );
+    for (const order of ['you should', 'now click', 'try ', 'next, ', 'must ']) {
+      expect(
+        said.toLowerCase(),
+        `"${order}" would be an instruction, not an observation`,
+      ).not.toContain(order);
+    }
+  });
+
+  test('should mark itself as the harness speaking, not the page', () => {
+    // An agent that read this as page content would report the harness's own bookkeeping as a
+    // finding — a defect claim against the product for something the product never said.
+    expect(handoverLine(handover({ moved: 'something moved' }))).toContain('[harness]');
+  });
+
+  test('should say when the ceiling is what will stop it', () => {
+    /**
+     * The sentence `maxStates` could never produce while it was wired only to stopping. Without it
+     * a session cannot tell a page that stopped changing from a harness that stopped letting it
+     * move, and would read its own budget running out as the application having nothing left.
+     */
+    const said = handoverLine(handover({ atCeiling: true, untriedHere: ['a', 'b'] })) ?? '';
+
+    expect(said, 'it must name the refusal that is coming').toContain('will be refused');
+    expect(said, 'and tie it to what will therefore go unreached').toContain('will not reach');
+  });
+
+  test('should cap a long list rather than spend the budget on it', () => {
+    // A state with forty controls would otherwise put forty names into the context after every
+    // single action, paid for out of the token ceiling that bounds the run.
+    const many = Array.from({ length: 40 }, (_, i) => `control ${i}`);
+    const said = handoverLine(handover({ untriedHere: many })) ?? '';
+
+    expect(said, 'the count is exact even when the list is not').toContain('40 control(s)');
+    expect(said.length, 'but the line stays short enough to be worth sending').toBeLessThan(220);
+  });
+});
+
+test.describe('telling a session its budget is nearly gone', () => {
+  /**
+   * The gap every live run on 2026-10-07 fell into: a session is handed its state ceiling and
+   * nothing about its budget, so it is cut off mid-thought. None of them wrote a report, and each
+   * then failed its gate on the formatting of its closing prose — a complaint about the wrong
+   * thing entirely.
+   */
+
+  const handover = (over: Partial<Handover> = {}): Handover => ({
+    moved: null,
+    surface: null,
+    untriedHere: [],
+    atCeiling: false,
+    budgetLeft: null,
+    ...over,
+  });
+
+  test('should warn in time to act, not in time to know', () => {
+    const said =
+      handoverLine(handover({ budgetLeft: { fraction: 0.15, tightest: 'tokens' } })) ?? '';
+
+    expect(said, 'how much is left').toContain('15%');
+    expect(said, 'which limit it is').toContain('tokens');
+    expect(said, 'and what to do with the rest of it').toContain('write up what you have');
+  });
+
+  test('should stay quiet while there is plenty left', () => {
+    // A warning on every action is a warning nobody reads, and this one is paid for out of the
+    // budget it is warning about.
+    expect(
+      handoverLine(handover({ budgetLeft: { fraction: 0.8, tightest: 'wall clock' } })),
+      'four fifths left is not news',
+    ).toBeNull();
+  });
+
+  test('should say nothing when nothing is bounded', () => {
+    // Null is "no limit set", which must not print as "plenty left" — the two are different
+    // facts and only one of them means the run is safe.
+    expect(handoverLine(handover({ budgetLeft: null }))).toBeNull();
+  });
+
+  test('should name the tightest bound rather than the roomiest', () => {
+    // A run with hours of clock and a spent token ceiling is as finished as one with the reverse.
+    // Reporting whichever looks healthiest would be reassurance.
+    const said =
+      handoverLine(handover({ budgetLeft: { fraction: 0.05, tightest: 'wall clock' } })) ?? '';
+    expect(said).toContain('wall clock');
+  });
+
+  test('should be the only instruction it ever gives', () => {
+    /**
+     * The narrow exception. Everything else here reports a fact and leaves the judgement to the
+     * session; this one sentence is about the harness's own constraint rather than about what to
+     * test. The test above for "should not tell the agent what to do" covers the ordinary case, and
+     * this pins that the exception does not leak into it.
+     */
+    const ordinary = handoverLine(handover({ untriedHere: ['checkout'] })) ?? '';
+
+    expect(
+      ordinary.toLowerCase(),
+      'with budget to spare, the harness still suggests nothing about what to do',
+    ).not.toContain('write up');
   });
 });

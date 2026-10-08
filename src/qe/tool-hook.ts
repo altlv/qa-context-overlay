@@ -72,7 +72,7 @@ export function decideToolUse(
  * dropped argument rather than anything structural.
  */
 export function observerHook(
-  observe: (toolName: string, toolInput: unknown) => Promise<void>,
+  observe: (toolName: string, toolInput: unknown) => Promise<string | null>,
   interestedIn: (toolName: string) => boolean,
 ): HookCallbackMatcher {
   return {
@@ -81,7 +81,25 @@ export function observerHook(
         if (input.hook_event_name !== 'PostToolUse') return { continue: true };
         if (!interestedIn(input.tool_name)) return { continue: true };
         try {
-          await observe(input.tool_name, input.tool_input);
+          /**
+           * What the observer learned goes **back to the agent**, not only to the terminal.
+           *
+           * Everything this hook produced used to be written to `console.error` and to a
+           * post-run summary — the operator and a report. The agent, the only thing that can
+           * act on an untried control, was told nothing after its opening prompt. The channel
+           * was here all along: `additionalContext` on a PostToolUse result reaches the model,
+           * proven on 2026-10-07 with a code word the agent read back.
+           *
+           * Null sends nothing. This is spent from the token budget that bounds the run, so a
+           * handover with nothing to say must cost nothing.
+           */
+          const say = await observe(input.tool_name, input.tool_input);
+          if (say !== null) {
+            return {
+              continue: true,
+              hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: say },
+            };
+          }
         } catch {
           // Already fail-soft inside the observer; this is the belt to that braces.
           // An exception escaping here would surface as a tool failure to the model,

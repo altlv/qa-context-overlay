@@ -514,3 +514,52 @@ test('a run that changed one test file should not run it twice', () => {
   });
   expect(plan.steps.filter((entry) => entry.name.includes('together'))).toHaveLength(0);
 });
+
+test.describe('a run that was cut short before writing a report', () => {
+  /**
+   * Two different failures that used to look identical. A role that wrote a bad report is a finding
+   * about the role; a role **killed before it could write one** is a finding about the budget. The
+   * second was reported as `No YAML frontmatter block found` — a formatting complaint about the
+   * agent's closing prose, which nobody had claimed was a report.
+   *
+   * Measured 2026-10-07: every live run that day was stopped by a limit, none wrote a report, and
+   * every one failed its gate this way. So it was the dominant failure mode rather than an edge
+   * case, and the whole QA layer had only ever been exercised on truncated runs.
+   */
+
+  test('should report the check as NOT RUN rather than failing it', () => {
+    const plan = planGate({
+      ...base,
+      role: 'exploratory-tester',
+      family: 'testing',
+      changed: [],
+      truncatedWithNoReport: true,
+    });
+
+    expect(
+      names(plan),
+      'there is nothing of the role’s to check, so the check must not run at all',
+    ).not.toContain('report');
+    expect(
+      plan.notRun.join(' '),
+      'CLAUDE.md rule 1: a check that did not run says so explicitly',
+    ).toContain('cut short before it wrote one');
+    expect(
+      plan.notRun.join(' '),
+      'and it must name the real cause, or the next person debugs the report format',
+    ).toContain('budget ended this run');
+  });
+
+  test('should still gate the report on an ordinary run', () => {
+    /**
+     * Instrument liveness. A gate that skipped this step whenever it was inconvenient would stop
+     * being the thing that holds a role to its own claims — and the skip must never be the quiet
+     * default, because a measurement that was not taken may not read like one that came back clean.
+     */
+    const plan = planGate({ ...base, role: 'exploratory-tester', family: 'testing', changed: [] });
+
+    expect(names(plan), 'nothing was truncated, so the report is checked as always').toContain(
+      'report',
+    );
+  });
+});

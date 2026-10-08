@@ -106,28 +106,31 @@ export function resolveModel(raw: string | undefined = process.env.HARNESS_MODEL
  * mutation run.
  */
 /**
- * Tokens an operator’s dollar gets, so a dollar limit can be converted into the one spend
- * bound that can stop a run mid-flight. **Measured, not priced.**
+ * Billable units an operator's dollar buys, so a dollar limit becomes the one spend bound that
+ * can stop a run mid-flight. **Measured, not priced.**
  *
- * A price table in this repository would be four numbers per tier that change without anything
- * here noticing, which is the kind of claim `CLAUDE.md` now bans from its own status table. This
- * is one number, taken from one run, with the run recorded: on 2026-10-06 a sonnet run billed
- * 42,551 tokens for $0.175568, which is 242,362 tokens per dollar. It checks out against a
- * second, independent run — `exploratory-tester` against academybugs spent $0.9050, which at this
- * rate is 219,338 tokens, and a ceiling derived from its $1.00 limit would have bound it at
- * almost exactly the point it stopped.
+ * The unit is an **input-token-equivalent** from `billableTokens`, not a token. The first version
+ * of this counted raw tokens and the number was 242,362, and it bricked the role it was meant to
+ * protect: every message of an `exploratory-tester` run re-reads the whole cached prompt, so raw
+ * totals grow with message count times prompt size rather than with cost. Two live runs on
+ * 2026-10-07 died at 19 seconds having taken **zero actions**. Weighting by the ratios in
+ * `TOKEN_WEIGHTS` makes the total track money, which is what a dollar limit needs.
  *
- * **It is one shape of run and it leans conservative.** That run was cache-*write* dominated,
- * and a cache write costs several times a cache read, so a session that mostly re-reads a warm
- * prompt gets far more tokens per dollar than this and will hit the ceiling before its money is
- * gone. Stopping early costs a partial session; stopping late costs money nobody authorised, so
- * that is the direction to be wrong in — the same reasoning `Budget.wouldExceed` was written
- * with. Not tier-scaled for the same reason it is not a price table: one measurement is honest
- * about being one measurement, and three guesses would not be.
+ * Derived from one run and checked against another. The probe billed 42,551 one-hour cache-write
+ * tokens for $0.175568 — 85,114 weighted, so 484,792 per dollar. That allows about 23 messages of
+ * a real exploratory session, each measured at ~21,262 weighted; and `exploratory-tester` against
+ * academybugs on 2026-10-04 ran **22 turns for $0.9050** before its own limit stopped it. Two
+ * independent runs, a day apart, agreeing within a message.
  *
- * Re-derive it from any run: the summary prints tokens and cost together for exactly that.
+ * Not tier-scaled, for the same reason it is not a price table: one measurement is honest about
+ * being one measurement, and three guesses would not be. The weights above are tier-independent,
+ * so only this rate carries tier error — and a tier whose input price differs from sonnet’s will
+ * be bounded proportionally wrong until someone measures it.
+ *
+ * Re-derive it from any run: the summary prints weighted tokens and cost together for exactly
+ * that.
  */
-export const TOKENS_PER_USD = 242_362;
+export const TOKENS_PER_USD = 484_792;
 
 export function budgetForTier(
   tier: ModelTier,

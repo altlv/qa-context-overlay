@@ -5,6 +5,7 @@ import {
   composeRoles,
   composeSystemPrompt,
   skillFile,
+  skillsFor,
 } from '../../src/agents/compose.js';
 import { roles } from '../../src/agents/roles.js';
 import { levelOfRole, type SubjectRun } from '../../src/agents/subject-prompt.js';
@@ -190,5 +191,63 @@ test.describe('the level a subject run works at', () => {
     ).toEqual(['api-coder', 'e2e-coder', 'integration-coder', 'unit-coder']);
     expect(levelOfRole('test-planner'), 'the planner works at no level').toBeNull();
     expect(levelOfRole('exploratory-tester')).toBeNull();
+  });
+});
+
+test.describe('narrowing the skills a run inlines', () => {
+  /**
+   * Item 87. The skills are the most expensive thing in a run — nine of them make a ~316k-token
+   * system prompt, charged as cache reads on every message — and the first complete run reported
+   * `exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1`: two of five
+   * procedural skills left no trace in its output.
+   *
+   * The README leads with "context the agent is given rather than pays to re-derive". This is how
+   * that gets tested rather than asserted, and it has to be repeatable — a hand edit to a role file
+   * produces a number nobody can reproduce.
+   */
+
+  const declared = ['work-discipline', 'honesty-check', 'exploratory-session', 'test-techniques'];
+
+  test('should leave a run without the flag exactly as it was', () => {
+    // The default has to be a no-op, or every existing measurement becomes incomparable.
+    expect(skillsFor(declared, null)).toEqual({ skills: declared, refused: [] });
+  });
+
+  test('should keep the role’s own order when narrowing', () => {
+    // The prompt is assembled in order, so honouring the operator's order instead would make two
+    // runs with the same set differ in their system prompt and in what they cost to cache.
+    expect(skillsFor(declared, ['test-techniques', 'work-discipline']).skills).toEqual([
+      'work-discipline',
+      'test-techniques',
+    ]);
+  });
+
+  test('should allow none at all', () => {
+    // The floor of the comparison: what does this role find with the prompt and no skills?
+    expect(
+      skillsFor(declared, []).skills,
+      'the role keeps its prompt, and inlines nothing',
+    ).toEqual([]);
+  });
+
+  test('should refuse a skill the role does not declare', () => {
+    /**
+     * Granting one would be measuring a different role, and `roles.test.ts` enforces that every
+     * skill belongs to one. Reported rather than dropped: a typo passed over in silence would
+     * inline fewer skills than asked for, and the result would read as "the skills made no
+     * difference" — the exact conclusion this experiment exists to test honestly.
+     */
+    const narrowed = skillsFor(declared, ['test-techniques', 'rule-modelling']);
+
+    expect(narrowed.refused, 'the name the role does not hold is named back').toEqual([
+      'rule-modelling',
+    ]);
+    expect(narrowed.skills, 'and the ones it does hold are still chosen').toEqual([
+      'test-techniques',
+    ]);
+  });
+
+  test('should refuse a typo rather than silently inlining nothing', () => {
+    expect(skillsFor(declared, ['test-techniqes']).refused).toEqual(['test-techniqes']);
   });
 });

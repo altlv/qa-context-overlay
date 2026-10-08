@@ -64,30 +64,77 @@ export interface TokenUsage {
   output_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /** The write split, when the API reports it: a 1-hour entry costs more than a 5-minute one. */
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number | null;
+    ephemeral_1h_input_tokens?: number | null;
+  } | null;
 }
 
 /**
- * What one message cost in tokens, across all four kinds.
+ * What each kind of token costs relative to a plain input token.
  *
- * **Pulled out of the client loop because a poison test walked straight through it.** Zeroing
- * the cache-creation term left every unit test green: they exercise `Budget`, and the summation
- * lived inline in a `for await` over the SDK stream where no test could reach it. That term is
- * the one that matters — the measured run was 42,551 cache-creation tokens against 2 input and 2
- * output, so dropping it undercounts by three orders of magnitude and the ceiling never fires.
- * A limit that silently never fires is worse than no limit, because the banner says it is there.
+ * **Ratios, deliberately, and not a price table.** Prices change and a table of them in this
+ * repository would rot in place while being believed — the failure `CLAUDE.md` now bans from its
+ * own status table. These ratios are structural: output is 5× input on every tier (sonnet $3/$15,
+ * opus $15/$75, haiku $1/$5), a cache read is a tenth of an input token, and a cache write is a
+ * premium on one. So the weighting is tier-independent and only the single dollar rate below has
+ * to be measured.
  *
- * Nullable rather than absent for two of the four: a run with no cache writes reports
- * `cache_creation_input_tokens: null`, and arithmetic on that gives NaN — which no comparison
- * ever exceeds, so the ceiling would again never fire.
+ * **Summing the four kinds unweighted was wrong, and it bricked a role.** Measured 2026-10-07:
+ * every message of an `exploratory-tester` run bills ~70,362 **cache-read** tokens — the whole
+ * prompt re-read — against ~7,107 written and 2 of input and output each. Counting a cache read as
+ * equal to a cache write overstates by about twentyfold, and it compounds, because each message
+ * re-reads the entire prompt whatever work it does. Raw tokens therefore grow with *message count
+ * times prompt size* rather than with cost. The ceiling fired after four messages of nothing, and
+ * two live runs took **zero actions** before dying at 19 seconds. That is worse than the unbounded
+ * spend it was built to fix.
+ *
+ * Dated because it is a claim about someone else's pricing structure: if the shape changes, this is
+ * what needs revisiting, and every run prints weighted tokens beside cost so the rate stays
+ * checkable without reading a price page.
  */
-export function tokensIn(usage: TokenUsage): number {
+export const TOKEN_WEIGHTS = {
+  input: 1,
+  output: 5,
+  cacheRead: 0.1,
+  cacheWrite5m: 1.25,
+  cacheWrite1h: 2,
+} as const;
+
+/**
+ * What one message cost, in input-token-equivalents.
+ *
+ * **Not a token count, and named so it cannot be read as one.** A figure called "tokens" that is
+ * not tokens is exactly the sort of label this repository keeps having to correct. This is a cost
+ * proxy: the four kinds weighted by `TOKEN_WEIGHTS` so the total tracks money rather than volume.
+ *
+ * Pulled out of the client loop because a poison test walked straight through it there. Zeroing the
+ * cache-creation term left every unit test green: they exercise `Budget`, and the summation lived
+ * inline in a `for await` over the SDK stream where no test could reach it.
+ *
+ * Nullable rather than absent for the cache fields: a run with no cache writes reports
+ * `cache_creation_input_tokens: null`, and arithmetic on that gives NaN — which no comparison ever
+ * exceeds, so the ceiling would silently stop existing on exactly those runs.
+ */
+export function billableTokens(usage: TokenUsage): number {
   const count = (value: number | null | undefined): number =>
     typeof value === 'number' && Number.isFinite(value) ? value : 0;
+
+  // The split when the API reports it, falling back to the total at the dearer rate. Guessing the
+  // cheaper one would understate a cost this exists to bound.
+  const split = usage.cache_creation;
+  const written5m = count(split?.ephemeral_5m_input_tokens);
+  const written1h = count(split?.ephemeral_1h_input_tokens);
+  const writtenTotal = count(usage.cache_creation_input_tokens);
+  const unsplit = Math.max(0, writtenTotal - written5m - written1h);
+
   return (
-    count(usage.input_tokens) +
-    count(usage.output_tokens) +
-    count(usage.cache_creation_input_tokens) +
-    count(usage.cache_read_input_tokens)
+    count(usage.input_tokens) * TOKEN_WEIGHTS.input +
+    count(usage.output_tokens) * TOKEN_WEIGHTS.output +
+    count(usage.cache_read_input_tokens) * TOKEN_WEIGHTS.cacheRead +
+    written5m * TOKEN_WEIGHTS.cacheWrite5m +
+    (written1h + unsplit) * TOKEN_WEIGHTS.cacheWrite1h
   );
 }
 
@@ -227,6 +274,46 @@ export class Budget {
   abort(reason: string): string {
     this.controller.abort();
     return reason;
+  }
+
+  /**
+   * How much of the run is left, as the fraction of the tightest bound still unspent.
+   *
+   * **The gap this fills: a session was never told it was about to be killed.** It is handed its
+   * state ceiling and nothing about its budget, so it is cut off mid-thought — and on 2026-10-07
+   * every live run ended that way, wrote no report, and failed its gate on the formatting of its
+   * closing prose. A session that knows its budget is nearly gone can write up what it has; one
+   * that does not cannot.
+   *
+   * Null for a bound nobody set, so "plenty left" and "no limit at all" cannot print the same way.
+   * The tightest of the three is what matters: a run with hours of clock and a spent token ceiling
+   * is as finished as one with the reverse, and reporting the roomiest would be reassurance.
+   */
+  remaining(): { fraction: number; tightest: 'tokens' | 'wall clock' | 'turns' } | null {
+    const left: { fraction: number; tightest: 'tokens' | 'wall clock' | 'turns' }[] = [];
+
+    if (this.limits.maxTokens !== undefined && this.limits.maxTokens > 0) {
+      left.push({
+        fraction: 1 - this.tokens / this.limits.maxTokens,
+        tightest: 'tokens',
+      });
+    }
+    if (this.limits.timeoutMs > 0) {
+      left.push({
+        fraction: 1 - (Date.now() - this.startedAt) / this.limits.timeoutMs,
+        tightest: 'wall clock',
+      });
+    }
+    // Turns are deliberately last and only when they are the real bound: `num_turns` arrives with
+    // the final result message, so `this.turns` is 0 for the whole of a run and a fraction built
+    // from it would read as untouched. Included anyway because the SDK enforces the limit itself,
+    // so it is a real bound even while this class cannot watch it tick.
+    if (this.limits.maxTurns > 0 && this.turns > 0) {
+      left.push({ fraction: 1 - this.turns / this.limits.maxTurns, tightest: 'turns' });
+    }
+
+    if (left.length === 0) return null;
+    return left.reduce((tightest, one) => (one.fraction < tightest.fraction ? one : tightest));
   }
 
   spent(): { turns: number; costUsd: number; tokens: number; elapsedMs: number } {

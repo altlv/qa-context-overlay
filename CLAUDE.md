@@ -144,6 +144,9 @@ npm run bug-replay -- --repo <path> --suite <cmd...>
                           # reverse a commit's source changes, keep its tests at HEAD, and ask
                           # whether the suite notices — faults the subject authored, not us.
                           # --candidates ranks commits and runs no suite
+npm run role -- <role> "<task>" --app <app> --env <env> --skills <a,b,c|none>
+                          # inline only those of the role own skills, to measure what the
+                          # context buys. Narrows, never adds; refuses a name the role lacks
 npm run precommit         # housekeeping before handing over a commit
 ```
 

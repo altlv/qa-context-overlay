@@ -10,7 +10,7 @@ import { targetFor } from '../../apps/targets.js';
 import { AgentAuthError, runAgent } from '../agents/client.js';
 import type { AgentRunOptions } from '../agents/client.js';
 import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
-import { composeRoles, composeSystemPrompt } from '../agents/compose.js';
+import { composeRoles, composeSystemPrompt, skillsFor } from '../agents/compose.js';
 import { TOKENS_PER_USD, budgetForTier, resolveModel } from '../agents/models.js';
 import { describeBudget, describeSpend } from '../agents/budget-line.js';
 import { levelOfRole } from '../agents/subject-prompt.js';
@@ -23,6 +23,7 @@ import { browserGuard, movesThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
 import { describeSurface } from '../tools/surfaces.js';
+import { handoverLine } from '../qe/frontier.js';
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
 import { describePatience, runWithPatience } from '../qe/patience.js';
@@ -127,6 +128,26 @@ const scanMapOnly = flag('--scan') === 'map';
 // Every check that can refuse a run, and nothing that costs anything: no worktree, no
 // browser, no agent. Also what the refusal tests use, so a check that fails to refuse
 // ends in exit 0 instead of a paid run.
+/**
+ * `--skills a,b,c` inlines only those of the role's own skills; `--skills none` inlines none.
+ *
+ * The skills are the most expensive thing in a run — nine of them make a ~316k-token system prompt,
+ * charged as cache reads on every message — and the first complete run reported that two of five
+ * procedural skills left no trace in its output. The README leads with "context the agent is given
+ * rather than pays to re-derive"; this is how that claim gets tested rather than asserted. Item 87.
+ *
+ * Null means the role's own list, so a run without the flag is unchanged.
+ */
+const skillsOnly = ((): string[] | null => {
+  const value = flag('--skills');
+  if (value === undefined) return null;
+  if (value.trim().toLowerCase() === 'none') return [];
+  return value
+    .split(',')
+    .map((skill) => skill.trim())
+    .filter((skill) => skill !== '');
+})();
+
 const preflight = rest.includes('--preflight');
 
 /** Everything before the first flag. */
@@ -776,7 +797,32 @@ const allow: GuardDecision = { allowed: true, reason: 'no guard applies' };
 // Every tool call already passes through here on its way to being allowed or refused.
 // Recording it costs nothing and replaces the only evidence we had about a session's
 // method — the session's own prose about itself.
-const ledger = new ToolLedger(role.skills ?? []);
+/**
+ * What this run will actually inline, and a refusal for anything the role does not declare.
+ *
+ * Granting a skill the role does not hold would be measuring a different role. A typo passed over
+ * in silence would be worse than an error: the run would inline fewer skills than asked for, and
+ * the result would read as "the skills made no difference".
+ */
+const chosenSkills = skillsFor(role.skills ?? [], skillsOnly);
+if (chosenSkills.refused.length > 0) {
+  refuse(
+    `--skills names ${chosenSkills.refused.join(', ')}, which "${name}" does not declare. ` +
+      `A run may narrow a role's skills and never add to them, or it is a different role.`,
+  );
+}
+if (skillsOnly !== null) {
+  const declared = (role.skills ?? []).length;
+  console.error(
+    `Skills NARROWED by --skills: ${chosenSkills.skills.length} of ${declared} inlined ` +
+      `(${chosenSkills.skills.join(', ') || 'none'}). This run is not comparable with one that ` +
+      `had them all.`,
+  );
+}
+
+// The ledger and the skill-use audit judge what was actually inlined, not what the role declares:
+// a narrowed run must not be marked down for skills it never had.
+const ledger = new ToolLedger(chosenSkills.skills);
 const decide = (toolName: string, input: Record<string, unknown>): GuardDecision => {
   if (toolName === 'Bash') {
     return shell.check(typeof input.command === 'string' ? input.command : '');
@@ -795,7 +841,7 @@ let result;
 try {
   result = await runAgent({
     prompt,
-    systemPrompt: composeSystemPrompt(role, undefined, subjectRun),
+    systemPrompt: composeSystemPrompt(role, undefined, subjectRun, skillsOnly),
     allowedTools: [...(role.tools ?? []), ...(browser?.tools ?? [])],
     ...(browser === null ? {} : { mcpServers: browser.mcpServers }),
     // Every role, composed the same way, so a coder that finds a gap mid-run can call
@@ -848,9 +894,42 @@ try {
                 // What arrived, when something did. Printed beside the transition rather than
                 // instead of it: "3 appeared" says the page moved and "modal" says what kind of
                 // thing moved it, and neither substitutes for the other.
-                if (look !== null && look.arrival !== null) {
-                  console.error(`  surface: ${describeSurface(look.arrival.classification)}`);
-                }
+                const surface =
+                  look !== null && look.arrival !== null
+                    ? describeSurface(look.arrival.classification)
+                    : null;
+                if (surface !== null) console.error(`  surface: ${surface}`);
+
+                /**
+                 * And the same thing to the **agent**, which is the half that was missing.
+                 *
+                 * Both lines above go to the operator's terminal. The session that could act on an
+                 * untried control was told none of it, so the harness discovered pathways and
+                 * handed them to a reader. Returned here, the hook puts it in the model's context
+                 * after the tool result.
+                 *
+                 * The untried list is for the state the session is standing in *now* —
+                 * `transition.to` — not the whole graph. The agent is in one place, and the rest is
+                 * noise bought with the run's own tokens.
+                 */
+                if (look === null) return null;
+                const say = handoverLine({
+                  moved,
+                  surface,
+                  untriedHere: browser!.observer.untriedHere(look.transition.to),
+                  // The run's own remaining allowance, so a session can wrap up instead of
+                  // being cut off mid-thought with its findings unwritten.
+                  budgetLeft: budget.remaining(),
+                  atCeiling: browser!.observer.atCeiling(
+                    policyFor(runTarget!.environment).maxStates,
+                  ),
+                });
+                // Echoed to the operator as well as returned to the agent. What the harness
+                // puts into a session's context is part of the run and has to be auditable:
+                // without this line nobody can tell a session that found something itself from
+                // one that was handed it.
+                if (say !== null) console.error(`  told the agent: ${say}`);
+                return say;
               }, movesThePage),
             ],
           }),
@@ -897,7 +976,7 @@ try {
     const text = readFileSync(written.path, 'utf8');
     const parsed = parseReport(text);
     const prose = searchable(parsed.ok ? parsed.report : { findings: [] }, text);
-    const uses = skillUse(role.skills ?? [], prose, (skill) =>
+    const uses = skillUse(chosenSkills.skills, prose, (skill) =>
       readFileSync(join(repoRoot, skillFile(skill)), 'utf8'),
     );
     const lines = reportSkillUse(uses);
@@ -971,7 +1050,22 @@ await mkdir(join(worktree, runDir), { recursive: true });
 const wrote = findReport(worktree);
 const reportBody =
   wrote === null ? result.text : await readFile(wrote.path, 'utf8').catch(() => result.text);
-if (wrote === null) {
+/**
+ * Cut short before writing anything, which is a different failure from writing badly.
+ *
+ * Every live run on 2026-10-07 ended this way, and every one failed its gate on `No YAML
+ * frontmatter block found` — a formatting complaint about the agent's closing prose. The real
+ * cause was the budget, and the gate said nothing about it.
+ */
+const truncatedWithNoReport = wrote === null && result.stoppedBy !== null;
+
+if (truncatedWithNoReport) {
+  console.error(
+    `The run was cut short (${result.stoppedBy}) before it wrote a report, so there is none to ` +
+      `gate. The final message is kept as the summary. This is a budget finding, not a report ` +
+      `one — raise the limit that stopped it rather than looking at the format.`,
+  );
+} else if (wrote === null) {
   console.error(
     `No report file found under artifacts/run/ or reports/ — gating the final message instead. ` +
       `A role that writes its report to a file gets that file gated; this one did not.`,
@@ -1029,6 +1123,7 @@ if (parsedReport.ok) {
 // Everything changed in the worktree is the run's: nobody else works there.
 const changed = await worktreeChanges(worktree);
 const plan = planGate({
+  truncatedWithNoReport,
   role: name,
   family,
   changed,

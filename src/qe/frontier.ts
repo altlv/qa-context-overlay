@@ -168,3 +168,97 @@ export function describeFrontier(
   }
   return lines;
 }
+
+export interface Handover {
+  /** What the last action did, from `describeTransition`. Null when nothing moved. */
+  moved: string | null;
+  /** What kind of surface arrived, from `describeSurface`. Null when none did. */
+  surface: string | null;
+  /** Controls in the state the session is now standing in that nothing has acted on. */
+  untriedHere: readonly string[];
+  /** True when the state ceiling is reached, so a move somewhere new would be refused. */
+  atCeiling: boolean;
+  /**
+   * How much of the run is left, from `Budget.remaining()`, or null when nothing is bounded.
+   *
+   * A session was never told it was about to be killed. It is handed its state ceiling and nothing
+   * about its budget, so it gets cut off mid-thought — and on 2026-10-07 every live run ended that
+   * way, wrote no report, and then failed its gate on the formatting of its closing prose.
+   */
+  budgetLeft: { fraction: number; tightest: string } | null;
+}
+
+/**
+ * What the harness tells the **agent** after an action, or null when it has nothing worth the
+ * tokens.
+ *
+ * **The gap this closes.** Everything the observer learned went to `console.error` and to a
+ * post-run `summary()` — the operator, and a report. The agent, the only thing that can act on an
+ * untried control, was told nothing after its opening prompt. The frontier as first built was a
+ * coverage report wearing the word "steering": it says what a session missed and cannot tell the
+ * session. `PostToolUse` carries `additionalContext` back to the model — proven on 2026-10-07 with
+ * a code word the agent read back — so the channel existed and was simply unused.
+ *
+ * **It informs and never instructs.** `formatActionPlan` settles this for the opening briefing:
+ * "Which deserve your budget is your call — that judgement is the part no script makes." The same
+ * holds here. A line reading "now click Checkout" would replace the judgement that is the whole
+ * value of an exploratory role and turn the agent into a crawler that happens to cost model
+ * prices. So this reports facts: what moved, what arrived, what has not been touched.
+ *
+ * **Silence is the default, because this is spent from the budget that bounds the run.** Since
+ * 2026-10-06 a run is bounded by tokens, so every line here is money and wall-clock taken from the
+ * session itself. A handover after an action that moved nothing, into a state with nothing left,
+ * buys nothing and is not sent.
+ */
+export function handoverLine(handover: Handover, mostControls = 8): string | null {
+  const parts: string[] = [];
+  if (handover.moved !== null) parts.push(handover.moved);
+  if (handover.surface !== null) parts.push(`a surface arrived: ${handover.surface}`);
+
+  if (handover.untriedHere.length > 0) {
+    const shown = handover.untriedHere.slice(0, mostControls);
+    const more = handover.untriedHere.length > shown.length ? ', …' : '';
+    parts.push(
+      `${handover.untriedHere.length} control(s) here nothing has acted on yet: ` +
+        `${shown.join(', ')}${more}`,
+    );
+  }
+
+  /**
+   * **The one place this module gives an instruction, and the exception is narrow.**
+   *
+   * Everything else here reports a fact and leaves the judgement to the session, because
+   * `formatActionPlan` settles that doctrine and a harness saying "now click Checkout" has replaced
+   * the thing an exploratory role is for. "Write up what you have" is a different kind of sentence:
+   * it is about the **harness's own constraint**, not about what to test or where to look. The
+   * alternative is not neutrality — it is a session killed mid-thought whose work is lost, which is
+   * what happened to every run on 2026-10-07.
+   *
+   * The threshold leaves room to act rather than only to know. Measured the same day, a message of
+   * this role costs ~21,262 weighted units against a $1 ceiling of ~484,792, so a fifth of the
+   * budget is about four messages — enough to stop, gather and write. A warning at the last percent
+   * would be an epitaph.
+   */
+  if (handover.budgetLeft !== null && handover.budgetLeft.fraction <= 0.2) {
+    const left = Math.max(0, Math.round(handover.budgetLeft.fraction * 100));
+    parts.push(
+      `about ${left}% of this run’s ${handover.budgetLeft.tightest} budget is left, and the run ` +
+        `ends when it is gone — write up what you have rather than losing it`,
+    );
+  }
+
+  if (handover.atCeiling) {
+    // Worth the tokens whatever else is true: without it a session cannot tell a page that stopped
+    // changing from a harness that stopped letting it move, and would read its own budget running
+    // out as the application having nothing left to show.
+    parts.push(
+      'the state ceiling is reached, so a move to a state not seen before will be refused — ' +
+        'whatever is listed as untried is what this session will not reach',
+    );
+  }
+
+  if (parts.length === 0) return null;
+  // Named as the harness so it cannot be mistaken for something the page said. An agent reading
+  // this as page content would report the harness's own bookkeeping as a finding.
+  return `[harness] ${parts.join('. ')}.`;
+}

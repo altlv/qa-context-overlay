@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
-import { Budget, tokensIn } from './budget.js';
+import { Budget, billableTokens } from './budget.js';
 import { resolveModel } from './models.js';
 
 export interface AgentRunResult {
@@ -159,7 +159,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
         // Summed by `tokensIn`, which is pure and tested. Inline, the cache-creation term —
         // the one that carries almost the whole count — could be zeroed with every test
         // still green, because nothing can reach into a `for await` over the SDK stream.
-        budget.record({ tokens: tokensIn(message.message.usage) });
+        budget.record({ tokens: billableTokens(message.message.usage) });
       }
 
       if (message.type === 'assistant') {

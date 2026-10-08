@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { Budget, tokensIn } from '../../src/agents/budget.js';
+import { Budget, billableTokens } from '../../src/agents/budget.js';
 import { isAuthFailure } from '../../src/agents/client.js';
 import { extractJson, triageVerdictSchema } from '../../src/agents/triage.js';
 import {
@@ -405,7 +405,7 @@ test.describe('the only spend bound that can stop a run', () => {
   });
 });
 
-test.describe('counting what a message was billed for', () => {
+test.describe('what a message actually cost, in input-token-equivalents', () => {
   /**
    * **These exist because a poison test walked through the summation untouched.** Zeroing the
    * cache-creation term left all thirty-six tests green: they exercise `Budget`, while the
@@ -418,33 +418,34 @@ test.describe('counting what a message was billed for', () => {
     // The shape measured on 2026-10-06, verbatim: cache creation dominates by three orders of
     // magnitude. A count that leaves it out reads as 4 instead of 42,555.
     expect(
-      tokensIn({
+      billableTokens({
         input_tokens: 2,
         output_tokens: 2,
         cache_creation_input_tokens: 42_551,
         cache_read_input_tokens: 0,
       }),
-      'cache creation is the term the ceiling depends on',
-    ).toBe(42_555);
+      'a one-hour cache write costs twice an input token, and it is the term the ceiling depends on',
+    ).toBe(85_114);
   });
 
   test('should count a cache read, which a warm prompt is almost entirely made of', () => {
     expect(
-      tokensIn({
+      billableTokens({
         input_tokens: 5,
         output_tokens: 10,
         cache_creation_input_tokens: 0,
         cache_read_input_tokens: 30_000,
       }),
-      'a session that re-reads a warm prompt bills almost entirely here',
-    ).toBe(30_015);
+      'a cache read is a tenth of an input token — counting it as a write overstates twentyfold ' +
+        'and compounds every message, which took two live runs to zero actions',
+    ).toBe(3_055);
   });
 
   test('should survive the nulls the API actually sends', () => {
     // Two of the four are `number | null`, and a run with no cache writes sends null rather than
     // omitting the field. `null + 5` is 5, but `undefined + 5` is NaN — and NaN exceeds no
     // ceiling, so the bound would vanish on exactly the runs that have no cache.
-    const counted = tokensIn({
+    const counted = billableTokens({
       input_tokens: 7,
       output_tokens: 3,
       cache_creation_input_tokens: null,
@@ -452,11 +453,78 @@ test.describe('counting what a message was billed for', () => {
     });
 
     expect(Number.isNaN(counted), 'a NaN total is an absent ceiling').toBe(false);
-    expect(counted).toBe(10);
+    expect(counted, '7 input at 1x and 3 output at 5x').toBe(22);
+  });
+
+  test('should charge an unsplit cache write at the dearer rate', () => {
+    // The API reports a 5m/1h split when it has one. Without it, guessing the cheaper rate
+    // would understate the very cost this bound exists to hold.
+    expect(
+      billableTokens({ cache_creation_input_tokens: 1_000 }),
+      'no split given, so charged as a one-hour write rather than assumed cheap',
+    ).toBe(2_000);
+  });
+
+  test('should use the split when the API reports one', () => {
+    expect(
+      billableTokens({
+        cache_creation_input_tokens: 1_000,
+        cache_creation: { ephemeral_5m_input_tokens: 1_000, ephemeral_1h_input_tokens: 0 },
+      }),
+      'a five-minute write is 1.25x, not 2x — the split is worth reading',
+    ).toBe(1_250);
   });
 
   test('should treat a missing field as nothing rather than as NaN', () => {
-    expect(tokensIn({ input_tokens: 4 }), 'the shape can change under us').toBe(4);
-    expect(tokensIn({}), 'and an empty usage is zero, not NaN').toBe(0);
+    expect(billableTokens({ input_tokens: 4 }), 'the shape can change under us').toBe(4);
+    expect(billableTokens({}), 'and an empty usage is zero, not NaN').toBe(0);
+  });
+});
+
+test.describe('how much of a run is left', () => {
+  test('should report the tightest bound, not the roomiest', () => {
+    // A run with hours of clock and a spent token ceiling is as finished as one with the reverse.
+    // Reporting whichever looks healthiest would be reassurance in the one place it costs most.
+    const budget = new Budget({
+      maxTurns: 100,
+      maxUsd: 1,
+      timeoutMs: 3_600_000,
+      maxTokens: 1_000,
+    });
+    budget.record({ tokens: 900 });
+
+    const left = budget.remaining();
+    expect(left?.tightest, 'tokens are nearly gone while the clock has an hour on it').toBe(
+      'tokens',
+    );
+    expect(left?.fraction, 'a tenth of the ceiling left').toBeCloseTo(0.1, 2);
+  });
+
+  test('should be null when nothing bounds the run', () => {
+    /**
+     * "No limit set" and "plenty left" are different facts and only one of them means the run is
+     * safe. Collapsing them would let a session with no spend bound at all read as comfortable —
+     * which is the state every run was in before 2026-10-06.
+     */
+    const budget = new Budget({ maxTurns: 0, maxUsd: 1, timeoutMs: 0 });
+    expect(budget.remaining(), 'nothing is bounded, so there is no fraction to report').toBeNull();
+  });
+
+  test('should not read an unticked turn counter as a full budget', () => {
+    // `num_turns` arrives only with the final result message, so `turns` is 0 for the whole of a
+    // run. A fraction built from it would report 100% of the turn budget remaining at the moment
+    // the run ends, which is worse than saying nothing.
+    const budget = new Budget({ maxTurns: 10, maxUsd: 1, timeoutMs: 0 });
+    expect(
+      budget.remaining(),
+      'turns cannot be watched mid-run, so they are not offered as a reading',
+    ).toBeNull();
+  });
+
+  test('should fall to zero rather than go negative', () => {
+    const budget = new Budget({ maxTurns: 0, maxUsd: 1, timeoutMs: 0, maxTokens: 100 });
+    budget.record({ tokens: 250 });
+
+    expect(budget.remaining()?.fraction, 'overspent is spent').toBeLessThanOrEqual(0);
   });
 });

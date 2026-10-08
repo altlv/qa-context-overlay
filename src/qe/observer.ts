@@ -3,7 +3,7 @@ import { readAnnouncements } from '../tools/announcements.js';
 import { harvestCandidates } from '../tools/heal.js';
 import { arrivalLines, classifyArrival } from '../tools/surfaces.js';
 import type { Arrival, ObserveOptions } from '../tools/surfaces.js';
-import { describeFrontier, frontier, moveLabel } from './frontier.js';
+import { describeFrontier, frontier, moveLabel, untriedControls } from './frontier.js';
 import type { StateFrontier } from './frontier.js';
 import { StateModel, describeTransition } from './state-model.js';
 import type { Transition } from './state-model.js';
@@ -45,6 +45,14 @@ export interface Observer {
   about(toolName: string, toolInput: unknown): void;
   /** Every state that still offers a control nothing acted on. */
   frontier(): StateFrontier[];
+  /**
+   * Controls in the state the session is standing in now that nothing has acted on.
+   *
+   * The frontier for **one** state rather than the whole graph: the agent is standing in one
+   * place, and a list of every state’s leftovers is noise paid for out of the run’s own token
+   * budget.
+   */
+  untriedHere(state: string): string[];
   /** Lines for the run summary. */
   summary(): string[];
 }
@@ -140,6 +148,7 @@ export function pageObserver(
     missed: () => missedLooks,
     about: (toolName, toolInput) => model.about(moveLabel(toolName, toolInput)),
     frontier: frontierNow,
+    untriedHere: (state) => untriedControls(model.affordsIn(state), model.triedFrom(state)),
 
     async observe() {
       try {

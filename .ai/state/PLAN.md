@@ -12,7 +12,7 @@ Attribution lives in `docs/sources.md`. None of that belongs here.
 
 ## Where we are
 
-Head is `df5346a` — the commit this file was last checked against. A file cannot name
+Head is `d328e49` — the commit this file was last checked against. A file cannot name
 the commit that contains it, so `npm run precommit` accepts HEAD itself, or HEAD's
 parent when the latest commit updated this file.
 
@@ -1283,6 +1283,136 @@ That inverts the concern worth recording: a flickering page **inflates the state
 than deflating the frontier. It is a cost of how finely this model discriminates, and it now sits
 in a test instead of behind a branch that never ran.
 
+### E5c — the handover, 2026-10-07. The user asked the question that found it
+
+"So the driver is not doing proper handover, even if it discovers pathways?" Correct, and worse
+than the framing it corrected.
+
+Every channel the observer had was **operator-facing**. `page: 53 appeared, 30 gone` and
+`surface: popover` went to `console.error`. The frontier went to `summary()`, printed after the
+agent had already stopped. So item 83 shipped a **coverage report wearing the word "steering"**:
+it tells a reader what a session missed and cannot tell the session. The only handover that ever
+reached the agent was the `--scan` briefing in its opening prompt — once, before it had clicked
+anything — and `formatActionPlan` had been confessing the consequence all along: "It is built
+from ONE state: the page as it first loaded."
+
+**The channel existed and was unused.** `PostToolUse` returns `additionalContext` to the model.
+Proven rather than read off a type definition — a hook slipped in a code word and the agent read
+`ZEBRA-4417` back. Now the observer returns a line and the hook carries it: what moved, what kind
+of surface arrived, and the untried controls in the state the session is standing in. That state
+only, not the whole graph, because the agent is in one place and the rest is noise paid for out
+of the run's own token budget.
+
+Two constraints it is held to. **It informs and never instructs** — `formatActionPlan` settles
+that doctrine ("which deserve your budget is your call") and a test asserts the line carries no
+imperative, because a harness that says "now click Checkout" has replaced the judgement that is
+the whole value of the role. And **silence is the default**, since every line is money taken from
+the session that is being helped.
+
+Live on academybugs: `[harness] 31 control(s) here nothing has acted on yet: academybugs.com,
+accept cookies, add to cart, …`. Echoed to the operator as well, because what the harness puts
+into a session's context is part of the run and has to be auditable — otherwise nobody can tell a
+session that found something itself from one that was handed it.
+
+#### And the token bound bricked the role it was built to protect
+
+**Two live runs died at 19 seconds having taken zero actions.** `token limit reached
+(316,457/242,362)` — and the same without `--scan`, so the briefing was not the cause. The
+unbounded spend that bound replaced was bad; a role that cannot act at all is worse, and this was
+pushed as `df5346a` before anyone ran it.
+
+The quantity was wrong, not the plumbing. Measured on 2026-10-07: **every message bills ~70,362
+cache-read tokens** — the whole prompt re-read — against ~7,107 written and 2 each of input and
+output. A cache read costs a tenth of an input token and a write costs double, so an unweighted
+sum overstates about twentyfold **and compounds**: raw tokens grow with message count times
+prompt size rather than with cost. Four messages of nothing reached the ceiling.
+
+The rate came from a probe whose entire count was cold-cache _writes_, applied to runs that are
+almost entirely warm-cache _reads_. **The neighbour of the thing being bounded** — the hazard
+below, and the first time it reached production rather than a report. The doc even said "it leans
+conservative, and stopping early costs a partial session"; what it cost was the whole session,
+and the word "conservative" was covering for a number never checked against a real run.
+
+Fixed with **ratios, not prices**: output 5× input on every tier, cache read 0.1×, cache write
+1.25× at five minutes and 2× at an hour, with the API’s own split read when it reports one. The
+weights are tier-independent, so there is still no price table to rot, and the unit is named an
+input-token-equivalent rather than a token because a figure called tokens that is not tokens is
+the kind of label this file keeps having to correct.
+
+`TOKENS_PER_USD` is now 484,792 weighted, and it **predicts a real run**: ~23 messages per dollar,
+against `exploratory-tester` actually running 22 turns for $0.9050 on 2026-10-04. Two independent
+runs a day apart, agreeing within one message.
+
+**What that calibration then reveals is the real answer to item 30.** A $1 tier budget buys about
+23 messages of this role, which came to **2 state-changing actions** in 156 seconds. Arm 1 managed
+0 and arm 2 managed 4. So every arm of that comparison truncated because the default budget is far
+too small for exploratory work — not because of anything the arms were testing.
+
+**Still missing: the agent is never told its _budget_ is nearly gone.** The handover reports the
+state ceiling, which is a different limit; the run above died on tokens with the session unaware.
+
+### A run that finishes — item 48 and budget awareness, 2026-10-07
+
+**Every live run this session was killed rather than finished**, wrote no report, and failed its
+gate on `No YAML frontmatter block found` — a formatting complaint about the agent’s closing
+prose, which nobody had claimed was a report. So the whole QA layer had only ever been exercised
+on truncated runs, and the gate was reporting the wrong cause every time.
+
+Two fixes. **The session is told when its budget is nearly gone** — `Budget.remaining()` reports
+the fraction of the _tightest_ bound left, because a run with hours of clock and a spent token
+ceiling is as finished as one with the reverse, and reporting the roomiest would be reassurance.
+The handover warns at a fifth left, measured at about four messages: enough to stop, gather and
+write. A warning at the last percent would be an epitaph.
+
+That warning is **the only instruction the handover ever gives**, and the exception is narrow on
+purpose: it is about the harness’s own constraint rather than about what to test, and the
+alternative is not neutrality but a session killed mid-thought with its findings lost. A test
+pins that it does not leak into the ordinary case.
+
+And **item 48**: a run cut short before writing a report now reports that check as NOT RUN with
+the real cause, rather than failing it. Rule 1 asks for exactly that. It does not pass either —
+a measurement that was not taken may never read like one that came back clean.
+
+#### The first complete run
+
+`exploratory-tester` against academybugs: **36 turns, $1.4649, 399s, no stop reason, report
+written to the conventional path, gate PASS, 3 defect claims.** Against the five runs before it
+that same day, all of which were killed and failed their gates. Three changes compound into it:
+the operator raised `AGENT_MAX_USD`, the weighted conversion stopped the bound firing on cache
+reads, and the session could wrap up.
+
+**What it does not prove:** the wrap-up warning never fired, because nothing ran out. The gate
+fix and the ceiling fix are shown live; the warning is unit-tested only.
+
+#### Three findings the passing run produced
+
+**The session barely moves.** 36 turns and $1.46 bought **1 state and 2 state-changing actions** —
+11 `browser_evaluate`, 4 screenshots, 5 `Bash`, 3 `Read`. It found three real defects, so the work
+was not wasted, but it examined one page very hard rather than exploring an application. That
+reframes the frontier: 31 untried controls is not a budget problem, it is the role’s method being
+depth-first on whatever loads. `maxStates: 25` has never been close to binding, and no number
+here said so until the frontier existed.
+
+**Most of the context we pay for leaves no trace.** Nine skills inlined into a ~316k-token system
+prompt, charged as cache reads on every message, and the run’s own accounting says
+`exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1` — two of five
+procedural skills left no trace at all. This is **item 78 with a measurement attached**: the
+README leads with "context the agent is given rather than pays to re-derive", and most of that
+context does not reach the output. It is also the sharper version of item 30 — the comparison
+worth running may not be _with ideas versus without_, but **with nine skills versus three**.
+
+**The handover speaks once.** One handover in 36 turns, delivered before the session had done
+anything, because it only fires after a page-moving tool and this session used two. The channel
+works; the trigger is wrong. A session spending eleven of its turns in `browser_evaluate` learns
+nothing in between.
+
+#### Also open
+
+The **opus token rate is unmeasured**, so a ceiling derived from a dollar figure there is roughly
+five times too generous. And **repeat-run variance is now visible in the explorer**: the same
+role, target and charter produced 0, 2 and 4 state-changing actions across runs, which is large
+enough to swamp most comparisons — item 76 applies to explorers and not only to coders.
+
 ### A standing hazard, recorded because it is now a pattern
 
 **Nine times across these sessions** — the count was four when this was written and three more
@@ -1471,8 +1601,8 @@ Three separate problems, and conflating them is the trap:
 | 45  | **Layer 3 — success rates over runs. Unblocked 2026-09-19 when item 26 landed.** "Regression no longer means the output changed, it means success rates dropped" requires more than one run on disk to compare. `npm run archive-results` now keeps the newest 20, so there is finally something to measure against — though the history is a floor, since nothing runs it automatically                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | 46  | **Layer 4 is item 9 wearing a different hat.** LLM-as-judge on a rubric, three runs and a majority vote, needs a second model — which is exactly the `askModel(model, prompt)` seam item 9 already describes, and exactly what `honesty-check` most needs, since self-assessment is its weakest link. Build the seam once and both land                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 47  | **Diagnose the countdown-timer failures properly, with `flaky-test-detection`.** The signature is captured (see _Not proven_): `page.clock` does not hold this app — the display keeps counting in real time while an assertion waits — and `runFor` lands one second short. Two things to establish. First, whether the subject changed under us: its JS is served `last-modified: 2026-09-18`, a day before the rate jumped, and `setInterval` drives the display. Second, why clock control is partial, given the spec installs before `goto` as the README demands. **The `sourceRepo` in `apps/countdown-timer/app.config.ts` 404s**, so upstream history cannot answer the first — find where that repository moved, or record that it is gone. Until then this is the one external subject whose red is expected, which is exactly the state that teaches a team to ignore a red suite                                                                                                                                                                                                           |
-| 48  | **The post-run gate validates the wrong file.** `src/cli/role.ts` writes `result.text` — the agent's final chat message — to `--out`, then points the gate at it. On 2026-09-20 sonnet correctly wrote its report to `reports/` and signed off with a summary, so the gate validated the summary and failed it for missing frontmatter while the real 15 KB report passed `check-report` cleanly. Opus happened to emit its whole report as its last message and passed the identical gate. Compounding it, `/reports/` is gitignored, so `worktreeChanges` never sees the run's deliverable at all — sonnet's gate listed five screenshots and no report. Find the report the role wrote, or make the contract explicit and enforce it. **A gate whose verdict depends on a stylistic choice the role never made deliberately is not a gate.** Both runs are evidence and their worktrees are kept                                                                                                                                                                                                     |
-| 49  | **The spend cap is a trailing stop, not a ceiling.** Opus spent $5.3834 against `AGENT_MAX_USD=4` on 2026-09-20 — 35% over — because `budget.exceeded()` is consulted after a turn completes, so one expensive turn carries the run past its limit. Either check a forecast before the turn, or stop calling it a limit in the output. It matters most where it is least affordable: the overshoot scales with per-turn cost, so the pricier the tier the further it overruns, and nothing in the run output says the number is approximate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 48  | **DONE 2026-10-07.** A run cut short before writing a report now reports that check as NOT RUN with the real cause, rather than failing it on `No YAML frontmatter block found` — a formatting complaint about the agent’s closing prose. Measured: every live run that day ended this way, so it was the dominant failure mode and not an edge case                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | —   | The original half — a role writing its report somewhere unexpected — was already fixed by `findReport`. What remained was the gate reporting the wrong _cause_ when there was nothing to find               |
+| 49  | **DONE 2026-10-06, and this item understated it.** It was not a trailing stop — cost reaches `Budget` once, on the single `result` message the SDK emits at the end, so `AGENT_MAX_USD` had **never bounded any run**. The 35% overshoot recorded here was just how far one run got before that message arrived. Bounded on tokens instead                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | —   | The first fix summed the kinds unweighted and bricked the role: every message re-reads the whole cached prompt, so raw tokens track message count rather than cost. Weighted by tier-independent ratios now |
 | 50  | **The `coverage` declaration — generalise what made the pre-flight fix work.** A fixed list of testing dimensions in every session report, each answered `ran`, `gap`, or `not applicable, because…`. **Not a mandate to test them — a mandate to account for them.** This is the mechanism, and it is the prerequisite for items 51-56: each new skill plugs in as a dimension rather than as another paragraph of prose nobody checks. Proven twice now: `preflight` and `lenses` moved seeded-bug recall 2.7-3.8× with the models unchanged, and sonnet's "contrast: not measured … declared as a gap" passed the gate, which is exactly right. Context to fall back on, never a ceiling — three findings across the eprimer runs **disagreed with the seeded key** and were right to                                                                                                                                                                                                                                                                                                                |
 | 51  | **`rule-modelling` skill — the largest single gap, 16 seeded bugs of which 6 high-impact.** `test-techniques` generates from DOM shapes: field types, constraints, toggles, groups. A product that implements a **domain rule** has its defects in the rule, not in the markup, and no scan can see one. Recover the rule from docs, source or behaviour; write it as a table; enumerate its classes; test classes rather than examples. **Carries the oracle rule that nothing else states: a rule recovered from source describes the implementation, so it may generate inputs and can never be the oracle.** That single sentence would have prevented sonnet's CJK false pass, where it read the tokenizer, adopted whitespace-splitting as its oracle, and certified a seeded bug as correct behaviour                                                                                                                                                                                                                                                                                            |
 | 52  | **`web-platform-checks` and `content-review` — about 15 seeded bugs for almost no browser actions.** Platform: document head, charset, viewport, favicon, HTML/CSS validation, security.txt, privacy, and page weight **from the network capture the role already tells sessions to watch and no session has ever opened**. Content: read every string and ask whether it is accurate, consistent in its terminology, and complete — labels rendering with no value, instructions that do not instruct. The best ratio in the whole table and the cheapest to write                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -1516,6 +1646,13 @@ Three separate problems, and conflating them is the trap:
 | 79 | **Nothing measures whether a person is helped.** Every number here compares an agent to another agent, or an agent's suite to a hand-written one (4 of 14 against 8, then 11 — a real comparison, and of **artifacts**) | 76 gives the variance this would need | "Meaningful aid for QA activities" is the purpose in the README's first line and it is the one claim with no instrument at all. The activity has never been measured: whether a tester working with this finds more, or faster, or with better evidence, than the same tester without it. It may not be cheaply measurable — that is a reason to say so plainly rather than to let the artifact comparisons stand in for it |
 | 76 | **Repeat-run variance for coders.** Same seam, same task, three runs; compare mutation scores and take the union of killed mutations against the best single run | 75 is independent of this; neither blocks the other | The explorer side measures this and the number was the most useful one we have — the best single session reaches **39%** of what five sessions found between them, 31 of 57 findings seen exactly once. The coder side measures nothing of the kind, so every coder number on this page is a sample of one, including the 4/8/11 progression. A capability whose spread is unmeasured cannot be said to have improved. It also gives killed-mutations-per-dollar, which is the axis that should decide model choice and which we have never computed despite logging cost and turns for every run |
 | 74 | **Performance: the coder capability this plan forgot, and the measurement instrument underneath it.** Raised by the user on 2026-09-25 — an agent for performance test _creation and maintenance_ | the item-43 ruling, which it shares | Performance is a quality attribute that crosses all four levels, so a role named for it crosses the axis the coders split on — the same objection as `agentic-coder`. The genuinely different part is the instrument: a measurement is statistical, so it needs thresholds and a baseline per metric. Item 8 (the scan-side `performance.getEntriesByType` pass) has never been built, there is no comparator for measurements — the analogue of `mutation-compare` — and no gate rule that reads one. `.ai/state/POC-CODER-ROLLOUT.md` §2b gives the sequence, and the ruling to make together with item 43 |
+
+| 85 | **The handover speaks once.** It fires only after a page-moving tool, and the first complete run used two in 36 turns — so the agent got its frontier before it had done anything and nothing for the next six minutes. The channel works (`additionalContext`, proven live); the trigger is wrong | 83 | A session spending eleven of its turns in `browser_evaluate` learns nothing in between. Candidates: fire after any browser tool, or on a timer, or when the frontier changes. Each costs tokens from the run it is helping, so the cheap wrong answer is "always" |
+| 86 | **The session barely moves, and the frontier is what revealed it.** 36 turns and $1.4649 bought **1 state and 2 state-changing actions** — 11 `browser_evaluate`, 4 screenshots, 5 `Bash`, 3 `Read`. Three real defects found, so the work was not wasted, but it examined one page hard rather than exploring an app | 83 | `maxStates: 25` has never been close to binding, and nothing said so until the frontier existed. Whether depth-first on one page is the wrong method or just a different one is a judgement for the user; what is certain is that "exploratory" and what this does are not the same word |
+| 87 | **Most of the context we pay for leaves no trace — item 78 with a measurement.** Nine skills inlined into a ~316k-token system prompt, charged as cache reads on every message, and the run’s own accounting says `exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1`; two of five procedural skills left no trace at all | — | The README leads with "context the agent is given rather than pays to re-derive" and most of it does not reach the output. **The cheap test: run the same charter with three skills instead of nine and compare cost and findings.** It is also the sharper form of item 30 — nine skills versus three, rather than ideas versus no ideas |
+| 88 | **The opus token rate is unmeasured.** `TOKENS_PER_USD` was measured on sonnet, and opus costs roughly five times per token, so a ceiling derived from a dollar figure there is about five times too generous | — | One probe fixes it, the same shape as the sonnet one: a one-turn `runAgent` call with the tier set, reading weighted tokens against reported cost. Until then an opus run is bounded by the clock and not by its dollar limit |
+| 89 | **The wrap-up warning has never fired in a live run.** Unit-tested only: the run that proved the gate fix and the ceiling fix finished with budget to spare, so the warning was never reached | — | It needs a run that genuinely runs low, which means a tight ceiling on purpose. Cheap, and the thing it protects is a whole session’s findings — the failure it exists for is exactly the one that produced no report five times in a day |
+| 90 | **Repeat-run variance is visible in the explorer now, and it is large.** Same role, same target, same charter, three runs: **0, 2 and 4** state-changing actions. Item 76 asks for this on coders; it applies here and the numbers are already in hand | 76 is the same question | A spread that wide swamps most comparisons, including item 30’s and item 87’s. Any claim from a single run of either is one sample from a distribution nobody has characterised, and saying so is cheaper than pretending otherwise |
 
 ## Waiting on the user
 

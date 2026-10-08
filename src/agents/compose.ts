@@ -56,13 +56,41 @@ function forSubject(prompt: string, subject: SubjectRun): string {
     .replace(TEST_LEVELS, subjectLevels(subject));
 }
 
+/**
+ * The skills a run will actually inline, from the role's own list and an operator's subset.
+ *
+ * **Why this is a capability rather than a hand edit.** The skills are the most expensive thing
+ * in a run: nine of them inline into a ~316k-token system prompt, charged as cache reads on every
+ * message. Measured on 2026-10-07, the first complete run's own accounting said
+ * `exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1` — two of five
+ * procedural skills left no trace in the report at all. The README leads with "context the agent
+ * is given rather than pays to re-derive", and most of that context did not reach the output.
+ *
+ * So the comparison worth running is nine skills against three, and it has to be repeatable to
+ * mean anything — a temporary edit to a role file produces a number nobody can reproduce. Item 87.
+ *
+ * **A subset only, never an addition.** Granting a skill the role does not declare would be
+ * measuring a different role, and `roles.test.ts` enforces that every skill is declared by one.
+ * An unknown name is refused rather than ignored, because a typo that silently changed nothing
+ * would read as "the skills made no difference".
+ */
+export function skillsFor(
+  declared: readonly string[],
+  wanted: readonly string[] | null,
+): { skills: string[]; refused: string[] } {
+  if (wanted === null) return { skills: [...declared], refused: [] };
+  const refused = wanted.filter((name) => !declared.includes(name));
+  return { skills: declared.filter((name) => wanted.includes(name)), refused };
+}
+
 export function composeSystemPrompt(
   role: AgentDefinition,
   read: (path: string) => string = readFromRepo,
   subject?: SubjectRun,
+  only?: readonly string[] | null,
 ): string {
   const prompt = subject === undefined ? role.prompt : forSubject(role.prompt, subject);
-  const skills = role.skills ?? [];
+  const skills = skillsFor(role.skills ?? [], only ?? null).skills;
   if (skills.length === 0) return prompt;
 
   const sections = skills.map((name) => {

@@ -91,6 +91,19 @@ export function planGate(input: {
   family: RoleFamily;
   changed: string[];
   report: string;
+  /**
+   * True when the agent never wrote a report of its own and the run was cut short.
+   *
+   * These are two different failures that used to look identical. A role that wrote a bad
+   * report is a finding about the role. A role that was **killed before it could write one** is
+   * a finding about the budget, and gating its final chat message reports `No YAML frontmatter
+   * block found` — a formatting complaint about prose nobody claimed was a report.
+   *
+   * Measured on 2026-10-07: every live run that day was stopped by a limit, none wrote a report,
+   * and every one failed its gate on frontmatter. So this was the dominant failure mode rather
+   * than an edge case, and the whole QA layer had only ever been exercised on truncated runs.
+   */
+  truncatedWithNoReport?: boolean;
   /** The run's environment. Every spec the gate runs, runs there. */
   environment: Environment | null;
   /** This run's own folder, so the gate never writes over another run's results. */
@@ -311,11 +324,26 @@ export function planGate(input: {
   // named for every defect claim, observations and questions kept apart from both. No
   // extra gate step: one command, one place the rules live.
 
-  steps.push({
-    name: 'report',
-    args: [TSX, script('src/cli/check-report.ts'), posix(input.report)],
-    env: {},
-  });
+  /**
+   * Reported as NOT RUN rather than failed when there was nothing to check.
+   *
+   * CLAUDE.md rule 1: "Never claim a check ran when it did not — report NOT RUN explicitly." A
+   * frontmatter failure against a chat message is a check that ran on the wrong thing, which is
+   * worse than one that did not run, because it produces a confident finding about the wrong
+   * subject. It must not pass either: a measurement that failed may never be indistinguishable
+   * from one that came back clean.
+   */
+  if (input.truncatedWithNoReport === true) {
+    notRun.push(
+      'report: the run was cut short before it wrote one, so there is nothing of the role\u2019s to check. The budget ended this run, not the report format.',
+    );
+  } else {
+    steps.push({
+      name: 'report',
+      args: [TSX, script('src/cli/check-report.ts'), posix(input.report)],
+      env: {},
+    });
+  }
   return { steps, problems, notRun };
 }
 
