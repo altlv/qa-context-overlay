@@ -74,9 +74,38 @@ const MOVES_THE_PAGE = new Set([
   'browser_tabs',
 ]);
 
-/** Whether the page may look different after this call, so it is worth re-reading. */
-export function movesThePage(toolName: string): boolean {
-  return MOVES_THE_PAGE.has(toolName.split('__').pop() ?? toolName);
+/**
+ * Tools that may have changed the page without being a move the session chose.
+ *
+ * Wider again than `MOVES_THE_PAGE`, and measured rather than guessed. Across the two complete
+ * academybugs runs (2026-10-07 and 2026-10-08) only **3 of 21** and **6 of 22** browser calls were
+ * in `MOVES_THE_PAGE`, while `browser_evaluate` was the most used tool in both — 11 calls and 7.
+ * Evaluate runs arbitrary script in the page: it can click, submit, mutate the DOM and open a
+ * dialog, and nothing recorded any of it. That is not only a handover that stayed silent, it is a
+ * **state model blind to a whole class of change, with no miss recorded** — the count read as
+ * complete when it was not.
+ *
+ * `browser_hover` and `browser_wait_for` are here for the same reason and neither is an action
+ * against `maxActions`: a hover opens a menu, and waiting for something is waiting for the page
+ * to become different.
+ *
+ * Kept as a second set rather than folded into the first, because the two say different things
+ * and only one of them is a question anything now asks. `MOVES_THE_PAGE` is "a move the session
+ * chose", which is why navigation belongs in it and `browser_evaluate` does not. This set is "the
+ * page is possibly not what we last read", which is the only question a look should ever be gated
+ * on — so it is the only one with a predicate. The narrower one had exactly one caller, this hook,
+ * and widening it left nothing asking; a predicate nothing calls is a claim nothing checks.
+ */
+const MAY_CHANGE_THE_PAGE = new Set([
+  ...MOVES_THE_PAGE,
+  'browser_evaluate',
+  'browser_hover',
+  'browser_wait_for',
+]);
+
+/** Whether the page may differ from what was last read, so a look is worth taking. */
+export function mayChangeThePage(toolName: string): boolean {
+  return MAY_CHANGE_THE_PAGE.has(toolName.split('__').pop() ?? toolName);
 }
 
 export interface GuardDecision {

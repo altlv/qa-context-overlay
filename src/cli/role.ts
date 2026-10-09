@@ -19,11 +19,11 @@ import { BROWSER_MCP_SERVER, browserMcpConfig, browserToolsFor } from '../qe/bro
 import type { SnapshotMode } from '../qe/browser-tools.js';
 import { launchChromium } from '../qe/browser-launch.js';
 import { parseConsoleLog, reportConsole, summariseConsole } from '../qe/console-log.js';
-import { browserGuard, movesThePage } from '../qe/browser-guard.js';
+import { browserGuard, mayChangeThePage } from '../qe/browser-guard.js';
 import type { BrowserGuard, GuardDecision } from '../qe/browser-guard.js';
 import { activePage, describeTransition, pageObserver } from '../qe/observer.js';
 import { describeSurface } from '../tools/surfaces.js';
-import { handoverLine } from '../qe/frontier.js';
+import { handoverLine, handoverPacer } from '../qe/frontier.js';
 import type { Observer } from '../qe/observer.js';
 import { sessionBriefing } from '../qe/session-briefing.js';
 import { describePatience, runWithPatience } from '../qe/patience.js';
@@ -837,6 +837,14 @@ const check = (toolName: string, input: Record<string, unknown>): GuardDecision 
   return decision;
 };
 
+/**
+ * One pacer per run, because it remembers what it has already told this session.
+ *
+ * Declared out here rather than inside the hook: a hook callback runs once per tool call, so a
+ * pacer built inside it would be new every time and would suppress nothing.
+ */
+const pace = handoverPacer();
+
 let result;
 try {
   result = await runAgent({
@@ -883,6 +891,41 @@ try {
         : {
             PostToolUse: [
               observerHook(async (toolName, toolInput) => {
+                /**
+                 * A look costs a page read; a handover costs the run's own tokens. Only the
+                 * first is gated on the tool.
+                 *
+                 * **Why this branch exists.** The hook used to run only after
+                 * `movesThePage`, which measured at 3 of 21 and 6 of 22 browser calls across
+                 * the two complete academybugs runs — so the session was handed its frontier
+                 * twice in 36 turns and nothing for the six minutes after. Worse, the last ten
+                 * tool calls of the 2026-10-08 run were Read, Bash, Write, Edit and Grep with
+                 * no browser call at all, which is where a run ends and therefore where a
+                 * budget warning has to be able to arrive. It could not: no browser tool, no
+                 * hook, no warning. That is item 89's "never fired in a live run" explained.
+                 *
+                 * So the hook now runs after every tool, and decides here:
+                 *
+                 * - the page may have changed → look, and hand over everything;
+                 * - it cannot have → **no look**, and hand over only what is true without one.
+                 *
+                 * The second branch deliberately says nothing about the page. A frontier from
+                 * the last look, presented after three `Bash` calls, would be the harness
+                 * stating as current something it did not re-read.
+                 */
+                if (!mayChangeThePage(toolName)) {
+                  // No look, so no miss is recorded: this is not an observation that failed, it
+                  // is one that was never warranted.
+                  return pace(
+                    handoverLine({
+                      moved: null,
+                      surface: null,
+                      untriedHere: [],
+                      atCeiling: false,
+                      budgetLeft: budget.remaining(),
+                    }),
+                  );
+                }
                 // Named before the look, because the edge this produces is labelled from it and
                 // the model has to know before it records the transition. Nothing called this
                 // before, so every edge in every run was labelled `unknown` and the untried half
@@ -928,9 +971,14 @@ try {
                 // puts into a session's context is part of the run and has to be auditable:
                 // without this line nobody can tell a session that found something itself from
                 // one that was handed it.
-                if (say !== null) console.error(`  told the agent: ${say}`);
-                return say;
-              }, movesThePage),
+                // Paced, because the trigger is now every tool call: an unchanged line is
+                // something the session already knows, and re-reading it is charged to the budget
+                // that bounds the run. `handoverPacer` re-speaks it eventually, so standing
+                // still does not buy permanent silence.
+                const paced = pace(say);
+                if (paced !== null) console.error(`  told the agent: ${paced}`);
+                return paced;
+              }, mayChangeThePage),
             ],
           }),
     },

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { browserGuard } from '../../src/qe/browser-guard.js';
+import { browserGuard, mayChangeThePage } from '../../src/qe/browser-guard.js';
 import { policyFor } from '../../src/qe/exploration-policy.js';
 
 /**
@@ -187,5 +187,62 @@ test.describe('the state ceiling', () => {
       browserGuard(policyFor('local'), source(0)).enforcing().join(' '),
       'and a guard that does enforce it must say the number',
     ).toContain('40 states');
+  });
+});
+
+test.describe('when the page is worth looking at again', () => {
+  /**
+   * Item 85, and the measurement that sized it. The look was gated on the set of tools that are a
+   * move the session chose, which came to **3 of 21** and **6 of 22** browser calls across the two
+   * complete academybugs runs (2026-10-07 and 2026-10-08). `browser_evaluate` was the most used
+   * tool in both — 11 calls and 7 — and it runs arbitrary script in the page: it can click, submit,
+   * mutate the DOM and open a dialog. None of that was ever looked at, so the state model was blind
+   * to a whole class of change **and recorded no miss for it**, which made the count read as
+   * complete when it was not.
+   */
+
+  test('should look after a script that could have changed anything', () => {
+    expect(mayChangeThePage('mcp__playwright__browser_evaluate')).toBe(true);
+  });
+
+  test('should look after the moves it already looked after', () => {
+    // The wider set contains the narrower one. Widening must not drop a trigger.
+    for (const tool of [
+      'browser_click',
+      'browser_select_option',
+      'browser_type',
+      'browser_navigate',
+      'browser_press_key',
+      'browser_handle_dialog',
+    ]) {
+      expect(mayChangeThePage(`mcp__playwright__${tool}`), tool).toBe(true);
+    }
+  });
+
+  test('should look after a hover and a wait, neither of which spends an action', () => {
+    // A hover opens a menu; waiting for something is waiting for the page to be different. Both
+    // change what is on screen without counting against `maxActions`.
+    expect(mayChangeThePage('mcp__playwright__browser_hover'), 'hover').toBe(true);
+    expect(mayChangeThePage('mcp__playwright__browser_wait_for'), 'wait_for').toBe(true);
+  });
+
+  test('should not look after a tool that only reads', () => {
+    /**
+     * The cost side. A look harvests every control, reads the announcements and presses Tab, so
+     * taking one after a tool that cannot have changed the page spends wall clock for nothing — and
+     * a failed look is counted as a miss, which would then report the state count as a floor on the
+     * strength of a screenshot.
+     */
+    for (const tool of [
+      'mcp__playwright__browser_take_screenshot',
+      'mcp__playwright__browser_snapshot',
+      'mcp__playwright__browser_network_requests',
+      'mcp__playwright__browser_console_messages',
+      'Bash',
+      'Read',
+      'Edit',
+    ]) {
+      expect(mayChangeThePage(tool), tool).toBe(false);
+    }
   });
 });

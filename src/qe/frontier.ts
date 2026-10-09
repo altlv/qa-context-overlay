@@ -240,7 +240,20 @@ export function handoverLine(handover: Handover, mostControls = 8): string | nul
    * would be an epitaph.
    */
   if (handover.budgetLeft !== null && handover.budgetLeft.fraction <= 0.2) {
-    const left = Math.max(0, Math.round(handover.budgetLeft.fraction * 100));
+    /**
+     * Bucketed down to 5%, for two reasons that point the same way.
+     *
+     * A whole-percent figure changes on almost every message, so `handoverPacer` could not tell a
+     * warning it had already given from a new one, and the one sentence this module is allowed to
+     * make imperative would arrive on every call until the run ended — nagging, charged to the
+     * budget it is warning about. Bucketing makes the line stable within a band, so it is said
+     * once per band and then again when the band changes: four warnings at most.
+     *
+     * Rounding **down** rather than nearest is the second reason. 17% left must not read as "about
+     * 20%", because the whole point of the sentence is that there is less room than the session
+     * thinks. Understating what is left is the safe direction.
+     */
+    const left = Math.max(0, Math.floor((handover.budgetLeft.fraction * 100) / 5) * 5);
     parts.push(
       `about ${left}% of this run’s ${handover.budgetLeft.tightest} budget is left, and the run ` +
         `ends when it is gone — write up what you have rather than losing it`,
@@ -261,4 +274,41 @@ export function handoverLine(handover: Handover, mostControls = 8): string | nul
   // Named as the harness so it cannot be mistaken for something the page said. An agent reading
   // this as page content would report the harness's own bookkeeping as a finding.
   return `[harness] ${parts.join('. ')}.`;
+}
+
+/**
+ * Whether a handover is worth saying **again**.
+ *
+ * The trigger for a look used to be `MOVES_THE_PAGE`, which measured at 3 of 21 and 6 of 22
+ * browser calls across the two complete academybugs runs: the agent was handed its frontier twice
+ * in 36 turns, both times near the start, and then told nothing for six minutes. Widening the
+ * trigger to every call that may have changed the page fixes that and creates this problem — the
+ * same "31 control(s) here nothing has acted on yet" line, repeated twenty times, bought with the
+ * run's own tokens. Item 85 names the trap: "the cheap wrong answer is 'always'".
+ *
+ * So: say anything new, and say nothing that is merely true again. An unchanged line is
+ * information the session already has, and re-reading it costs money and crowds the context.
+ *
+ * **But silence cannot be permanent, which is why `repeatAfter` exists.** Suppressing an
+ * unchanged line forever would reproduce the failure this is fixing from the other direction: a
+ * session fifteen calls deep in one state would end up in exactly the position of the 2026-10-07
+ * run, hearing nothing while standing still. The default of 6 is a judgement, not a measurement,
+ * and it is cheap to change: at ~21,000 weighted units a message against a $1 ceiling of ~484,792,
+ * one repeat in six is well under a percent of a run.
+ */
+export function handoverPacer(repeatAfter = 6): (line: string | null) => string | null {
+  let said: string | null = null;
+  let suppressed = 0;
+  return (line) => {
+    if (line === null) return null;
+    if (line !== said) {
+      said = line;
+      suppressed = 0;
+      return line;
+    }
+    suppressed += 1;
+    if (suppressed < repeatAfter) return null;
+    suppressed = 0;
+    return line;
+  };
 }

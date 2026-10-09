@@ -4,6 +4,7 @@ import {
   describeFrontier,
   frontier,
   handoverLine,
+  handoverPacer,
   moveLabel,
   untriedControls,
   type Handover,
@@ -411,5 +412,136 @@ test.describe('telling a session its budget is nearly gone', () => {
       ordinary.toLowerCase(),
       'with budget to spare, the harness still suggests nothing about what to do',
     ).not.toContain('write up');
+  });
+});
+
+test.describe('how often the handover is allowed to speak', () => {
+  /**
+   * Item 85. The look used to be triggered by `movesThePage`, which measured at **3 of 21** and
+   * **6 of 22** browser calls across the two complete academybugs runs — the session was handed its
+   * frontier twice in 36 turns, both near the start, and told nothing for the six minutes after.
+   *
+   * Widening the trigger to every call that may have changed the page is the fix, and it creates
+   * the opposite failure: the same line repeated twenty times, bought with the run's own tokens.
+   * Item 85 names the trap in its own text — "the cheap wrong answer is 'always'".
+   */
+
+  test('should say something new', () => {
+    const pace = handoverPacer();
+    expect(pace('[harness] 3 appeared.')).toBe('[harness] 3 appeared.');
+    expect(pace('[harness] a modal arrived.'), 'a different line is news').toBe(
+      '[harness] a modal arrived.',
+    );
+  });
+
+  test('should not charge the run for a line it has already read', () => {
+    const pace = handoverPacer();
+    pace('[harness] 31 control(s) here nothing has acted on yet.');
+
+    expect(
+      pace('[harness] 31 control(s) here nothing has acted on yet.'),
+      'the same frontier is not a second piece of information',
+    ).toBeNull();
+  });
+
+  test('should speak again rather than go quiet for the rest of the run', () => {
+    /**
+     * The guard against fixing item 85 into its mirror image. A session fifteen calls deep in one
+     * state must not end up where the 2026-10-07 run was — hearing nothing while standing still.
+     */
+    const pace = handoverPacer(3);
+    const line = '[harness] 31 control(s) here nothing has acted on yet.';
+    pace(line);
+
+    expect(pace(line), 'first repeat suppressed').toBeNull();
+    expect(pace(line), 'second repeat suppressed').toBeNull();
+    expect(pace(line), 'and then said again').toBe(line);
+  });
+
+  test('should start counting again after it repeats itself', () => {
+    // Otherwise the line would be repeated on every call from then on, which is the nagging this
+    // exists to prevent.
+    const pace = handoverPacer(2);
+    const line = '[harness] standing still.';
+    pace(line);
+    pace(line);
+    expect(pace(line), 'repeated once').toBe(line);
+    expect(pace(line), 'and quiet again straight after').toBeNull();
+  });
+
+  test('should pass silence through without spending a repeat on it', () => {
+    /**
+     * Null is "the harness has nothing to say", which is not the same fact as "it said this
+     * already" and must not consume the repeat counter — otherwise a run of quiet actions would
+     * eat the allowance and the next genuine repeat would never arrive.
+     */
+    const pace = handoverPacer(2);
+    const line = '[harness] 31 control(s) here nothing has acted on yet.';
+    pace(line);
+    expect(pace(null)).toBeNull();
+    expect(pace(null)).toBeNull();
+
+    expect(pace(line), 'the repeat counter was not spent by the silence').toBeNull();
+    expect(pace(line), 'and the repeat lands on the second identical line, not the fourth').toBe(
+      line,
+    );
+  });
+});
+
+test.describe('the wrap-up warning a session can actually be given', () => {
+  const handover = (over: Partial<Handover> = {}): Handover => ({
+    moved: null,
+    surface: null,
+    untriedHere: [],
+    atCeiling: false,
+    budgetLeft: null,
+    ...over,
+  });
+
+  test('should report the same band as one line, so the pacer can suppress it', () => {
+    /**
+     * A whole-percent figure changes on almost every message, so every warning read as new and the
+     * one sentence this module may make imperative would arrive on every call until the run ended.
+     * Bucketing is what makes `handoverPacer` able to see a warning it has already given.
+     */
+    const pace = handoverPacer();
+    const at = (fraction: number): string | null =>
+      pace(handoverLine(handover({ budgetLeft: { fraction, tightest: 'tokens' } })));
+
+    expect(at(0.19), 'the first warning in the band').toContain('15%');
+    expect(at(0.17), 'still the same band, so not said twice').toBeNull();
+    expect(at(0.16), 'still the same band').toBeNull();
+    expect(at(0.14), 'a new band is news').toContain('10%');
+  });
+
+  test('should round down, never to the nearest', () => {
+    // 19% left must not read as "about 20%". The whole point of the sentence is that there is less
+    // room than the session thinks, so understating what is left is the safe direction.
+    const said =
+      handoverLine(handover({ budgetLeft: { fraction: 0.19, tightest: 'tokens' } })) ?? '';
+
+    expect(said, 'rounded down to the band').toContain('15%');
+    expect(said, 'and not up to a figure that reads as roomier than the truth').not.toContain(
+      '20%',
+    );
+  });
+
+  test('should reach a session that is no longer touching the browser', () => {
+    /**
+     * The reachability half of the defect, and the mechanism under item 89's "never fired in a live
+     * run". The last **ten** tool calls of the 2026-10-08 run were Read, Bash, Write, Edit and
+     * Grep — no browser call at all. That is where a run ends, so it is where the warning has to
+     * be able to arrive; while the hook was gated on a page-moving tool it could not.
+     *
+     * This is the shape the runner builds on that path: no look was taken, so nothing is claimed
+     * about the page, and the warning is the whole message.
+     */
+    const said =
+      handoverLine(handover({ budgetLeft: { fraction: 0.1, tightest: 'tokens' } })) ?? '';
+
+    expect(said, 'the warning survives with no page facts beside it').toContain(
+      'write up what you have',
+    );
+    expect(said, 'and claims nothing about a page it did not re-read').not.toContain('control(s)');
   });
 });
