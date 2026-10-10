@@ -210,6 +210,15 @@ export class StateModel {
    * Optional on purpose: an unlabelled move still records an edge, with the action as `unknown`.
    * Requiring the label would mean a caller that forgot it loses the edge entirely, and a graph
    * with a hole in it is worse than one with a vague label in it.
+   *
+   * **Prefer passing the action to `observe` where the two are separated by an `await`.** This
+   * holds the label in a field between the two calls, and the SDK documents `PostToolUse` as
+   * firing per tool and running **concurrently for parallel tool calls** — so a second caller's
+   * `about` can overwrite the label before the first caller's `observe` consumes it, and the
+   * edge is then named after someone else's move. That corrupts `triedFrom`, which is the tried
+   * half of the frontier, in the direction that reads as coverage. The parameter closes the window
+   * by not having one; this method stays for a caller that labels and observes with nothing
+   * suspended in between.
    */
   about(action: string): void {
     this.pending = action;
@@ -267,7 +276,7 @@ export class StateModel {
   }
 
   /** Record one look at the page and say what changed since the last one. */
-  observe(observation: Observation): Transition {
+  observe(observation: Observation, action?: string): Transition {
     const to = stateKey(observation);
     const from = this.last === null ? null : stateKey(this.last);
     const isNewState = !this.seen.has(to);
@@ -315,7 +324,7 @@ export class StateModel {
     // seen is exactly the move a route needs, and dropping it would record only the spanning
     // tree of first visits rather than the graph.
     if (from !== null) {
-      this.edges.push({ from, action: this.pending ?? 'unknown', to });
+      this.edges.push({ from, action: action ?? this.pending ?? 'unknown', to });
     }
     this.pending = null;
 

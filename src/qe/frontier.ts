@@ -234,10 +234,18 @@ export function handoverLine(handover: Handover, mostControls = 8): string | nul
    * alternative is not neutrality — it is a session killed mid-thought whose work is lost, which is
    * what happened to every run on 2026-10-07.
    *
-   * The threshold leaves room to act rather than only to know. Measured the same day, a message of
-   * this role costs ~21,262 weighted units against a $1 ceiling of ~484,792, so a fifth of the
-   * budget is about four messages — enough to stop, gather and write. A warning at the last percent
-   * would be an epitaph.
+   * The threshold leaves room to act rather than only to know. Measured on 2026-10-07, a
+   * steady-state message of this role costs ~21,262 weighted units against a $1 ceiling of
+   * ~484,792, so a fifth of the budget is about four messages — enough to stop, gather and write. A
+   * warning at the last percent would be an epitaph.
+   *
+   * **On the token bound that reasoning holds only mid-run, and a measurement has since shown how
+   * it fails.** The first message writes the whole prompt to cache rather than reading it, so a run
+   * capped at 436,313 units reported 444,046 consumed after four tool calls — budget-left went from
+   * 100% to below zero in one step, every threshold was jumped, and the warning that did arrive
+   * read "about 0% left": the epitaph this paragraph says it must not be. The bound that declines
+   * in the small steps this assumes is the **clock**. Item 91 carries the fix; this comment is here
+   * so nobody re-derives the four-messages figure and trusts it at the start of a run.
    */
   if (handover.budgetLeft !== null && handover.budgetLeft.fraction <= 0.2) {
     /**
@@ -293,7 +301,8 @@ export function handoverLine(handover: Handover, mostControls = 8): string | nul
  * unchanged line forever would reproduce the failure this is fixing from the other direction: a
  * session fifteen calls deep in one state would end up in exactly the position of the 2026-10-07
  * run, hearing nothing while standing still. The default of 6 is a judgement, not a measurement,
- * and it is cheap to change: at ~21,000 weighted units a message against a $1 ceiling of ~484,792,
+ * and it is cheap to change: at ~21,000 weighted units a steady-state message against a $1
+ * ceiling of ~484,792 (the opening message costs many times that — see item 91),
  * one repeat in six is well under a percent of a run.
  */
 export function handoverPacer(repeatAfter = 6): (line: string | null) => string | null {

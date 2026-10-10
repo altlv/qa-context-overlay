@@ -59,9 +59,19 @@ function forSubject(prompt: string, subject: SubjectRun): string {
 /**
  * The skills a run will actually inline, from the role's own list and an operator's subset.
  *
- * **Why this is a capability rather than a hand edit.** The skills are the most expensive thing
- * in a run: nine of them inline into a ~316k-token system prompt, charged as cache reads on every
- * message. Measured on 2026-10-07, the first complete run's own accounting said
+ * **Why this is a capability rather than a hand edit.** The skills are the largest part of this
+ * role's prompt and they are re-read as cache on every message: measured 2026-10-09, this role’s prompt is **9,036 tokens with no skills and 24,559 with all nine**, so the nine skills are ~15,500 tokens of it and narrowing to three removes ~10,900. At the 0.1× cache-read
+ * weight that is ~1,090 weighted units a message, which over the 38-message run of 2026-10-09 is
+ * ~$0.086 — and the measured gap between the two arms was $0.1132, so the narrowing accounts for
+ * very nearly all of it.
+ *
+ * **An earlier version of this comment said "~316k-token system prompt" and that was wrong by
+ * about 13×.** 316k is the whole cached prefix per message — tool schemas and conversation
+ * included — not the prompt, and attributing it to the skills made them look like the dominant
+ * cost of a run when they are under a tenth of the prefix. Corrected 2026-10-09 by measuring
+ * `composeSystemPrompt` directly, which is one call and should have been the first move.
+ *
+ * Measured on 2026-10-07, the first complete run's own accounting said
  * `exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1` — two of five
  * procedural skills left no trace in the report at all. The README leads with "context the agent
  * is given rather than pays to re-derive", and most of that context did not reach the output.

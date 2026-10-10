@@ -122,6 +122,14 @@ export function resolveModel(raw: string | undefined = process.env.HARNESS_MODEL
  * academybugs on 2026-10-04 ran **22 turns for $0.9050** before its own limit stopped it. Two
  * independent runs, a day apart, agreeing within a message.
  *
+ * **~21,262 is a steady-state message and the opening of a run is nothing like it.** A later
+ * message re-reads a cached prompt at 0.1×; the first one *writes* that prompt, at 1.25× or 2×.
+ * Measured on 2026-10-09: a run capped at 436,313 weighted units reported **444,046 consumed after
+ * four tool calls and zero completed turns**, which is many times a later message and the whole
+ * ceiling at once. So this rate divides a budget into messages correctly in the middle of a run
+ * and badly at the start of one — a ceiling sized by multiplying it is right for a long run and
+ * wrong for a short one. Item 91.
+ *
  * Not tier-scaled, for the same reason it is not a price table: one measurement is honest about
  * being one measurement, and three guesses would not be. The weights above are tier-independent,
  * so only this rate carries tier error — and a tier whose input price differs from sonnet’s will

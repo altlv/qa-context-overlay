@@ -204,3 +204,58 @@ test('the key does not depend on the order the DOM walk returned', () => {
     stateKey(at('/', [two, one])),
   );
 });
+
+test.describe('naming an edge when two looks are in flight at once', () => {
+  /**
+   * Found by audit on 2026-10-09, after the observer hook was widened to wake for every tool.
+   *
+   * The label used to be parked in the model by `about()` and consumed by `observe()`. In the hook
+   * those two calls are separated by three awaits — harvesting controls, reading announcements,
+   * classifying the arrival — and the SDK documents `PostToolUse` as firing per tool and running
+   * **concurrently for parallel tool calls**. So a second call's `about()` could overwrite the
+   * label before the first call's `observe()` consumed it, and the edge would be named after
+   * someone else's move.
+   *
+   * That is not a cosmetic mislabel: `triedFrom` is built from edge labels, and it is the tried
+   * half of the frontier. A wrong label makes a control look acted-on when nothing touched it,
+   * which is the one direction the frontier must never err in — it reads as coverage.
+   */
+
+  test('should take the label from the call rather than the field', () => {
+    const model = new StateModel();
+    model.observe(at('/', [control()]));
+    // What a second hook invocation would have done to the shared field while this look was
+    // suspended on its awaits.
+    model.about('click Cart');
+
+    const transition = model.observe(at('/menu', [control()]), 'click Menu');
+
+    expect(
+      model.graph().edges.at(-1)?.action,
+      'the move this observation was actually made for',
+    ).toBe('click Menu');
+    expect(transition.to, 'and the transition is otherwise unchanged').toBeTruthy();
+  });
+
+  test('should keep each edge’s own label when two labelled looks interleave', () => {
+    const model = new StateModel();
+    model.observe(at('/', [control()]));
+
+    model.observe(at('/a', [control()]), 'click A');
+    model.observe(at('/b', [control()]), 'click B');
+
+    expect(model.graph().edges.map((edge) => edge.action)).toEqual(['click A', 'click B']);
+  });
+
+  test('should still honour about() for a caller with nothing suspended in between', () => {
+    // The field is not removed, because a synchronous caller is not exposed to the race and the
+    // model's own tests use it. Deleting it would be a wider change than the defect warrants.
+    const model = new StateModel();
+    model.observe(at('/', [control()]));
+    model.about('press Enter');
+
+    model.observe(at('/results', [control()]));
+
+    expect(model.graph().edges.at(-1)?.action).toBe('press Enter');
+  });
+});

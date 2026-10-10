@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { Budget, billableTokens } from '../../src/agents/budget.js';
+import { fundsTheOpening, Budget, billableTokens } from '../../src/agents/budget.js';
 import { isAuthFailure } from '../../src/agents/client.js';
 import { extractJson, triageVerdictSchema } from '../../src/agents/triage.js';
 import {
@@ -526,5 +526,77 @@ test.describe('how much of a run is left', () => {
     budget.record({ tokens: 250 });
 
     expect(budget.remaining()?.fraction, 'overspent is spent').toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe('whether a ceiling can fund the run it is bounding', () => {
+  /**
+   * Measured harm, 2026-10-09: a run capped at `AGENT_MAX_USD=0.9` (436,313 weighted units) died
+   * at 29 seconds having completed **zero turns and four tool calls**, reporting 444,046/436,313.
+   * The worktree was created, the browser launched and the money spent, and nothing had said the
+   * ceiling could not fund the first message — the header printed it as a token count and nothing
+   * compared it with the prompt.
+   *
+   * The cause is the shape of the cost curve: the first message *writes* the prompt to cache at
+   * 1.25–2×, where later messages re-read it at 0.1×. A ceiling multiplied from the ~21,262 figure
+   * for a steady-state message is therefore right for a long run and silently fatal for a short
+   * one. Item 91.
+   */
+
+  // Four characters per token, cheaper cache-write rate: 1.25 weighted units per 4 characters.
+  const charsFor = (weighted: number): number => Math.round((weighted / 1.25) * 4);
+
+  test('should refuse a ceiling the opening prompt exhausts on its own', () => {
+    const verdict = fundsTheOpening(charsFor(500_000), 436_313);
+
+    expect(verdict.verdict, 'nothing can be bought with what is left').toBe('fatal');
+    expect(verdict.message, 'and it has to say what to change').toContain('--skills');
+    expect(verdict.message, 'with the numbers that decided it').toContain('436,313');
+  });
+
+  test('should refuse the ceiling that was measured failing', () => {
+    /**
+     * The case from the live run rather than a constructed one. `exploratory-tester` with one
+     * skill composes a 42,739-character prompt, and `AGENT_MAX_USD=0.05` sets a 24,240-unit
+     * ceiling. That run reached **45,369/24,240 in 12 seconds with zero turns**, and before this
+     * check the only notice was the stop reason afterwards — the worktree built, the browser
+     * launched, the scan run.
+     */
+    const verdict = fundsTheOpening(42_739, 24_240);
+
+    expect(verdict.verdict, 'this exact pair is known to produce nothing').toBe('fatal');
+    expect(
+      verdict.message,
+      'and the refusal shows the prompt’s share of its own estimate',
+    ).toContain('13,356');
+  });
+
+  test('should warn when the prompt takes over half before the session acts', () => {
+    const verdict = fundsTheOpening(charsFor(300_000), 436_313);
+
+    expect(verdict.verdict).toBe('tight');
+    expect(
+      verdict.message,
+      'and name the consequence for the warning that depends on a fraction',
+    ).toContain('wrap-up');
+  });
+
+  test('should stay silent about a ceiling that comfortably funds the run', () => {
+    const verdict = fundsTheOpening(charsFor(400_000), 21_815_640);
+
+    expect(verdict.verdict, 'the $45 ceiling against a real prompt').toBe('funded');
+    expect(verdict.message, 'a check that passes says nothing').toBeNull();
+  });
+
+  test('should not invent a bound where none was set', () => {
+    /**
+     * `maxTokens` is absent when nothing names a token ceiling, and zero is treated the same way
+     * by `tokenCeiling`. Reporting either as fatal would refuse every unbounded run — the runs
+     * that are bounded by the clock instead.
+     */
+    expect(fundsTheOpening(4_000_000, undefined).verdict).toBe('unbounded');
+    expect(fundsTheOpening(4_000_000, 0).verdict, 'zero means unbounded here, not empty').toBe(
+      'unbounded',
+    );
   });
 });

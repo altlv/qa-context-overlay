@@ -29,20 +29,20 @@ import type { Transition } from './state-model.js';
  */
 
 export interface Observer {
-  /** Look now, record, and say what moved. Null when the look could not be taken. */
-  observe(): Promise<Look | null>;
+  /**
+   * Look now, record, and say what moved. Null when the look could not be taken.
+   *
+   * The move that caused it is passed **in**, not set beforehand. `PostToolUse` fires per tool
+   * and the SDK documents it as running concurrently for parallel tool calls, so a label parked in
+   * a field between `about()` and here can be overwritten by another call in flight — naming the
+   * edge after someone else's move and corrupting the tried half of the frontier.
+   */
+  observe(toolName?: string, toolInput?: unknown): Promise<Look | null>;
   /** For the guard. Narrow by design — the guard asks, it never records. */
   count(): number;
   atCeiling(maxStates: number): boolean;
   /** Looks that could not be taken. Above zero, `count()` is a floor. */
   missed(): number;
-  /**
-   * Name the move about to be made, so the edge it produces can be labelled.
-   *
-   * Called from the hook with the tool name and its arguments. Nothing called the model’s
-   * `about()` before this, so every edge in every run was labelled `unknown`.
-   */
-  about(toolName: string, toolInput: unknown): void;
   /** Every state that still offers a control nothing acted on. */
   frontier(): StateFrontier[];
   /**
@@ -146,11 +146,10 @@ export function pageObserver(
       return model.atCeiling(maxStates);
     },
     missed: () => missedLooks,
-    about: (toolName, toolInput) => model.about(moveLabel(toolName, toolInput)),
     frontier: frontierNow,
     untriedHere: (state) => untriedControls(model.affordsIn(state), model.triedFrom(state)),
 
-    async observe() {
+    async observe(toolName?: string, toolInput?: unknown) {
       try {
         const page = await find();
         if (page === null) {
@@ -162,11 +161,16 @@ export function pageObserver(
         // read at one moment rather than two. Reading them separately would let a toast
         // appear between the calls and be attributed to the wrong state.
         const announcements = await readAnnouncements(page);
-        const transition = model.observe({
-          url: page.url(),
-          fingerprints: candidates.map((candidate) => candidate.fingerprint),
-          announcements,
-        });
+        const transition = model.observe(
+          {
+            url: page.url(),
+            fingerprints: candidates.map((candidate) => candidate.fingerprint),
+            announcements,
+          },
+          // Carried through this call rather than parked in the model, because everything above is
+          // awaited and another hook invocation can be running in it.
+          toolName === undefined ? undefined : moveLabel(toolName, toolInput),
+        );
 
         /**
          * What kind of thing arrived — the step that turns `src/tools/surfaces.ts` from a module

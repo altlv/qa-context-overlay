@@ -103,6 +103,80 @@ export const TOKEN_WEIGHTS = {
 } as const;
 
 /**
+ * Whether a token ceiling can fund the **opening** of a run — the prompt plus a measured
+ * overhead — checked before anything is spent.
+ *
+ * **The harm this prevents, measured.** On 2026-10-09 a run capped at `AGENT_MAX_USD=0.9`
+ * (436,313 weighted units) died at 29 seconds having completed **zero turns and four tool calls**,
+ * reporting 444,046/436,313. Nothing had said the ceiling could not fund the run: the header
+ * printed it as a token count and nothing compared it with the prompt. The money was spent, the
+ * worktree was created, the browser was launched, and the session produced nothing.
+ *
+ * **What it is NOT.** My first explanation was that the first message writes the system prompt to
+ * cache and that this dominates. **The measurement refuted it**: the three-skill prompt is 17,047
+ * weighted units, under 4% of the 444,046 that run consumed. Whatever dominates a browser run's
+ * opening is elsewhere — the 58 MCP tool schemas in the cached prefix, the injected scan, output at
+ * the 5× weight, and tool results that can be enormous. That is unmeasured, and this function does
+ * not pretend otherwise.
+ *
+ * **So the bar here is empirical, not derived.** `OPENING_OVERHEAD` is the non-prompt remainder of
+ * a measured opening: the `$0.05` run consumed 45,369 units with a 13,356-unit prompt, leaving
+ * ~32,000 that was not prompt. A ceiling below prompt-plus-that has never started a run of this
+ * shape, so it is refused.
+ *
+ * **It catches a ceiling too small to open a session, and nothing subtler.** It would have refused
+ * the `$0.05` run and would **not** have caught the `$0.9` one, which died several messages in.
+ * Four characters per token, the cheaper cache-write rate, and one measured overhead: all of it
+ * errs towards letting a run proceed, because refusing a run that would have worked is the worse
+ * failure here. Item 91 carries the measurement that would let this be tightened.
+ */
+/**
+ * The non-prompt part of a measured opening, in weighted units.
+ *
+ * From the `$0.05` run of 2026-10-09: 45,369 consumed, of which the prompt estimate was 13,356.
+ * One measurement, named as a constant so the next one can replace it rather than be argued with.
+ */
+const OPENING_OVERHEAD = 32_000;
+
+export function fundsTheOpening(
+  promptChars: number,
+  maxTokens: number | undefined,
+): { verdict: 'unbounded' | 'funded' | 'tight' | 'fatal'; message: string | null } {
+  if (maxTokens === undefined || maxTokens <= 0) {
+    return { verdict: 'unbounded', message: null };
+  }
+  const writeCost = Math.round((promptChars / 4) * TOKEN_WEIGHTS.cacheWrite5m);
+  const opening = writeCost + OPENING_OVERHEAD;
+  const share = opening / maxTokens;
+  const figures =
+    `opening this session costs at least about ${opening.toLocaleString()} weighted unit(s) of a ` +
+    `${maxTokens.toLocaleString()} ceiling (${writeCost.toLocaleString()} of it the prompt)`;
+
+  if (share >= 1) {
+    return {
+      verdict: 'fatal',
+      message:
+        `this run cannot start: ${figures}, so opening the session exhausts it. Raise the ` +
+        'limit, or narrow the prompt with --skills. A ceiling derived from a dollar figure is ' +
+        'multiplied from the cost of a steady-state message (~21,262 weighted units), and the ' +
+        'opening of a browser session costs several times that — tool schemas, the scan, output at ' +
+        'the 5x weight. Measured 2026-10-09: a 24,240 ceiling reached 45,369 in 12 seconds and ' +
+        'completed zero turns.',
+    };
+  }
+  if (share >= 0.5) {
+    return {
+      verdict: 'tight',
+      message:
+        `${figures} — over half of it before the session does anything. Expect few messages, ` +
+        'and note that the wrap-up warning fires on a fraction of the budget, so it may be ' +
+        'skipped entirely when one message is this large a share.',
+    };
+  }
+  return { verdict: 'funded', message: null };
+}
+
+/**
  * What one message cost, in input-token-equivalents.
  *
  * **Not a token count, and named so it cannot be read as one.** A figure called "tokens" that is

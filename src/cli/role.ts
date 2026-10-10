@@ -9,7 +9,7 @@ import { apps } from '../../apps/registry.js';
 import { targetFor } from '../../apps/targets.js';
 import { AgentAuthError, runAgent } from '../agents/client.js';
 import type { AgentRunOptions } from '../agents/client.js';
-import { Budget, DEFAULT_LIMITS } from '../agents/budget.js';
+import { fundsTheOpening, Budget, DEFAULT_LIMITS } from '../agents/budget.js';
 import { composeRoles, composeSystemPrompt, skillsFor } from '../agents/compose.js';
 import { TOKENS_PER_USD, budgetForTier, resolveModel } from '../agents/models.js';
 import { describeBudget, describeSpend } from '../agents/budget-line.js';
@@ -131,8 +131,10 @@ const scanMapOnly = flag('--scan') === 'map';
 /**
  * `--skills a,b,c` inlines only those of the role's own skills; `--skills none` inlines none.
  *
- * The skills are the most expensive thing in a run — nine of them make a ~316k-token system prompt,
- * charged as cache reads on every message — and the first complete run reported that two of five
+ * The skills are the largest part of this role's prompt and are re-read as cache on every message:
+ * measured 2026-10-09, this role’s prompt is **9,036 tokens with no skills and 24,559 with all nine**, so the nine skills are ~15,500 tokens of it and narrowing to three removes ~10,900. (An earlier version of this comment called it a ~316k-token prompt; that figure is
+ * the whole cached prefix, tool schemas and history included, and overstated the skills by ~13×.)
+ * The first complete run reported that two of five
  * procedural skills left no trace in its output. The README leads with "context the agent is given
  * rather than pays to re-derive"; this is how that claim gets tested rather than asserted. Item 87.
  *
@@ -843,13 +845,58 @@ const check = (toolName: string, input: Record<string, unknown>): GuardDecision 
  * Declared out here rather than inside the hook: a hook callback runs once per tool call, so a
  * pacer built inside it would be new every time and would suppress nothing.
  */
+/**
+ * The prompt, composed before the run so it can be weighed against the ceiling.
+ *
+ * It was built inline in the `runAgent` call, which meant nothing could compare it with the
+ * budget. On 2026-10-09 a $0.90 ceiling bought **zero turns and four tool calls** — the worktree
+ * was created, the browser launched, the money spent, and the only notice was the stop reason
+ * afterwards.
+ */
+const systemPrompt = composeSystemPrompt(role, undefined, subjectRun, skillsOnly);
+const funding = fundsTheOpening(systemPrompt.length, budget.limits.maxTokens);
+if (funding.verdict === 'fatal') refuse(funding.message!);
+if (funding.message !== null) console.error(`Budget TIGHT: ${funding.message}`);
+
 const pace = handoverPacer();
+
+/**
+ * Pace a handover, echo whatever survives, and return it to the agent.
+ *
+ * **One path on purpose.** The echo and the return have to happen together: what the harness puts
+ * into a session's context is part of the run and has to be auditable, or nobody can tell a session
+ * that found something itself from one that was handed it. Written twice, they came apart
+ * immediately — the no-look branch returned a line to the agent and logged nothing, which would
+ * have let the wrap-up warning fire into a run and leave no evidence that it had. That warning is
+ * the one thing item 89 is waiting to observe.
+ */
+const handOver = (line: string | null): string | null => {
+  const paced = pace(line);
+  if (paced !== null) console.error(`  told the agent: ${paced}`);
+  return paced;
+};
+
+/**
+ * What can be said without looking at the page: the run's own remaining allowance and nothing else.
+ *
+ * Used where no look was taken or a look failed. It deliberately claims nothing about the page — a
+ * frontier from the last look, presented after three `Bash` calls, would be the harness stating as
+ * current something it did not re-read.
+ */
+const budgetOnlyHandover = (): string | null =>
+  handoverLine({
+    moved: null,
+    surface: null,
+    untriedHere: [],
+    atCeiling: false,
+    budgetLeft: budget.remaining(),
+  });
 
 let result;
 try {
   result = await runAgent({
     prompt,
-    systemPrompt: composeSystemPrompt(role, undefined, subjectRun, skillsOnly),
+    systemPrompt,
     allowedTools: [...(role.tools ?? []), ...(browser?.tools ?? [])],
     ...(browser === null ? {} : { mcpServers: browser.mcpServers }),
     // Every role, composed the same way, so a coder that finds a gap mid-run can call
@@ -890,95 +937,103 @@ try {
         ? {}
         : {
             PostToolUse: [
-              observerHook(async (toolName, toolInput) => {
-                /**
-                 * A look costs a page read; a handover costs the run's own tokens. Only the
-                 * first is gated on the tool.
-                 *
-                 * **Why this branch exists.** The hook used to run only after
-                 * `movesThePage`, which measured at 3 of 21 and 6 of 22 browser calls across
-                 * the two complete academybugs runs — so the session was handed its frontier
-                 * twice in 36 turns and nothing for the six minutes after. Worse, the last ten
-                 * tool calls of the 2026-10-08 run were Read, Bash, Write, Edit and Grep with
-                 * no browser call at all, which is where a run ends and therefore where a
-                 * budget warning has to be able to arrive. It could not: no browser tool, no
-                 * hook, no warning. That is item 89's "never fired in a live run" explained.
-                 *
-                 * So the hook now runs after every tool, and decides here:
-                 *
-                 * - the page may have changed → look, and hand over everything;
-                 * - it cannot have → **no look**, and hand over only what is true without one.
-                 *
-                 * The second branch deliberately says nothing about the page. A frontier from
-                 * the last look, presented after three `Bash` calls, would be the harness
-                 * stating as current something it did not re-read.
-                 */
-                if (!mayChangeThePage(toolName)) {
-                  // No look, so no miss is recorded: this is not an observation that failed, it
-                  // is one that was never warranted.
-                  return pace(
-                    handoverLine({
-                      moved: null,
-                      surface: null,
-                      untriedHere: [],
-                      atCeiling: false,
-                      budgetLeft: budget.remaining(),
-                    }),
-                  );
-                }
-                // Named before the look, because the edge this produces is labelled from it and
-                // the model has to know before it records the transition. Nothing called this
-                // before, so every edge in every run was labelled `unknown` and the untried half
-                // of the frontier could not be computed at all — item 83's actual blocker.
-                browser!.observer.about(toolName, toolInput);
-                const look = await browser!.observer.observe();
-                const moved = look === null ? null : describeTransition(look.transition);
-                if (moved !== null) console.error(`  page: ${moved}`);
-                // What arrived, when something did. Printed beside the transition rather than
-                // instead of it: "3 appeared" says the page moved and "modal" says what kind of
-                // thing moved it, and neither substitutes for the other.
-                const surface =
-                  look !== null && look.arrival !== null
-                    ? describeSurface(look.arrival.classification)
-                    : null;
-                if (surface !== null) console.error(`  surface: ${surface}`);
+              observerHook(
+                async (toolName, toolInput) => {
+                  /**
+                   * A look costs a page read; a handover costs the run's own tokens. Only the
+                   * first is gated on the tool.
+                   *
+                   * **Why this branch exists.** The hook used to run only after
+                   * `movesThePage`, which measured at 3 of 21 and 6 of 22 browser calls across
+                   * the two complete academybugs runs — so the session was handed its frontier
+                   * twice in 36 turns and nothing for the six minutes after. Worse, the last ten
+                   * tool calls of the 2026-10-08 run were Read, Bash, Write, Edit and Grep with
+                   * no browser call at all, which is where a run ends and therefore where a
+                   * budget warning has to be able to arrive. It could not: no browser tool, no
+                   * hook, no warning. That is item 89's "never fired in a live run" explained.
+                   *
+                   * So the hook now runs after every tool, and decides here:
+                   *
+                   * - the page may have changed → look, and hand over everything;
+                   * - it cannot have → **no look**, and hand over only what is true without one.
+                   *
+                   * The second branch deliberately says nothing about the page. A frontier from
+                   * the last look, presented after three `Bash` calls, would be the harness
+                   * stating as current something it did not re-read.
+                   */
+                  if (!mayChangeThePage(toolName)) {
+                    // No look, so no miss is recorded: this is not an observation that failed, it
+                    // is one that was never warranted.
+                    return handOver(budgetOnlyHandover());
+                  }
+                  // The move is handed to the look rather than parked in the model first. The
+                  // SDK fires this hook per tool and runs it concurrently for parallel tool calls,
+                  // so a label left in a field between the two calls can be consumed by whichever
+                  // observation resolves first.
+                  const look = await browser!.observer.observe(toolName, toolInput);
+                  const moved = look === null ? null : describeTransition(look.transition);
+                  if (moved !== null) console.error(`  page: ${moved}`);
+                  // What arrived, when something did. Printed beside the transition rather than
+                  // instead of it: "3 appeared" says the page moved and "modal" says what kind of
+                  // thing moved it, and neither substitutes for the other.
+                  const surface =
+                    look !== null && look.arrival !== null
+                      ? describeSurface(look.arrival.classification)
+                      : null;
+                  if (surface !== null) console.error(`  surface: ${surface}`);
 
-                /**
-                 * And the same thing to the **agent**, which is the half that was missing.
-                 *
-                 * Both lines above go to the operator's terminal. The session that could act on an
-                 * untried control was told none of it, so the harness discovered pathways and
-                 * handed them to a reader. Returned here, the hook puts it in the model's context
-                 * after the tool result.
-                 *
-                 * The untried list is for the state the session is standing in *now* —
-                 * `transition.to` — not the whole graph. The agent is in one place, and the rest is
-                 * noise bought with the run's own tokens.
-                 */
-                if (look === null) return null;
-                const say = handoverLine({
-                  moved,
-                  surface,
-                  untriedHere: browser!.observer.untriedHere(look.transition.to),
-                  // The run's own remaining allowance, so a session can wrap up instead of
-                  // being cut off mid-thought with its findings unwritten.
-                  budgetLeft: budget.remaining(),
-                  atCeiling: browser!.observer.atCeiling(
-                    policyFor(runTarget!.environment).maxStates,
-                  ),
-                });
-                // Echoed to the operator as well as returned to the agent. What the harness
-                // puts into a session's context is part of the run and has to be auditable:
-                // without this line nobody can tell a session that found something itself from
-                // one that was handed it.
-                // Paced, because the trigger is now every tool call: an unchanged line is
-                // something the session already knows, and re-reading it is charged to the budget
-                // that bounds the run. `handoverPacer` re-speaks it eventually, so standing
-                // still does not buy permanent silence.
-                const paced = pace(say);
-                if (paced !== null) console.error(`  told the agent: ${paced}`);
-                return paced;
-              }, mayChangeThePage),
+                  /**
+                   * And the same thing to the **agent**, which is the half that was missing.
+                   *
+                   * Both lines above go to the operator's terminal. The session that could act on an
+                   * untried control was told none of it, so the harness discovered pathways and
+                   * handed them to a reader. Returned here, the hook puts it in the model's context
+                   * after the tool result.
+                   *
+                   * The untried list is for the state the session is standing in *now* —
+                   * `transition.to` — not the whole graph. The agent is in one place, and the rest is
+                   * noise bought with the run's own tokens.
+                   */
+                  // A look that could not be taken is not a reason to drop the budget warning.
+                  // The page is unknown, so nothing is claimed about it — but the run's clock is
+                  // still running, and this is the path a page mid-navigation takes. One look
+                  // failed in the 2026-10-09 run; had it landed in the low-budget window the
+                  // warning would have been lost with it.
+                  if (look === null) return handOver(budgetOnlyHandover());
+                  const say = handoverLine({
+                    moved,
+                    surface,
+                    untriedHere: browser!.observer.untriedHere(look.transition.to),
+                    // The run's own remaining allowance, so a session can wrap up instead of
+                    // being cut off mid-thought with its findings unwritten.
+                    budgetLeft: budget.remaining(),
+                    atCeiling: browser!.observer.atCeiling(
+                      policyFor(runTarget!.environment).maxStates,
+                    ),
+                  });
+                  // Echoed to the operator as well as returned to the agent. What the harness
+                  // puts into a session's context is part of the run and has to be auditable:
+                  // without this line nobody can tell a session that found something itself from
+                  // one that was handed it.
+                  // Paced, because the trigger is now every tool call: an unchanged line is
+                  // something the session already knows, and re-reading it is charged to the budget
+                  // that bounds the run. `handoverPacer` re-speaks it eventually, so standing
+                  // still does not buy permanent silence.
+                  return handOver(say);
+                  /**
+                   * **Every tool, and the branch above decides what to do about it.**
+                   *
+                   * This read `mayChangeThePage` for one commit and the live run of 2026-10-09
+                   * caught it: the hook returns before the callback, so the no-look branch — the
+                   * whole of the fix that lets a budget warning reach a session away from the
+                   * browser — was unreachable code. The run's last two tool calls landed at 384.6s
+                   * and 387.5s of 480s, both inside the 20% band, and no warning was sent. The unit
+                   * test that was supposed to cover it asserted `handoverLine`'s output for the
+                   * shape this branch builds, which is the neighbouring claim and not this one.
+                   */
+                },
+                () => true,
+              ),
             ],
           }),
     },

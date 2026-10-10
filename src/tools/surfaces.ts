@@ -186,10 +186,24 @@ export function describeSurface(classification: Classification): string {
  * harness looked at the page would be debugging the harness.
  */
 export async function trapsFocus(page: Page, container: string): Promise<boolean> {
-  const was = await page.evaluate(() => {
-    const active = document.activeElement as HTMLElement | null;
-    return active === null ? null : active.getAttribute('data-qco-focus-probe');
-  });
+  /**
+   * A handle to whatever had focus, so it can be given back.
+   *
+   * **This did not work and nothing noticed.** It read a `data-qco-focus-probe` attribute that is
+   * set nowhere in this repository, so the result was always null and the `finally` below always
+   * took the blur path — the probe *destroyed* the session's focus on every call, while the comment
+   * above it promised the opposite. A session that had typed into a field and found focus on the
+   * body afterwards would have been debugging the harness, which is the exact outcome that comment
+   * forbids. Nothing caught it because `trapsFocus` had no test of its own: the suite tested the
+   * classifier that consumes its boolean.
+   *
+   * Found on 2026-10-09 while auditing the widening of the observer trigger. The bug is older than
+   * that change, but the change made it fire after every `browser_evaluate` — 7 to 11 calls in a
+   * run against the 2 or 3 that used to reach here.
+   *
+   * A handle rather than an attribute, so the page's own DOM is not written to in order to read it.
+   */
+  const had = await page.evaluateHandle(() => document.activeElement);
 
   try {
     const inside = page.locator(`${container} >> ${INTERACTIVE_SELECTOR}`);
@@ -212,7 +226,13 @@ export async function trapsFocus(page: Page, container: string): Promise<boolean
     // observed-false: the caller gets the honest answer from the catch, not a property.
     return false;
   } finally {
-    if (was === null) await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+    // Focus back where the session left it. `body` is a normal answer here and focusing it is
+    // harmless; the handle is disposed either way so the page is not held open by it.
+    const element = had.asElement();
+    if (element !== null) {
+      await element.focus().catch(() => undefined);
+    }
+    await had.dispose().catch(() => undefined);
   }
 }
 

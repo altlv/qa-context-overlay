@@ -196,8 +196,10 @@ test.describe('the level a subject run works at', () => {
 
 test.describe('narrowing the skills a run inlines', () => {
   /**
-   * Item 87. The skills are the most expensive thing in a run — nine of them make a ~316k-token
-   * system prompt, charged as cache reads on every message — and the first complete run reported
+   * Item 87. The skills are the largest part of this role's prompt and are re-read as cache on
+   * every message: measured 2026-10-09, this role’s prompt is **9,036 tokens with no skills and 24,559 with all nine**, so the nine skills are ~15,500 tokens of it and narrowing to three removes ~10,900. An earlier version of this comment said
+   * "~316k-token system prompt", which is the whole cached prefix rather than the prompt and
+   * overstated the skills by ~13×. The first complete run reported
    * `exploratory-session: 0/3`, `test-techniques: 0/8`, `risk-assessment: 0/1`: two of five
    * procedural skills left no trace in its output.
    *
