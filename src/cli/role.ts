@@ -44,7 +44,7 @@ import { readinessProblems, stalenessWarning } from '../qe/readiness.js';
 import { parseReport } from '../qe/report.js';
 import { gatePassed, investigationCommand, planGate, type GateRecord } from '../qe/run-gate.js';
 import { acquireLock, lockPathFor, releaseLock } from '../qe/run-lock.js';
-import { findReport, unparsedReport } from '../qe/run-report.js';
+import { findReport, preferredReportPath, unparsedReport } from '../qe/run-report.js';
 import { resolveRunTarget } from '../qe/run-target.js';
 import { harvestSession, indexLine, noteInIndex } from '../qe/session-store.js';
 import { ToolLedger } from '../qe/tool-ledger.js';
@@ -951,6 +951,10 @@ try {
               ? 'no report file was found under artifacts/run/ or reports/'
               : `the file at ${rejected.relative} cannot be read as a report — ${rejected.why}`;
           },
+          // The conventional path, named in the refusal. A live probe showed a session burn 12
+          // turns to its limit against a refusal that told it to write a report without saying
+          // where.
+          preferredReportPath(worktree),
           // A run the budget ended did not choose to finish, and item 48 is the precedent: that is
           // a budget finding, never a formatting one. `exceeded()` is the same check the client
           // uses to stop a run, so the two cannot disagree about whether the budget is spent.

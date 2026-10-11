@@ -146,3 +146,15 @@ export function unparsedReport(
     why: first?.message ?? 'it does not parse as a report',
   };
 }
+
+/**
+ * The path a report is expected at, for a message that asks a session to write one.
+ *
+ * Exported so the refusal in `stopHook` names **the same path `findReport` and `unparsedReport`
+ * read**, rather than one assembled beside them. A live probe on 2026-10-11 showed what a vague
+ * refusal costs — 12 turns to the turn limit, nothing written — and a refusal naming a path the
+ * check does not look at would be the same failure wearing a precise-looking number.
+ */
+export function preferredReportPath(worktree: string): string {
+  return join(worktree, PREFERRED);
+}

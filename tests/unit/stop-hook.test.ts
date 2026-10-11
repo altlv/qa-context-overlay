@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk';
+import { join } from 'node:path';
 import { stopHook } from '../../src/qe/stop-hook.js';
+import { preferredReportPath } from '../../src/qe/run-report.js';
 
 /**
  * The only thing in this harness that can stop a session finishing with nothing readable.
@@ -19,6 +21,16 @@ import { stopHook } from '../../src/qe/stop-hook.js';
 
 const signal = new AbortController().signal;
 
+/**
+ * The path the refusal has to name.
+ *
+ * A live probe on 2026-10-11 drove the shipped hook against a real agent. It blocked
+ * correctly and the session then spent 12 turns to its turn limit writing nothing, because
+ * the refusal said "write a report" without saying where. A refusal that cannot be acted on
+ * is a budget leak rather than a guard.
+ */
+const REPORT_PATH = '/run/artifacts/run/report.md';
+
 const stopping = (over: Partial<{ stop_hook_active: boolean }> = {}): HookInput =>
   ({
     hook_event_name: 'Stop',
@@ -36,6 +48,7 @@ test.describe('holding a session open until it has written a report', () => {
     const seen: string[] = [];
     const hook = stopHook(
       () => 'no report file was found under artifacts/run/ or reports/',
+      REPORT_PATH,
       () => false,
       (problem) => seen.push(problem),
     );
@@ -59,6 +72,7 @@ test.describe('holding a session open until it has written a report', () => {
   test('should let a session finish once it has one', async () => {
     const hook = stopHook(
       () => null,
+      REPORT_PATH,
       () => false,
     );
 
@@ -75,6 +89,7 @@ test.describe('holding a session open until it has written a report', () => {
      */
     const hook = stopHook(
       () => 'still no report',
+      REPORT_PATH,
       () => false,
     );
 
@@ -93,6 +108,7 @@ test.describe('holding a session open until it has written a report', () => {
      */
     const hook = stopHook(
       () => 'no report file was found',
+      REPORT_PATH,
       () => true,
     );
 
@@ -108,6 +124,7 @@ test.describe('holding a session open until it has written a report', () => {
       () => {
         throw new Error('worktree vanished');
       },
+      REPORT_PATH,
       () => false,
     );
 
@@ -123,6 +140,7 @@ test.describe('holding a session open until it has written a report', () => {
   test('should ignore every event that is not a stop', async () => {
     const hook = stopHook(
       () => 'no report',
+      REPORT_PATH,
       () => false,
     );
 
@@ -133,5 +151,45 @@ test.describe('holding a session open until it has written a report', () => {
     )) as Blocked;
 
     expect(out.decision).toBeUndefined();
+  });
+});
+
+test.describe('the path the refusal names', () => {
+  /**
+   * Found by driving the shipped hook against a live agent on 2026-10-11, after a first probe with
+   * a hand-written imitation of it had passed — the neighbouring claim, for the fifth time this
+   * week. The real hook blocked correctly and the session then spent **12 turns to its turn
+   * limit** writing nothing, at twice the cost of the probe whose refusal named an exact file.
+   *
+   * The agent retried because it had no target, not because it declined. A refusal that cannot be
+   * acted on is not a guard, it is a budget leak.
+   */
+
+  test('should tell the session exactly where to write it', async () => {
+    const hook = stopHook(
+      () => 'no report file was found',
+      '/run/artifacts/run/report.md',
+      () => false,
+    );
+
+    const out = (await hook.hooks[0]!(stopping(), 'id', { signal })) as Blocked;
+
+    expect(
+      out.reason ?? '',
+      'a session told to write a report without a path has nothing to act on',
+    ).toContain('/run/artifacts/run/report.md');
+    expect(out.reason ?? '', 'and it has to be unmistakably the path, not an example').toContain(
+      'that exact path',
+    );
+  });
+
+  test('should name the path that findReport actually reads', () => {
+    /**
+     * The coupling is the point. A refusal naming a path the check does not look at would be this
+     * same defect wearing a precise-looking number, so the runner passes
+     * `preferredReportPath(worktree)` — the function `findReport` and `unparsedReport` resolve
+     * against — rather than assembling a path beside them.
+     */
+    expect(preferredReportPath('/run')).toBe(join('/run', 'artifacts', 'run', 'report.md'));
   });
 });

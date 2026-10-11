@@ -32,6 +32,18 @@ import type {
 export function stopHook(
   /** The reason a report cannot be read, or null when one can. Evaluated at stop time, not before. */
   reportProblem: () => string | null,
+  /**
+   * Where the report belongs, named in the refusal.
+   *
+   * **Measured on 2026-10-11, and this parameter is the fix.** The first version of this reason
+   * named the command and said "write one before you finish", with no path. Driven against a live
+   * agent it blocked correctly, and the session then spent **12 turns to the turn limit** writing
+   * nothing, at twice the cost of a probe whose refusal named an exact file. A refusal that cannot
+   * be acted on is not a guard, it is a budget leak: the agent retried because it had no target,
+   * not because it declined. Found by testing the shipped hook rather than an imitation of it —
+   * the first probe used a hand-written hook and passed, which is the neighbouring claim again.
+   */
+  reportPath: string,
   /** True when the run was already ended by a budget limit, in which case nothing is blocked. */
   budgetStopped: () => boolean,
   /** For the operator's log, so a block is visible in the run output and not only in the session. */
@@ -58,13 +70,14 @@ export function stopHook(
         if (problem === null) return { continue: true };
 
         const reason =
-          `This session has no report that can be read: ${problem}. Write one before you ` +
-          `finish — \`npm run -s report-skeleton -- --target "<url> (<env>)" --author ` +
-          `<role>\` prints a valid empty report that passes \`npm run check-report\` with zero ` +
-          `errors, and you fill in what you found. Findings live inside the frontmatter, so it is ` +
-          `one file rewritten rather than appended to. Everything you have already confirmed is ` +
-          `worth more written down than remembered: a session whose report cannot be parsed is ` +
-          `counted as a session that found nothing.`;
+          `This session has no report that can be read: ${problem}. Write one to ` +
+          `\`${reportPath}\` before you finish — that exact path. ` +
+          `\`npm run -s report-skeleton -- --target "<url> (<env>)" --author <role>\` prints a ` +
+          `valid empty report that passes \`npm run check-report\` with zero errors; redirect it ` +
+          `to that path and fill in what you found. Findings live inside the frontmatter, so it ` +
+          `is one file rewritten rather than appended to. Everything you have already confirmed ` +
+          `is worth more written down than remembered: a session whose report cannot be parsed ` +
+          `is counted as a session that found nothing.`;
         onBlock(problem);
         return { continue: true, decision: 'block', reason };
       },
