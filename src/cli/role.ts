@@ -44,7 +44,7 @@ import { readinessProblems, stalenessWarning } from '../qe/readiness.js';
 import { parseReport } from '../qe/report.js';
 import { gatePassed, investigationCommand, planGate, type GateRecord } from '../qe/run-gate.js';
 import { acquireLock, lockPathFor, releaseLock } from '../qe/run-lock.js';
-import { findReport } from '../qe/run-report.js';
+import { findReport, unparsedReport } from '../qe/run-report.js';
 import { resolveRunTarget } from '../qe/run-target.js';
 import { harvestSession, indexLine, noteInIndex } from '../qe/session-store.js';
 import { ToolLedger } from '../qe/tool-ledger.js';
@@ -61,6 +61,7 @@ import {
 import { shellGuard } from '../qe/shell-guard.js';
 import { needsShell } from '../qe/subject-runner.js';
 import { guardHook, observerHook } from '../qe/tool-hook.js';
+import { stopHook } from '../qe/stop-hook.js';
 import { reportSkillUse, searchable, skillUse } from '../qe/skill-use.js';
 import { skillFile } from '../agents/compose.js';
 import { clockHook } from '../qe/session-clock.js';
@@ -929,6 +930,38 @@ try {
       PreToolUse: [
         guardHook(check, (toolName, reason) => console.error(`  refused ${toolName}: ${reason}`)),
       ],
+      /**
+       * The last chance to stop a session finishing with nothing readable.
+       *
+       * Reporting is how a run of this harness most often produces nothing: of the 29 reports kept
+       * to 2026-10-11, **19 parse, 3 are prose and 7 are empty files**, and the worst case cost a
+       * session seven findings including three majors. Everything before this was advice. A
+       * `Stop` hook can return `decision: 'block'` with a reason the model reads, so a session
+       * about to sign off without a report is told what is wrong and gets its turn back.
+       *
+       * Checked at stop time rather than earlier, because the file the session is about to write
+       * does not exist when the hooks are built.
+       */
+      Stop: [
+        stopHook(
+          () => {
+            if (findReport(worktree) !== null) return null;
+            const rejected = unparsedReport(worktree);
+            return rejected === null
+              ? 'no report file was found under artifacts/run/ or reports/'
+              : `the file at ${rejected.relative} cannot be read as a report — ${rejected.why}`;
+          },
+          // A run the budget ended did not choose to finish, and item 48 is the precedent: that is
+          // a budget finding, never a formatting one. `exceeded()` is the same check the client
+          // uses to stop a run, so the two cannot disagree about whether the budget is spent.
+          () => budget.exceeded() !== null,
+          (problem) =>
+            console.error(
+              `  held the session open: ${problem}. It was asked to write a report before ` +
+                `finishing, once.`,
+            ),
+        ),
+      ],
       // Only where a browser exists. Registering an observer with nothing to observe
       // would spend a hook on every tool call to reach a `null` page and count a miss,
       // which would then report the state count as a floor for a run that never had a
@@ -1160,6 +1193,16 @@ const reportBody =
  * frontmatter block found` — a formatting complaint about the agent's closing prose. The real
  * cause was the budget, and the gate said nothing about it.
  */
+/**
+ * The name the closing message is kept under when no report was written.
+ *
+ * Named, not inlined, because three places have to agree: the message that tells a person where to
+ * look, the path the gate reads, and the path recorded in `gate.json`.
+ */
+const FALLBACK_NAME = 'final-message.md';
+
+const rejected = wrote === null ? unparsedReport(worktree) : null;
+
 const truncatedWithNoReport = wrote === null && result.stoppedBy !== null;
 
 if (truncatedWithNoReport) {
@@ -1168,10 +1211,20 @@ if (truncatedWithNoReport) {
       `gate. The final message is kept as the summary. This is a budget finding, not a report ` +
       `one — raise the limit that stopped it rather than looking at the format.`,
   );
+} else if (wrote === null && rejected !== null) {
+  // Measured 2026-10-10: this run printed "No report file found" with the session's report sitting
+  // at exactly that path, unparseable. A false cause is worse than a vague one — it sends the next
+  // person looking for a missing file instead of a malformed one.
+  console.error(
+    `A report exists at ${rejected.relative} and cannot be read as one — ${rejected.why}. It is ` +
+      `left exactly where the session put it and nothing overwrites it; read it for the findings. ` +
+      `This run's closing message is gated instead, as ${FALLBACK_NAME}.`,
+  );
 } else if (wrote === null) {
   console.error(
-    `No report file found under artifacts/run/ or reports/ — gating the final message instead. ` +
-      `A role that writes its report to a file gets that file gated; this one did not.`,
+    `No report file found under artifacts/run/ or reports/ — gating the final message instead, as ` +
+      `${FALLBACK_NAME}. A role that writes its report to a file gets that file gated; this one ` +
+      `did not.`,
   );
 } else {
   console.error(
@@ -1179,10 +1232,47 @@ if (truncatedWithNoReport) {
   );
 }
 
+/**
+ * Where the gated text goes — and, more importantly, where it does **not**.
+ *
+ * The fallback is the agent's closing message, which is not a report, and it used to be written to
+ * `<runDir>/report.md` — the path a session writes to. On 2026-10-10 that destroyed a session's
+ * own report: seven findings including three majors, replaced by a summary of itself, after which
+ * the gate failed the summary for missing frontmatter. **A file that is not a report does not get
+ * a report's name**, so the fallback lands beside it instead and the session's file is never
+ * touched.
+ */
 const reportPath =
-  outPath === undefined ? join(worktree, runDir, 'report.md') : resolve(repoRoot, outPath);
+  outPath !== undefined
+    ? resolve(repoRoot, outPath)
+    : join(worktree, runDir, wrote === null ? FALLBACK_NAME : 'report.md');
 await mkdir(dirname(reportPath), { recursive: true });
-await writeFile(reportPath, reportBody, 'utf8');
+/**
+ * Never let our summary of a session overwrite the session's own report.
+ *
+ * `reportBody` is the final chat message whenever `findReport` found nothing that parses, and
+ * `reportPath` is the path a session writes to — so a session that wrote a real report without
+ * frontmatter had it replaced by a summary of itself, and then failed the gate on the summary's
+ * formatting. Measured on 2026-10-10: a run against `webtestingcourse` wrote at 453s, reported
+ * seven findings including three majors, and that file is gone.
+ */
+/**
+ * Nothing is written when there is nothing to write.
+ *
+ * **7 of the 29 reports this harness has kept are 0-byte files.** Every one is a run the budget
+ * stopped before it produced either a report or a closing message, and each was written anyway and
+ * then copied into `sessions/` as that session's report. An empty file is a claim that a report
+ * exists: it survives `findReport`'s existence check, it is indistinguishable from one that was
+ * lost, and it is the shape of evidence without being evidence.
+ */
+if (reportBody.trim() === '') {
+  console.error(
+    `No report and no closing message, so no file is written — an empty ${FALLBACK_NAME} would ` +
+      `read as a report that exists. 7 of the 29 reports kept before this change were 0 bytes.`,
+  );
+} else {
+  await writeFile(reportPath, reportBody, 'utf8');
+}
 // The run's own transcript is kept beside it either way: when the report came from a
 // file, the final message is the summary a person reads first, and losing it to make
 // room for the report would throw away the part written for them.

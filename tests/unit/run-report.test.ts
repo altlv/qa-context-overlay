@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findReport } from '../../src/qe/run-report.js';
+import { findReport, unparsedReport } from '../../src/qe/run-report.js';
 
 /**
  * The shapes here are the ones live runs actually produced. Two of them passed a gate
@@ -156,5 +156,99 @@ test.describe('finding the report a run actually wrote', () => {
       findReport(work)?.because,
       'a person reading the run log needs to know which file was gated and why',
     ).toContain('reports/');
+  });
+});
+
+test.describe('saying why a report could not be read', () => {
+  /**
+   * Measured 2026-10-10. The runner printed **"No report file found under artifacts/run/ or
+   * reports/"** for a run whose report was sitting at exactly that path and merely had no
+   * frontmatter — and then wrote its own closing message over the top of it. Seven findings
+   * including three majors, replaced by a summary of themselves.
+   *
+   * A false cause is worse than a vague one: it sends the next person looking for a missing file
+   * instead of a malformed one. This is the same failure item 48 fixed for a truncated run, in a
+   * different branch.
+   *
+   * The companion measurement, and the reason the empty case is named separately below:
+   * **7 of the 29 reports this harness had kept were 0-byte files.**
+   */
+
+  const runDir = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'qco-unparsed-'));
+    mkdirSync(join(dir, 'artifacts', 'run'), { recursive: true });
+    return dir;
+  };
+  const at = (dir: string): string => join(dir, 'artifacts', 'run', 'report.md');
+
+  test('should name the file and the reason when it will not parse', () => {
+    const dir = runDir();
+    writeFileSync(at(dir), '# Findings\n\nThe cart does not add anything.\n', 'utf8');
+
+    const rejected = unparsedReport(dir);
+
+    expect(rejected?.relative, 'a person has to be told where to read the findings').toBe(
+      'artifacts/run/report.md',
+    );
+    expect(rejected?.why ?? '', 'and what was actually wrong with it').toMatch(/frontmatter/i);
+  });
+
+  test('should call an empty file empty rather than malformed', () => {
+    // Different failures with different fixes — one is a budget that stopped the run, the other is
+    // a format the session got wrong — and 7 of 29 kept reports were this one.
+    const dir = runDir();
+    writeFileSync(at(dir), '   \n', 'utf8');
+
+    expect(unparsedReport(dir)?.why).toBe('the file is empty');
+  });
+
+  test('should stay silent about a report that parses', () => {
+    const dir = runDir();
+    // The file's own fixture, so "parses" means the same thing here as it does for `findReport`
+    // above. Hand-rolling a second one is how a test ends up asserting against its own typo —
+    // the first attempt here omitted `evidence` and the function was right to reject it.
+    writeFileSync(at(dir), validReport(), 'utf8');
+
+    expect(
+      unparsedReport(dir),
+      'a readable report is findReport’s business, not this function’s',
+    ).toBeNull();
+  });
+
+  test('should say nothing when the session wrote no file at all', () => {
+    // A run cut short before writing anything is a third failure again, and reporting it as a
+    // malformed file would blame the session for the budget.
+    expect(unparsedReport(runDir())).toBeNull();
+  });
+});
+
+test.describe('where the runner is allowed to put its fallback', () => {
+  /**
+   * A test of the call site, because the call site is what destroyed a session's report.
+   *
+   * `role.ts` builds this path inline, so there is no seam to call — the same situation as the
+   * observer hook's registration, and `repo-hygiene.test.ts` already checks claims this way. What
+   * must hold is narrow: the agent's closing message is not a report and must never be given a
+   * report's name, and a run with nothing to say must not leave a 0-byte file behind.
+   */
+
+  const flat = readFileSync('src/cli/role.ts', 'utf8').split(String.fromCharCode(10)).join(' ');
+
+  test('should keep the closing message out of report.md', () => {
+    expect(
+      flat.includes("wrote === null ? FALLBACK_NAME : 'report.md'"),
+      'the fallback lands beside the session’s file, never on it',
+    ).toBe(true);
+    expect(
+      flat.includes("outPath === undefined ? join(worktree, runDir, 'report.md')"),
+      'the unconditional report.md path is the 2026-10-10 defect',
+    ).toBe(false);
+  });
+
+  test('should write nothing when there is nothing to write', () => {
+    expect(
+      flat.includes("if (reportBody.trim() === '')"),
+      'an empty file is a claim that a report exists — 7 of 29 kept reports were 0 bytes',
+    ).toBe(true);
   });
 });

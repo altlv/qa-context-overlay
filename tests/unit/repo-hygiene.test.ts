@@ -109,7 +109,10 @@ test.describe('npm scripts', () => {
       (JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> })
         .scripts,
     );
-    const promised = [...readFileSync('README.md', 'utf8').matchAll(/`npm run ([a-z:-]+)/g)].map(
+    // Digits belong in the class: `a11y` is a legal script name, and without `0-9` this read it
+    // as a command called `a` and failed on a command that exists. `precommit`'s own extractor
+    // allows them, so the two disagreed — which is the more interesting half of the bug.
+    const promised = [...readFileSync('README.md', 'utf8').matchAll(/`npm run ([a-z0-9:-]+)/g)].map(
       (m) => m[1] as string,
     );
     const missing = [...new Set(promised)].filter((name) => !scripts.includes(name));

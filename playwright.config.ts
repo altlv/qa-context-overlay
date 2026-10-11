@@ -105,6 +105,35 @@ export default defineConfig({
         ...(grep !== undefined ? { grep } : {}),
       };
     }),
+    /**
+     * A phone-sized run of the specs that ask for one.
+     *
+     * **Every report this harness has produced declares the same gap.** The `platform` dimension
+     * is one of nine the report format requires, and session after session answers it "only
+     * default-size Chromium" — because that is all there was: both projects above pin
+     * `devices['Desktop Chrome']`.
+     *
+     * **This creates the slot, not the coverage**, and the distinction is the whole reason it is
+     * written this way. `testMatch` is restricted to `*.mobile.spec.ts`, of which there are
+     * currently none, so this project runs nothing today and claims nothing. Widening it to the
+     * existing specs would run a suite written for a desktop viewport at 393px and report the
+     * layout difference as failures — which is how a platform dimension gets marked "covered"
+     * while telling you less than the honest gap did.
+     *
+     * A spec opts in by being named for it. The first one to do so should be a case that is
+     * *different* on a phone — navigation that collapses, a control that moves under the thumb —
+     * rather than a desktop assertion re-run narrower.
+     *
+     * **Agent sessions are not affected and do not need to be.** They already hold
+     * `browser_resize`, and `visual-inspection` already tells them to force phone width; no run
+     * has done it. That is the enforcement gap under item 100, not a missing capability.
+     */
+    {
+      name: 'mobile',
+      testDir: './apps',
+      testMatch: '**/*.mobile.spec.ts',
+      use: { ...devices['Pixel 5'] },
+    },
     // Tests of the harness itself, not of any app.
     {
       name: 'harness',

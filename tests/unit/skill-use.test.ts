@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { methodsTaught, reportSkillUse, searchable, skillUse } from '../../src/qe/skill-use.js';
 import { exploratoryTester } from '../../src/agents/roles/exploratory-tester.js';
 import { skillFile } from '../../src/agents/compose.js';
@@ -173,5 +173,132 @@ test.describe('a skill the session names outright', () => {
   test('should not count it as silent once it has been named', () => {
     const lines = reportSkillUse(skillUse(['rule-modelling'], 'I used rule-modelling', stepsOnly));
     expect(lines.join('\n')).not.toContain('left no trace');
+  });
+});
+
+test.describe('a zero that could not have been anything else', () => {
+  /**
+   * `exploratory-session` reported `0/3` in **four consecutive live runs**, and the three things
+   * being searched for were "Set the box and start (decide before starting)", "Explore (the
+   * session)" and "Debrief (5 min)" — the steps of its procedure, carrying their own time-boxes.
+   * No report has ever contained those strings or ever could, so the score was structurally
+   * unachievable. It was then quoted four times as evidence that the skill left no trace.
+   *
+   * It had left a trace. The run of 2026-10-09 named **"rumble strip"** in a finding's method, and
+   * that term exists in this repository in exactly one place: that skill, as a bolded named move
+   * in a list the heading rule never looks at. `test-design` was worse — all five of its methods
+   * carried a parenthetical, so its score could never be anything but zero either.
+   *
+   * Two fixes, and the tests below are what make the difference visible: a heading's trailing
+   * parenthetical is dropped, and a skill may declare the vocabulary it wants to be measured on.
+   */
+
+  test('should not search for a needle no report could contain', () => {
+    /**
+     * The repo-wide guard, and the one that would have caught this years earlier than a live run
+     * did. A method name carrying a parenthesis is a heading with a time-box or an aside — never a
+     * phrase a report quotes — so its presence means the denominator is counting something
+     * unreachable and every score built on it understates the session.
+     *
+     * Deliberately narrow. A single-word method is *not* flagged, because "Pairwise" and
+     * "Pre-flight" are real terms of art that a report does use; the inflation risk from a word
+     * like "Scan" is a different problem and this is not the place to pretend otherwise.
+     */
+    // Every skill in the repository, not only one role's. Scoped to `exploratoryTester.skills`
+    // this passed without testing anything: the skill that was worst affected — `test-design`,
+    // whose five methods all carried a time-box — belongs to no role in that list.
+    for (const skill of readdirSync('.claude/skills')) {
+      let text: string;
+      try {
+        text = readFileSync(skillFile(skill), 'utf8');
+      } catch {
+        continue;
+      }
+      for (const method of methodsTaught(text)) {
+        expect(
+          method.name.includes('(') || method.name.includes(')'),
+          `${skill} is measured on "${method.name}", which no report would write`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  test('should drop a heading’s time-box so the method can be found', () => {
+    const methods = methodsTaught('## 3. Risk analysis (5 min)\n\nbody\n');
+
+    expect(
+      methods.map((method) => method.name),
+      'the aside is prose about the method',
+    ).toEqual(['Risk analysis']);
+  });
+
+  test('should measure a skill on the vocabulary it declares', () => {
+    const skill = [
+      '---',
+      'name: exploratory-session',
+      '# a comment the parser must step over',
+      'methods:',
+      '  - rumble strip',
+      '  - error-message marathon',
+      '---',
+      '',
+      '## 1. Write the charter (2 min)',
+      '',
+      '### 4. Debrief (5 min)',
+    ].join('\n');
+
+    expect(
+      methodsTaught(skill).map((method) => method.name),
+      'the declaration replaces the headings rather than joining them — a skill that says what it ' +
+        'teaches must not also be scored on its own procedure',
+    ).toEqual(['rumble strip', 'error-message marathon']);
+  });
+
+  test('should still read a skill that declares nothing', () => {
+    // Most skills do not declare, and the heading rule is right for them: `test-techniques` names
+    // its techniques in its headings, which is exactly what a report quotes.
+    expect(
+      methodsTaught('## 2. Boundary value analysis — the six values\n\nbody\n').map((m) => m.name),
+    ).toEqual(['Boundary value analysis']);
+  });
+
+  test('should be able to report both answers for one skill', () => {
+    /**
+     * The liveness check. A score of zero only means something if the same instrument can produce
+     * a non-zero from text that used the method — otherwise "the skills made no difference" is a
+     * property of the measurement.
+     */
+    const skill = ['---', 'methods:', '  - rumble strip', '---', '', 'body'].join('\n');
+    const used = skillUse(['s'], 'followed the rumble strip off the charter page', () => skill)[0]!;
+    const notUsed = skillUse(['s'], 'clicked every button and wrote it up', () => skill)[0]!;
+
+    expect(used.named, 'the method the text names').toEqual(['rumble strip']);
+    expect(notUsed.named, 'and nothing claimed for text that names none of it').toEqual([]);
+  });
+
+  test('should count the moves the 2026-10-09 run actually named', () => {
+    /**
+     * The real case, as a fixture rather than a path into `sessions/`, which `archive-results`
+     * prunes. Both terms are from that run's declared `method:` fields: the session reported
+     * "bugs cluster" and "rumble strip" while the harness printed `exploratory-session: 0/3`.
+     */
+    const text = readFileSync(skillFile('exploratory-session'), 'utf8');
+    const prose = searchable(
+      {
+        findings: [
+          { method: 'rumble strip — followed the sidebar price filter after noticing a product' },
+          { method: 'bugs cluster — tested harder on the same control before moving on' },
+        ],
+      },
+      'prose that mentions nothing else of the skill',
+    );
+
+    const use = skillUse(['exploratory-session'], prose, () => text)[0]!;
+
+    expect(use.named.sort(), 'both moves the session declared').toEqual([
+      'bugs cluster',
+      'rumble strip',
+    ]);
+    expect(use.taught.length, 'out of the vocabulary the skill now declares').toBeGreaterThan(2);
   });
 });

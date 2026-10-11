@@ -44,7 +44,9 @@
     "sessions": "tsx src/cli/sessions.ts",
     "findings": "tsx src/cli/findings.ts",
     "subject-fault-check": "tsx src/cli/subject-fault-check.ts",
-    "bug-replay": "tsx src/cli/bug-replay.ts"
+    "bug-replay": "tsx src/cli/bug-replay.ts",
+    "report-skeleton": "tsx src/cli/report-skeleton.ts",
+    "a11y": "tsx src/cli/a11y.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.266",
@@ -52,6 +54,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.1",
     "@faker-js/faker": "^10.6.0",
     "@playwright/mcp": "^0.0.80",

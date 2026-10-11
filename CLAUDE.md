@@ -59,6 +59,18 @@ Ported from `core/HARNESS.md` and `core/guardrails/` in `goose-harness`.
 when it did not — report NOT RUN explicitly. A test that did not execute is not
 evidence, and a test that passes without exercising the claim is insufficient.
 
+**1b. A figure from one run carries `n=1`.** Write it beside the number, not in a caveat
+further down. An agent run of this harness is a sample from a distribution nobody has
+characterised: the same role, charter and target has produced **0, 2, 4, 5, 9, 12 and 13**
+state-changing actions across seven runs, so two runs differing by less than that tell you
+nothing about what changed between them. Two figures compared across one run each are
+**two samples, not a result**, and must be written that way or not written. This rule exists
+because the comparison in item 87 was presented as a finding — "three skills beat nine on
+cost and findings" — from one run per arm, and the next pair of runs reversed it. Where a
+figure is a mean, say over how many runs; where a spread is known, give it instead of the
+mean. `npm run flake-rate` prints its run count before any figure for exactly this reason,
+and prose should hold itself to what that command already does.
+
 **2. Every agent runs under a budget.** Never call the SDK's `query()` directly; go
 through `runAgent()` in `src/agents/client.ts`, which enforces turn, spend and
 wall-clock limits. An agent that cannot solve a problem loops rather than erroring.
@@ -147,6 +159,9 @@ npm run bug-replay -- --repo <path> --suite <cmd...>
 npm run role -- <role> "<task>" --app <app> --env <env> --skills <a,b,c|none>
                           # inline only those of the role own skills, to measure what the
                           # context buys. Narrows, never adds; refuses a name the role lacks
+npm run a11y -- <url>     # hold a page to WCAG 2.2 A and AA — the rules it fails, with the
+                          # clause for each. Exits 1 on any failure, 2 when it could not run:
+                          # a refusal is NOT a pass, and a clean run is not an accessible page
 npm run precommit         # housekeeping before handing over a commit
 ```
 

@@ -88,10 +88,20 @@ test.describe('measuring whether the inlined skills change anything', () => {
   test('should ask for the method used, not the one that sounds best', () => {
     // The field is a measurement. A tidied answer destroys the only reading of it
     // there is, so the prompt makes "noticed it while doing something else" legitimate.
-    expect(prompt, 'a tidied answer destroys the only reading of skill use there is').toContain(
-      'never\n   the one that sounds best',
+    /**
+     * Whitespace-normalised, both of them. The claim is what the prompt *says*; asserting on
+     * where a paragraph happens to wrap made both of these fail when the surrounding text was
+     * reflowed — tests about line breaks pretending to be tests about instructions. The
+     * substance is unchanged and still fails if either sentence goes.
+     */
+    const said = prompt.split(/\s+/).join(' ');
+
+    expect(said, 'a tidied answer destroys the only reading of skill use there is').toContain(
+      'never the one that sounds best',
     );
-    expect(prompt).toMatch(/Noticed it while doing something else/i);
+    expect(said, 'and an honest non-method has to stay available').toMatch(
+      /Noticed it while doing something else/i,
+    );
   });
 });
 

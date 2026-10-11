@@ -97,11 +97,68 @@ const NUMBERED = /^#{2,3}\s+\d+\.\s+(.+?)\s*$/gm;
  * The clause is prose about the method, not part of its name, and matching on it would
  * make the needle unfindable in any report written by a human or a model.
  */
+/**
+ * A `methods:` list in a skill's frontmatter — the vocabulary it wants to be measured on.
+ *
+ * **Why declaring beats inferring.** Harvesting numbered headings works for a skill whose
+ * headings *are* its techniques, and fails completely for one whose headings are phases. Measured
+ * on 2026-10-09, `exploratory-session` reported `0/3` in four consecutive live runs, and the
+ * three things being looked for were "Set the box and start (decide before starting)", "Explore
+ * (the session)" and "Debrief (5 min)" — the steps of its procedure. **No report could ever
+ * contain those strings, so the score was structurally unachievable** and the zero was reported
+ * four times as evidence that the skill left no trace.
+ *
+ * It had left a trace. The run of 2026-10-09 named **"rumble strip"** in a finding's method, and
+ * that term exists in this repository in exactly one place: this skill, as a bolded named move in
+ * a list the heading rule never looks at.
+ *
+ * Inferring harder was the wrong fix. The named moves sit beside sentences ("Do not stop at what
+ * you expected") that no report would quote, and beside the debrief's own section labels
+ * ("Observations", "Questions", "Defects") that **every** report contains — so one heuristic has
+ * to avoid both deflating the denominator with unquotable sentences and inflating the numerator
+ * with words that match by default. A list the skill's author writes settles it in one line and
+ * cannot drift from what the skill means, which inference can and did.
+ */
+const DECLARED = /^methods:[ \t]*$([\s\S]*?)^(?:\w|---)/m;
+
+function declaredMethods(skillText: string): Method[] {
+  const block = DECLARED.exec(skillText);
+  if (block === null) return [];
+  const methods: Method[] = [];
+  for (const line of (block[1] ?? '').split(String.fromCharCode(10))) {
+    const item = /^\s*-\s+(.+?)\s*$/.exec(line);
+    if (item === null) continue;
+    const name = (item[1] ?? '').replace(/^['"]|['"]$/g, '').trim();
+    if (name === '') continue;
+    const needle = name.toLowerCase();
+    if (!methods.some((method) => method.needle === needle)) methods.push({ name, needle });
+  }
+  return methods;
+}
+
 export function methodsTaught(skillText: string): Method[] {
+  // A declaration replaces the inference rather than adding to it: a skill that says what it
+  // teaches is not also guessed at, or its score would be diluted by its own section headings.
+  const declared = declaredMethods(skillText);
+  if (declared.length > 0) return declared;
+
   const methods: Method[] = [];
   for (const match of skillText.matchAll(NUMBERED)) {
     const heading = (match[1] ?? '').trim();
-    const name = (heading.split(/\s+[—–-]\s+/)[0] ?? heading).trim();
+    /**
+     * A trailing parenthetical is dropped, because it is never part of what a report would call
+     * the method.
+     *
+     * Headings in these skills carry time-boxes and asides: "Risk analysis (5 min)", "Debrief
+     * (5 min)", "Explore (the session)". Keeping them made the needle unmatchable by
+     * construction — `test-design` had **five** methods and not one of them could ever be found,
+     * and `exploratory-session` reported `0/3` in four consecutive live runs on needles like
+     * "Set the box and start (decide before starting)". A zero that cannot be anything else is
+     * not a measurement, and it was read as one.
+     */
+    const name = (heading.split(/\s+[—–-]\s+/)[0] ?? heading)
+      .replace(/\s*\([^)]*\)\s*$/, '')
+      .trim();
     if (name === '') continue;
     if (isStep(name)) continue;
     const needle = name.toLowerCase();

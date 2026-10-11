@@ -11,6 +11,7 @@ import mcpa from './mcpa/app.config.js';
 import petstore from './petstore/app.config.js';
 import polymerShop from './polymer-shop/app.config.js';
 import todoFixture from './todo-fixture/app.config.js';
+import webtestingcourse from './webtestingcourse/app.config.js';
 
 /**
  * Every app under test, one folder each under apps/.
@@ -32,4 +33,5 @@ export const apps: AppConfig[] = [
   mcpa,
   petstore,
   polymerShop,
+  webtestingcourse,
 ];

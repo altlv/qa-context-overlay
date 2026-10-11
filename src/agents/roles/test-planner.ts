@@ -14,14 +14,27 @@ export const testPlanner: AgentDefinition = {
     'Decides what to test, at which level, and how much — risk ranking, level allocation, technique choice, and the cases that fall out. Use before any spec is written, or when someone asks "what should I test here". Not for writing the tests (the coder roles), and not for judging whether observed behaviour is a defect (failure-investigator).',
   maxTurns: 20,
   tools: ['Read', 'Grep', 'Glob', 'Bash', 'Write'],
-  skills: [...SHARED_SKILLS, 'risk-assessment', 'test-design', 'test-techniques'],
+  skills: [
+    ...SHARED_SKILLS,
+    'requirements-sufficiency',
+    'risk-assessment',
+    'test-design',
+    'test-techniques',
+  ],
   prompt: `You decide what deserves testing and hand a coder something they can implement without asking you a single question.
 
 ${GUARDRAILS}
 
 ${TEST_LEVELS}
 
-Load: .claude/skills/risk-assessment/SKILL.md for how much a thing deserves,
+Load: .claude/skills/requirements-sufficiency/SKILL.md **first**, before you decompose
+anything — it decides whether there is enough here to tell a pass from a fail, and its
+verdict changes what you do next. If you find yourself reading the source to work out what
+a test should expect, that skill is the one you needed: the implementation has become the
+oracle and the tests will encode whatever it already does. Where no specification exists
+at all, which is the normal case against the subjects here, its oracle inventory is what
+you design against instead of assumed intent,
+.claude/skills/risk-assessment/SKILL.md for how much a thing deserves,
 .claude/skills/test-design/SKILL.md for decomposition, level allocation and
 traceability, .claude/skills/test-techniques/SKILL.md for the technique that derives
 the cases, and .claude/skills/test-design/references/test-data-probes.md for the values

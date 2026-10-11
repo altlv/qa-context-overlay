@@ -105,3 +105,44 @@ export function findReport(worktree: string): FoundReport | null {
 
   return null;
 }
+
+/**
+ * A report file the session wrote that cannot be read as one, and why.
+ *
+ * **Why this exists instead of the function that was here.** The runner used to write its fallback
+ * — the agent's closing message — to `<runDir>/report.md`, the same path a session writes to, so a
+ * session that wrote a real report without frontmatter had it replaced by a summary of itself. The
+ * first fix moved the session's file aside. The better fix was to stop writing there at all, which
+ * leaves nothing to move; what remains is the part that was always missing, which is **telling a
+ * person the real cause**.
+ *
+ * It mattered: the runner reported "No report file found under artifacts/run/ or reports/" for a
+ * run whose report file was right there and merely unparseable. That is the same false cause item
+ * 48 fixed for a truncated run — a formatting complaint standing in for the thing that happened.
+ */
+export function unparsedReport(
+  worktree: string,
+): { path: string; relative: string; why: string } | null {
+  const preferred = join(worktree, PREFERRED);
+  if (!existsSync(preferred)) return null;
+  let text: string;
+  try {
+    text = readFileSync(preferred, 'utf8');
+  } catch {
+    return null;
+  }
+  if (text.trim() === '') {
+    return { path: preferred, relative: PREFERRED, why: 'the file is empty' };
+  }
+  const parsed = parseReport(text);
+  if (parsed.ok) return null;
+  // The first error, because the rest are usually consequences of it: a file with no frontmatter
+  // is also missing every field the frontmatter would have carried, and listing all of that
+  // buries the one fact a person needs.
+  const first = parsed.problems.find((problem) => problem.level === 'error') ?? parsed.problems[0];
+  return {
+    path: preferred,
+    relative: PREFERRED,
+    why: first?.message ?? 'it does not parse as a report',
+  };
+}

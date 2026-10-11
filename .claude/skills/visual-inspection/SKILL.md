@@ -1,6 +1,18 @@
 ---
 name: visual-inspection
 description: Look at a rendered page methodically — the pre-flight checks that find bugs in the first two minutes, a sweep across positions and states, and the conditions worth forcing. Use before or during any session against a UI, and whenever a defect is likely to be visible rather than queryable. Not for deciding what to test (test-design) or for choosing input values (test-techniques).
+# The named moves this skill is measured on — the terms a report would actually write. Headings
+# alone are not enough: a skill whose headings are phases can only ever score zero, which is how
+# `exploratory-session` reported 0/3 in four consecutive live runs against needles no report
+# could contain. Single ubiquitous words are deliberately absent.
+methods:
+  - pre-flight
+  - the sweep
+  - position × state
+  - conditions worth forcing
+  - dismissal sweep
+  - accessible-name pass
+  - the placeholder rule
 ---
 
 A DOM query answers what the page contains. It cannot tell you the panel escapes its
@@ -93,6 +105,23 @@ one and look at it _in place_, at the position it appears.
 A cart-preview panel hanging off the bottom of the page was missed for exactly this
 reason: the cart _page_ was tested thoroughly and the cart _preview_ was never opened.
 
+#### Dismissal sweep — opening a surface is half of it
+
+Every surface you open, **close three ways**: `Escape`, a click outside it, and its own
+close control. A surface with no way out is a trap whichever of the three is missing,
+and the three fail independently — a modal can honour `Escape` and have no visible
+close button, or have one that is unreachable by keyboard.
+
+This is not hypothetical and it is not rare. A session against academybugs on
+2026-10-09 found a feedback popover that **could not be dismissed with `Escape` and had
+no distinguishable close target in the accessibility tree** — found only because the
+session tried to close it. Opening it, looking at it and moving on would have reported
+nothing, and every earlier session had done exactly that.
+
+Then ask the question the open/close pair makes available: after dismissing it, is the
+page as it was? A surface that leaves scroll locked, focus lost, or a backdrop behind
+is a defect that only exists **after** the close.
+
 ### What to look for
 
 | Look for                        | Reads as                                                               |
@@ -114,6 +143,26 @@ reason: the cart _page_ was tested thoroughly and the cart _preview_ was never o
 
 And **zoom to 200%**, which is a standard rather than a curiosity: content forced wider
 than the viewport is a WCAG 1.4.10 failure.
+
+### Accessible-name pass — the second rendering
+
+The page renders twice: once for the eye, once for the accessibility tree. The second
+is what a screen reader, and this harness's own scanner, actually read — and a control
+can be perfectly legible in one and **absent from the other**.
+
+Take the accessibility snapshot and look for controls with no accessible name, and for
+several controls sharing one. Both are invisible to the eye by definition: the link
+wrapping a product photo looks fine, and announces nothing.
+
+Two sessions against academybugs found this twice over — **20 links with no accessible
+name**, and three "Select Options" links sharing one name with no distinguishing
+context, so a screen-reader user hears the same label three times for three different
+products. Neither is visible in a screenshot. Both are WCAG failures (2.4.4, 4.1.2),
+and the second is also the reason automation on that page is fragile, which is
+`testability-audit`'s half of the same fact.
+
+The eye and the tree disagreeing is itself the finding. Where a label is visible on
+screen but missing from the tree, the page is showing one thing and announcing another.
 
 ---
 
@@ -163,7 +212,18 @@ are right, whether a control does what it claims, or whether anything persisted 
 It also depends on being able to see. Roles that need to — `exploratory-tester` and
 `testability-reviewer` — drive a real browser through the Playwright MCP server, with
 `browser_take_screenshot`, `browser_snapshot`, `browser_hover`, `browser_mouse_wheel`
-and `browser_resize` for the position sweep and the forced conditions. **Any other
+and `browser_resize` for the position sweep and the forced conditions.
+
+**The harness already classifies what arrived, so read it rather than re-deriving it.**
+After every action, `src/tools/surfaces.ts` reports the kind of surface that appeared
+and the facts behind the label — whether it covers content, whether it is pinned to the
+viewport, whether it traps focus, whether it announced itself, and whether it left on
+its own. A line reading `popover — pinned to the viewport and covering content, does
+not trap focus and announces nothing` has done the measuring for you: "announces
+nothing" is already an accessible-name finding, and "does not trap focus" on something
+that covers the page is already a keyboard one. Where the label is marked
+**provisional**, its lifetime was not observed — that is a budget decision, not an
+observation, so do not report it as one. **Any other
 agent still cannot run this skill** and should say so rather than substituting a DOM
 query and calling it looking.
 

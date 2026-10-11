@@ -1,6 +1,19 @@
 ---
 name: exploratory-session
 description: Run a chartered, time-boxed exploratory session against a running app and report observations, questions and defects separately. Use when asked to explore a feature, find what nobody specified, or investigate an area before designing tests. Not for executing a known checklist.
+
+# The named moves this skill is measured on. A session is credited with using this skill when
+# its report names one of these, so they are the terms of art and not the procedure: the steps
+# ("Write the charter", "Debrief") are what every session does, while these are what it chose
+# to do. Single words and whole sentences are deliberately absent — "Observations" appears in
+# every report and "Do not stop at what you expected" appears in none.
+methods:
+  - bugs cluster
+  - the same bug lives elsewhere
+  - rumble strip
+  - error-message marathon
+  - déjà vu
+  - test-investigate-setup-record
 ---
 
 Scripted tests check what someone already thought of. This finds what nobody did. It
