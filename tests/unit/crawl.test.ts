@@ -190,6 +190,35 @@ test.describe('link and structure extraction', () => {
       first,
       'two product pages differ in every word and agree in structure — that is what makes them one template',
     ).toBe(second);
+    /**
+     * Found by `npm run test-sensitivity -- src/tools/crawl.ts`, which reported this export as reached with
+     * nothing depending on what it returns.
+     *
+     * It was right. The assertion above compares two outputs and says nothing about either, so a
+     * body replaced with nothing passed it: `undefined === undefined`. One half of an equality
+     * claim is not a test of the function, it is a test that the function is deterministic — which
+     * a constant also satisfies.
+     */
+    expect(first, 'and a signature of nothing would satisfy the equality above').not.toBe('');
+    expect(
+      first,
+      'which is why the value itself has to be asserted, not only the agreement',
+    ).toBeTruthy();
+  });
+
+  test('should give pages of different shapes different signatures', () => {
+    // The other half, and the reason the equality test can mean something. Without it the only
+    // claim on record is "two things are equal", which a function returning a constant satisfies.
+    const product = structuralSignature(
+      '<h1>Red</h1><a href="/">x</a><select name="size"></select>',
+    );
+    const article = structuralSignature('<h1>Red</h1><p>words</p><p>more words</p>');
+
+    expect(
+      product,
+      'a product page and an article are not one template, and a signature that cannot tell them ' +
+        'apart would cluster the whole site into one',
+    ).not.toBe(article);
   });
 
   test('should find the axes a page offers', () => {

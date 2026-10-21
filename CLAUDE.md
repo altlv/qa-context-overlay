@@ -162,6 +162,11 @@ npm run role -- <role> "<task>" --app <app> --env <env> --skills <a,b,c|none>
 npm run a11y -- <url>     # hold a page to WCAG 2.2 A and AA — the rules it fails, with the
                           # clause for each. Exits 1 on any failure, 2 when it could not run:
                           # a refusal is NOT a pass, and a clean run is not an accessible page
+npm run test-sensitivity -- <module.ts> [--export <name>]
+                          # break each exported function in turn and see whether the tests notice:
+                          # once with a throw (does anything reach it) and once returning nothing
+                          # (does any test depend on what it returns). Refuses a file with
+                          # uncommitted changes, since it rewrites the file
 npm run precommit         # housekeeping before handing over a commit
 ```
 
