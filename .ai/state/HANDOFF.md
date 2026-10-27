@@ -195,6 +195,13 @@ Curated, not appended. Delete anything that stops being true.
   first, so the mutation lands somewhere other than the rule.
 - **Scoped runs must never print a percentage.** `npm run mutate -- --changed` covers
   only the rules you touched; a number that looks like a score gets read as one.
+- **`mutate -- --changed` exits 2 when it checked nothing, and 2 is not a pass.** The
+  mutation list is hand-registered per file, so most of `src/` has none and an empty
+  intersection is the common outcome of touching it. It exited **0** until 2026-10-27 —
+  a verification reporting success having run nothing, from the tool meant to catch
+  exactly that. `src/quality/mutation-scope.ts` owns the decision so it can be poisoned;
+  nothing reads the exit code yet, so wire it into a gate as a reported condition before
+  a blocking one.
 - **`document.elementFromPoint` only answers inside the viewport.** Clamping an
   off-screen centre onto the edge samples a different element and invents an overlay.
   Off-screen is not a blocker anyway — Playwright scrolls before acting.

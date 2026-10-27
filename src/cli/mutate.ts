@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+import { describeScope } from '../quality/mutation-scope.js';
 import { PLAYWRIGHT_CLI } from '../tool-paths.js';
 import { promisify } from 'node:util';
 
@@ -1154,16 +1155,19 @@ let selected = MUTATIONS;
 if (scoped) {
   const touched = await changedFiles();
   selected = MUTATIONS.filter((mutation) => touched.includes(mutation.file));
-  const files = [...new Set(selected.map((mutation) => mutation.file))];
-  console.log(
-    `Scoped to --changed: ${selected.length} of ${MUTATIONS.length} mutation(s), ` +
-      `across ${files.length} touched file(s).`,
-  );
-  for (const file of files) console.log(`  ${file}`);
-  if (selected.length === 0) {
-    console.log('\nNo mutation targets a file you have changed. Nothing to check here.');
-    process.exit(0);
-  }
+  const coveredFiles = [...new Set(selected.map((mutation) => mutation.file))];
+
+  const { decision, message } = describeScope({
+    selectedCount: selected.length,
+    totalCount: MUTATIONS.length,
+    touchedFiles: touched,
+    coveredFiles,
+  });
+
+  console.log(message);
+  // Exit 2 rather than 0: nothing was measured, and a run that measured nothing must not be
+  // readable as a run that found nothing wrong. The 0-or-1 answer comes later, from survivors.
+  if (decision.kind === 'could-not-check') process.exit(decision.exitCode);
   console.log('');
 }
 
