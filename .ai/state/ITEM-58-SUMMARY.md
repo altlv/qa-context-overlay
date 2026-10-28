@@ -1,6 +1,7 @@
 # Item 58 — `mutate -- --changed` reported success having checked nothing
 
-Outsourced to DeepSeek against `.ai/state/ITEM-58-MUTATE-ZERO-COVERAGE-DEEPSEEK.md`, then
+Outsourced to DeepSeek against a written brief (handed over directly, not committed: a brief
+names the files it wants built, so it cannot satisfy the dead-path check), then
 audited and amended here. This file records what was **measured**, and separately what was
 claimed and did not hold — the claims are kept rather than deleted, because a handover that
 quietly absorbs its own corrections teaches nobody anything.

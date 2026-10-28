@@ -3,3 +3,6 @@ apps/*/scans/
 artifacts/
 playwright-report/
 test-results/
+
+# Outsourcing briefs — hand-over documents, not repo source
+handovers/

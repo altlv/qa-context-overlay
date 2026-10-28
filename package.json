@@ -23,6 +23,8 @@
     "assertion-floor": "tsx src/cli/assertion-floor.ts",
     "serve:fixture": "node apps/todo-fixture/app/server.mjs",
     "scan": "tsx src/cli/scan.ts",
+    "archive-scan": "tsx src/cli/archive-scan.ts",
+    "scan-drift": "tsx src/cli/scan-drift.ts",
     "test:external": "cross-env RUN_EXTERNAL=1 playwright test --project=countdown-timer --project=fakerestapi",
     "gate": "tsx src/cli/gate.ts",
     "check-report": "tsx src/cli/check-report.ts",

@@ -142,6 +142,17 @@ npm run known-defect-check -- --pattern <regexp> <test-file>...
 npm run subject-fault-check -- --entry <file> --suite <cmd>
                           # does a subject test notice the process it spawns failing
 npm run archive-results   # keep the last 20 runs, so a trend can be read
+npm run archive-scan -- <scan.json>   # copy a scan into <dir>/history/, newest 20 kept.
+                          # Named from the scan own scannedAt, so archiving twice is one entry
+npm run scan-drift -- <scan.json> [--against <baseline.json>]
+                          # what moved since the baseline, across every dimension a scan records:
+                          # the page's own url and title, controls, endpoints, testability
+                          # findings (appeared, resolved, or escalated in severity), frames and
+                          # shadow roots the scan cannot see into, and controls the selector
+                          # sweep has started to miss. Defaults to the newest archived scan.
+                          # Exits 1 on drift, 2 when it could not compare: a scan it could not
+                          # read is NOT reported as a change it measured. Refuses the older
+                          # bare-PageScan format rather than diffing fields that differ in meaning
 npm run flake-rate        # how often each test has been unreliable, across archived runs
 npm run sessions          # what agent sessions have been kept, and what each holds
 npm run findings -- <app> # what every session against one app found between them

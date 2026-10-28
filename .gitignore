@@ -25,3 +25,7 @@ Thumbs.db
 
 # Session evidence: reports, notes and screenshots carried out of run worktrees
 sessions/
+
+# Outsourcing briefs and contractor hand-backs. Never committed: a brief names the
+# files it wants built, so it cannot satisfy the dead-path check in `npm run precommit`.
+handovers/
